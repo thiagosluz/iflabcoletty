@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\SoftwareController;
 use App\Http\Controllers\Api\V1\PublicController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\AuditLogController;
+use App\Http\Controllers\Api\V1\BackupController;
 
 Route::prefix('v1')->group(function () {
     // Public Routes (no authentication required) - Higher rate limit
@@ -34,6 +35,7 @@ Route::prefix('v1')->group(function () {
 
         // Computers
         Route::apiResource('computers', ComputerController::class);
+        Route::get('/computers/by-machine-id/{machineId}', [ComputerController::class, 'findByMachineId']);
         Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
         Route::get('/computers/{computer}/qrcode', [ComputerController::class, 'generateQrCode']);
         Route::post('/computers/export-qrcodes', [ComputerController::class, 'exportQrCodes']);
@@ -49,11 +51,24 @@ Route::prefix('v1')->group(function () {
         Route::post('/reports/labs', [ReportController::class, 'exportLabs']);
         Route::post('/reports/computers', [ReportController::class, 'exportComputers']);
         Route::post('/reports/softwares', [ReportController::class, 'exportSoftwares']);
+        Route::get('/reports/jobs', [ReportController::class, 'listJobs']);
+        Route::get('/reports/jobs/{reportJob}', [ReportController::class, 'getJobStatus']);
+        Route::get('/reports/jobs/{reportJob}/download', [ReportController::class, 'downloadReport'])->name('api.v1.reports.download');
 
         // Audit Logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
         Route::get('/audit-logs/stats', [AuditLogController::class, 'stats']);
         Route::get('/audit-logs/{id}', [AuditLogController::class, 'show']);
+
+        // Backups
+        Route::get('/backups', [BackupController::class, 'index']);
+        Route::get('/backups/stats', [BackupController::class, 'stats']);
+        Route::post('/backups', [BackupController::class, 'store']);
+        Route::get('/backups/{backup}', [BackupController::class, 'show']);
+        Route::delete('/backups/{backup}', [BackupController::class, 'destroy']);
+        Route::get('/backups/{backup}/download', [BackupController::class, 'download'])->name('api.v1.backups.download');
+        Route::post('/backups/{backup}/restore', [BackupController::class, 'restore']);
+        Route::post('/backups/clean', [BackupController::class, 'clean']);
     });
 });
 

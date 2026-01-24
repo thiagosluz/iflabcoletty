@@ -1,33 +1,57 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Download } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Download, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 interface ExportDialogProps {
     trigger: React.ReactNode;
-    onExport: (format: 'pdf' | 'csv' | 'xlsx') => Promise<void>;
+    onExport: (format: 'pdf' | 'csv' | 'xlsx', async?: boolean) => Promise<void>;
     title?: string;
     description?: string;
+    defaultAsync?: boolean;
 }
 
-export default function ExportDialog({ trigger, onExport, title = 'Exportar Relatório', description }: ExportDialogProps) {
+export default function ExportDialog({ 
+    trigger, 
+    onExport, 
+    title = 'Exportar Relatório', 
+    description,
+    defaultAsync = true 
+}: ExportDialogProps) {
     const [format, setFormat] = useState<'pdf' | 'csv' | 'xlsx'>('pdf');
     const [isOpen, setIsOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [useAsync, setUseAsync] = useState(defaultAsync);
     const { toast } = useToast();
+    const navigate = useNavigate();
 
     const handleExport = async () => {
         try {
             setIsExporting(true);
-            await onExport(format);
-            toast({
-                title: 'Exportação concluída!',
-                description: `Relatório exportado em formato ${format.toUpperCase()}.`,
-            });
-            setIsOpen(false);
+            await onExport(format, useAsync);
+            
+            if (useAsync) {
+                toast({
+                    title: 'Relatório em processamento!',
+                    description: 'Você será redirecionado para acompanhar o status.',
+                });
+                setIsOpen(false);
+                // Small delay to allow the toast to show
+                setTimeout(() => {
+                    navigate('/admin/report-jobs');
+                }, 500);
+            } else {
+                toast({
+                    title: 'Exportação concluída!',
+                    description: `Relatório exportado em formato ${format.toUpperCase()}.`,
+                });
+                setIsOpen(false);
+            }
         } catch (error: any) {
             toast({
                 title: 'Erro na exportação',
@@ -65,6 +89,22 @@ export default function ExportDialog({ trigger, onExport, title = 'Exportar Rela
                             </SelectContent>
                         </Select>
                     </div>
+                    <div className="flex items-center space-x-2">
+                        <Checkbox
+                            id="async"
+                            checked={useAsync}
+                            onCheckedChange={(checked) => setUseAsync(checked === true)}
+                        />
+                        <Label htmlFor="async" className="text-sm font-normal cursor-pointer">
+                            Processar em background (recomendado para relatórios grandes)
+                        </Label>
+                    </div>
+                    {useAsync && (
+                        <div className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
+                            <ExternalLink className="h-4 w-4 inline mr-1" />
+                            Você será redirecionado para acompanhar o status do processamento.
+                        </div>
+                    )}
                     <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setIsOpen(false)} disabled={isExporting}>
                             Cancelar
@@ -73,7 +113,7 @@ export default function ExportDialog({ trigger, onExport, title = 'Exportar Rela
                             {isExporting ? (
                                 <>
                                     <span className="animate-spin mr-2">⏳</span>
-                                    Exportando...
+                                    {useAsync ? 'Enviando...' : 'Exportando...'}
                                 </>
                             ) : (
                                 <>

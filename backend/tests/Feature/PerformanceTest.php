@@ -67,9 +67,13 @@ class PerformanceTest extends TestCase
     public function test_dashboard_stats_is_performant(): void
     {
         $user = $this->actingAsUser();
-        Lab::factory()->count(10)->create();
-        Computer::factory()->count(50)->create();
-        Computer::factory()->withHardwareInfo()->count(30)->create();
+        $labs = Lab::factory()->count(10)->create();
+        
+        // Create computers with lab_id to avoid creating duplicate labs
+        foreach ($labs as $lab) {
+            Computer::factory()->count(5)->create(['lab_id' => $lab->id]);
+            Computer::factory()->withHardwareInfo()->count(3)->create(['lab_id' => $lab->id]);
+        }
 
         $startTime = microtime(true);
         

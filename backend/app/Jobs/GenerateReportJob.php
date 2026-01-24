@@ -1,0 +1,455 @@
+<?php
+
+namespace App\Jobs;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use App\Models\ReportJob;
+use App\Models\Lab;
+use App\Models\Computer;
+use App\Models\Software;
+use Barryvdh\DomPDF\Facade\Pdf;
+use League\Csv\Writer;
+use Maatwebsite\Excel\Facades\Excel;
+use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+
+class GenerateReportJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public $timeout = 300; // 5 minutes
+    public $tries = 3;
+
+    /**
+     * Create a new job instance.
+     */
+    public function __construct(
+        public int $reportJobId,
+        public string $type, // 'labs', 'computers', 'softwares'
+        public string $format, // 'pdf', 'csv', 'xlsx'
+        public array $filters = []
+    ) {
+        //
+    }
+
+    /**
+     * Execute the job.
+     */
+    public function handle(): void
+    {
+        $reportJob = ReportJob::findOrFail($this->reportJobId);
+        
+        try {
+            // Update status to processing
+            $reportJob->update([
+                'status' => 'processing',
+                'started_at' => now(),
+            ]);
+
+            // Generate report based on type
+            $filePath = match($this->type) {
+                'labs' => $this->generateLabsReport(),
+                'computers' => $this->generateComputersReport(),
+                'softwares' => $this->generateSoftwaresReport(),
+                default => throw new \InvalidArgumentException("Invalid report type: {$this->type}")
+            };
+
+            // Update status to completed
+            $reportJob->update([
+                'status' => 'completed',
+                'file_path' => $filePath,
+                'completed_at' => now(),
+            ]);
+
+            Log::info("Report job {$this->reportJobId} completed successfully. File: {$filePath}");
+        } catch (\Exception $e) {
+            Log::error("Report job {$this->reportJobId} failed: " . $e->getMessage());
+            
+            $reportJob->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+                'failed_at' => now(),
+            ]);
+
+            throw $e; // Re-throw to trigger retry mechanism
+        }
+    }
+
+    /**
+     * Generate labs report
+     */
+    private function generateLabsReport(): string
+    {
+        $query = Lab::withCount('computers');
+
+        // Apply search filter
+        if (!empty($this->filters['search'])) {
+            $query->where(function ($q) {
+                $q->where('name', 'like', "%{$this->filters['search']}%")
+                    ->orWhere('description', 'like', "%{$this->filters['search']}%");
+            });
+        }
+
+        $labs = $query->orderBy('name')->get();
+
+        if ($labs->isEmpty()) {
+            throw new \Exception('Nenhum laboratório encontrado para exportar.');
+        }
+
+        return match($this->format) {
+            'pdf' => $this->exportLabsAsPdf($labs),
+            'csv' => $this->exportLabsAsCsv($labs),
+            'xlsx' => $this->exportLabsAsXlsx($labs),
+            default => throw new \InvalidArgumentException("Invalid format: {$this->format}")
+        };
+    }
+
+    /**
+     * Generate computers report
+     */
+    private function generateComputersReport(): string
+    {
+        $query = Computer::with('lab');
+
+        // Apply search filter
+        if (!empty($this->filters['search'])) {
+            $query->where(function ($q) {
+                $q->where('hostname', 'like', "%{$this->filters['search']}%")
+                    ->orWhere('machine_id', 'like', "%{$this->filters['search']}%");
+            });
+        }
+
+        // Apply lab filter
+        if (!empty($this->filters['lab_id'])) {
+            $query->where('lab_id', $this->filters['lab_id']);
+        }
+
+        // Apply status filter
+        if (!empty($this->filters['status'])) {
+            if ($this->filters['status'] === 'online') {
+                $query->where('updated_at', '>=', now()->subMinutes(5));
+            } else {
+                $query->where('updated_at', '<', now()->subMinutes(5));
+            }
+        }
+
+        $computers = $query->orderBy('created_at', 'desc')->get();
+
+        if ($computers->isEmpty()) {
+            // Don't throw exception, just log and mark as failed with message
+            \Log::warning("No computers found for export with filters: " . json_encode($this->filters));
+            throw new \Exception('Nenhum computador encontrado para exportar com os filtros aplicados.');
+        }
+
+        return match($this->format) {
+            'pdf' => $this->exportComputersAsPdf($computers),
+            'csv' => $this->exportComputersAsCsv($computers),
+            'xlsx' => $this->exportComputersAsXlsx($computers),
+            default => throw new \InvalidArgumentException("Invalid format: {$this->format}")
+        };
+    }
+
+    /**
+     * Generate softwares report
+     */
+    private function generateSoftwaresReport(): string
+    {
+        $query = Software::withCount('computers');
+
+        // Apply search filter
+        if (!empty($this->filters['search'])) {
+            $query->where(function ($q) {
+                $q->where('name', 'like', "%{$this->filters['search']}%")
+                    ->orWhere('version', 'like', "%{$this->filters['search']}%")
+                    ->orWhere('vendor', 'like', "%{$this->filters['search']}%");
+            });
+        }
+
+        $softwares = $query->orderBy('name')->get();
+
+        if ($softwares->isEmpty()) {
+            throw new \Exception('Nenhum software encontrado para exportar.');
+        }
+
+        return match($this->format) {
+            'pdf' => $this->exportSoftwaresAsPdf($softwares),
+            'csv' => $this->exportSoftwaresAsCsv($softwares),
+            'xlsx' => $this->exportSoftwaresAsXlsx($softwares),
+            default => throw new \InvalidArgumentException("Invalid format: {$this->format}")
+        };
+    }
+
+    // ========== PDF Export Methods ==========
+
+    private function exportLabsAsPdf($labs): string
+    {
+        $timestamp = now()->format('Y-m-d H:i:s');
+        $pdf = Pdf::loadView('reports.labs', [
+            'labs' => $labs,
+            'exportDate' => $timestamp,
+            'totalLabs' => $labs->count()
+        ]);
+
+        $filename = 'reports/laboratorios-' . now()->format('Y-m-d_His') . '.pdf';
+        Storage::put($filename, $pdf->output());
+        
+        return $filename;
+    }
+
+    private function exportComputersAsPdf($computers): string
+    {
+        $timestamp = now()->format('Y-m-d H:i:s');
+        $pdf = Pdf::loadView('reports.computers', [
+            'computers' => $computers,
+            'exportDate' => $timestamp,
+            'totalComputers' => $computers->count()
+        ]);
+
+        $filename = 'reports/computadores-' . now()->format('Y-m-d_His') . '.pdf';
+        Storage::put($filename, $pdf->output());
+        
+        return $filename;
+    }
+
+    private function exportSoftwaresAsPdf($softwares): string
+    {
+        $timestamp = now()->format('Y-m-d H:i:s');
+        $pdf = Pdf::loadView('reports.softwares', [
+            'softwares' => $softwares,
+            'exportDate' => $timestamp,
+            'totalSoftwares' => $softwares->count()
+        ]);
+
+        $filename = 'reports/softwares-' . now()->format('Y-m-d_His') . '.pdf';
+        Storage::put($filename, $pdf->output());
+        
+        return $filename;
+    }
+
+    // ========== CSV Export Methods ==========
+
+    private function exportLabsAsCsv($labs): string
+    {
+        $csv = Writer::createFromString();
+        $csv->setOutputBOM(Writer::BOM_UTF8);
+        $csv->insertOne(['ID', 'Nome', 'Descrição', 'Total de Computadores', 'Data de Criação']);
+
+        foreach ($labs as $lab) {
+            $csv->insertOne([
+                $lab->id,
+                $lab->name,
+                $lab->description ?? '',
+                $lab->computers_count ?? 0,
+                $lab->created_at->format('d/m/Y H:i:s'),
+            ]);
+        }
+
+        $filename = 'reports/laboratorios-' . now()->format('Y-m-d_His') . '.csv';
+        Storage::put($filename, $csv->toString());
+        
+        return $filename;
+    }
+
+    private function exportComputersAsCsv($computers): string
+    {
+        $csv = Writer::createFromString();
+        $csv->setOutputBOM(Writer::BOM_UTF8);
+        $csv->insertOne([
+            'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status',
+            'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos',
+            'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional'
+        ]);
+
+        foreach ($computers as $computer) {
+            $isOnline = now()->diffInMinutes($computer->updated_at) < 5;
+            $status = $isOnline ? 'Online' : 'Offline';
+            
+            $hardwareInfo = $computer->hardware_info ?? [];
+            $physicalCores = $hardwareInfo['cpu']['physical_cores'] ?? '';
+            $logicalCores = $hardwareInfo['cpu']['logical_cores'] ?? '';
+            $memory = $hardwareInfo['memory']['total_gb'] ?? '';
+            $disk = $hardwareInfo['disk']['total_gb'] ?? '';
+            $os = $hardwareInfo['os']['system'] ?? '';
+
+            $csv->insertOne([
+                $computer->id,
+                $computer->hostname ?? '',
+                $computer->machine_id,
+                $computer->lab->name ?? '',
+                $status,
+                $computer->updated_at->format('d/m/Y H:i:s'),
+                $physicalCores,
+                $logicalCores,
+                $memory,
+                $disk,
+                $os,
+            ]);
+        }
+
+        $filename = 'reports/computadores-' . now()->format('Y-m-d_His') . '.csv';
+        Storage::put($filename, $csv->toString());
+        
+        return $filename;
+    }
+
+    private function exportSoftwaresAsCsv($softwares): string
+    {
+        $csv = Writer::createFromString();
+        $csv->setOutputBOM(Writer::BOM_UTF8);
+        $csv->insertOne(['ID', 'Nome', 'Versão', 'Fabricante', 'Total de Computadores', 'Data de Criação']);
+
+        foreach ($softwares as $software) {
+            $csv->insertOne([
+                $software->id,
+                $software->name,
+                $software->version ?? '',
+                $software->vendor ?? '',
+                $software->computers_count ?? 0,
+                $software->created_at->format('d/m/Y H:i:s'),
+            ]);
+        }
+
+        $filename = 'reports/softwares-' . now()->format('Y-m-d_His') . '.csv';
+        Storage::put($filename, $csv->toString());
+        
+        return $filename;
+    }
+
+    // ========== XLSX Export Methods ==========
+
+    private function exportLabsAsXlsx($labs): string
+    {
+        $export = new class($labs) implements FromCollection, WithHeadings, WithMapping {
+            private $labs;
+
+            public function __construct($labs)
+            {
+                $this->labs = $labs;
+            }
+
+            public function collection()
+            {
+                return $this->labs;
+            }
+
+            public function headings(): array
+            {
+                return ['ID', 'Nome', 'Descrição', 'Total de Computadores', 'Data de Criação'];
+            }
+
+            public function map($lab): array
+            {
+                return [
+                    $lab->id,
+                    $lab->name,
+                    $lab->description ?? '',
+                    $lab->computers_count ?? 0,
+                    $lab->created_at->format('d/m/Y H:i:s'),
+                ];
+            }
+        };
+
+        $filename = 'reports/laboratorios-' . now()->format('Y-m-d_His') . '.xlsx';
+        Excel::store($export, $filename);
+        
+        return $filename;
+    }
+
+    private function exportComputersAsXlsx($computers): string
+    {
+        $export = new class($computers) implements FromCollection, WithHeadings, WithMapping {
+            private $computers;
+
+            public function __construct($computers)
+            {
+                $this->computers = $computers;
+            }
+
+            public function collection()
+            {
+                return $this->computers;
+            }
+
+            public function headings(): array
+            {
+                return [
+                    'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status',
+                    'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos',
+                    'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional'
+                ];
+            }
+
+            public function map($computer): array
+            {
+                $isOnline = now()->diffInMinutes($computer->updated_at) < 5;
+                $status = $isOnline ? 'Online' : 'Offline';
+                $hardwareInfo = $computer->hardware_info ?? [];
+
+                return [
+                    $computer->id,
+                    $computer->hostname ?? '',
+                    $computer->machine_id,
+                    $computer->lab->name ?? '',
+                    $status,
+                    $computer->updated_at->format('d/m/Y H:i:s'),
+                    $hardwareInfo['cpu']['physical_cores'] ?? '',
+                    $hardwareInfo['cpu']['logical_cores'] ?? '',
+                    $hardwareInfo['memory']['total_gb'] ?? '',
+                    $hardwareInfo['disk']['total_gb'] ?? '',
+                    $hardwareInfo['os']['system'] ?? '',
+                ];
+            }
+        };
+
+        $filename = 'reports/computadores-' . now()->format('Y-m-d_His') . '.xlsx';
+        Excel::store($export, $filename);
+        
+        return $filename;
+    }
+
+    private function exportSoftwaresAsXlsx($softwares): string
+    {
+        $export = new class($softwares) implements FromCollection, WithHeadings, WithMapping {
+            private $softwares;
+
+            public function __construct($softwares)
+            {
+                $this->softwares = $softwares;
+            }
+
+            public function collection()
+            {
+                return $this->softwares;
+            }
+
+            public function headings(): array
+            {
+                return ['ID', 'Nome', 'Versão', 'Fabricante', 'Total de Computadores', 'Data de Criação'];
+            }
+
+            public function map($software): array
+            {
+                return [
+                    $software->id,
+                    $software->name,
+                    $software->version ?? '',
+                    $software->vendor ?? '',
+                    $software->computers_count ?? 0,
+                    $software->created_at->format('d/m/Y H:i:s'),
+                ];
+            }
+        };
+
+        $filename = 'reports/softwares-' . now()->format('Y-m-d_His') . '.xlsx';
+        Excel::store($export, $filename);
+        
+        return $filename;
+    }
+}

@@ -73,10 +73,11 @@ export default function Softwares() {
         setCurrentPage(1); // Reset to first page when changing per page
     };
 
-    const handleExport = async (format: 'pdf' | 'csv' | 'xlsx') => {
+    const handleExport = async (format: 'pdf' | 'csv' | 'xlsx', async = true) => {
         try {
             const params: any = {
                 format,
+                async,
             };
 
             // Apply current filters
@@ -84,9 +85,16 @@ export default function Softwares() {
                 params.search = searchTerm;
             }
 
-            const response = await apiClient.post('/reports/softwares', params, {
+            const response = await apiClient.post('/reports/softwares', params, async ? {
+                responseType: 'json',
+            } : {
                 responseType: 'blob',
             });
+
+            // If async, return early (user will be redirected to jobs page)
+            if (async && response.status === 202) {
+                return; // Job created, user will be redirected
+            }
 
             // Check if response is actually an error JSON
             const contentType = response.headers['content-type'] || '';

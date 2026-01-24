@@ -134,49 +134,132 @@ class Agent:
             'hostname': socket.gethostname(),
         }
 
-    def register_or_update(self):
-        """Check if computer exists, then create or update."""
-        data = self.collect_data()
-        
-        # 1. Search for existing computer
+    def _find_computer_by_machine_id(self, bypass_cache=False):
+        """Search for computer by machine_id using exact match endpoint first, then fallback to search."""
+        # First, try the exact match endpoint (faster and more reliable)
         try:
-            search_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}"
+            exact_url = f"{config.API_BASE_URL}/computers/by-machine-id/{self.machine_id}"
+            response = self.session.get(exact_url)
+            if response.status_code == 200:
+                return response.json()
+            elif response.status_code == 404:
+                # Computer not found, return None
+                return None
+            # If other error, fall through to search method
+        except Exception as e:
+            logger.warning(f"Exact match endpoint failed: {e}. Falling back to search method.")
+        
+        # Fallback: Search for computer by machine_id across all pages
+        # Add timestamp to bypass cache if needed
+        cache_buster = f"&_bypass_cache=true&_t={int(time.time())}" if bypass_cache else ""
+        search_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}&per_page=100{cache_buster}"
+        try:
             response = self.session.get(search_url)
             response.raise_for_status()
             results = response.json()
             
-            # Check if found
-            existing = None
+            # Check if found in current page
             if 'data' in results:
                 for pc in results['data']:
-                    if pc['machine_id'] == self.machine_id:
-                        existing = pc
-                        break
+                    if pc.get('machine_id') == self.machine_id:
+                        return pc
+            
+            # If not found in first page and there are more pages, search through all pages
+            if results.get('last_page', 1) > 1:
+                for page in range(2, results.get('last_page', 1) + 1):
+                    page_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}&per_page=100&page={page}{cache_buster}"
+                    page_response = self.session.get(page_url)
+                    page_response.raise_for_status()
+                    page_results = page_response.json()
+                    
+                    if 'data' in page_results:
+                        for pc in page_results['data']:
+                            if pc.get('machine_id') == self.machine_id:
+                                return pc
+        except Exception as e:
+            logger.warning(f"Search method failed: {e}")
+        
+        return None
+
+    def register_or_update(self):
+        """Check if computer exists, then create or update."""
+        data = self.collect_data()
+        
+        try:
+            # 1. Search for existing computer by machine_id
+            existing = self._find_computer_by_machine_id()
             
             if existing:
                 self.computer_db_id = existing['id']
                 logger.info(f"Computer found (ID: {self.computer_db_id}). Updating...")
                 # Update
                 update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
-                self.session.put(update_url, json=data).raise_for_status()
+                update_response = self.session.put(update_url, json=data)
+                update_response.raise_for_status()
                 logger.info("Update successful.")
             else:
                 logger.info("Computer not found. Registering...")
                 # Create
                 create_url = f"{config.API_BASE_URL}/computers"
                 res = self.session.post(create_url, json=data)
-                res.raise_for_status()
-                self.computer_db_id = res.json()['id']
-                logger.info(f"Registration successful (ID: {self.computer_db_id}).")
                 
+                # Handle 422 error (machine_id already exists) - try to find and update instead
+                if res.status_code == 422:
+                    error_data = res.json()
+                    if 'errors' in error_data and 'machine_id' in error_data['errors']:
+                        logger.warning("Machine ID already exists (422 error). Searching again to update...")
+                        # Wait a bit for database to sync (in case of race condition)
+                        time.sleep(0.5)
+                        
+                        # Try to find the computer using exact match endpoint (bypasses cache)
+                        found_computer = self._find_computer_by_machine_id(bypass_cache=True)
+                        
+                        if found_computer:
+                            self.computer_db_id = found_computer['id']
+                            logger.info(f"Found existing computer (ID: {self.computer_db_id}). Updating...")
+                            update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
+                            update_response = self.session.put(update_url, json=data)
+                            update_response.raise_for_status()
+                            logger.info("Update successful after handling 422 error.")
+                        else:
+                            # If still not found, wait a bit more and try again
+                            logger.warning("Computer not found on first attempt. Waiting and retrying...")
+                            time.sleep(1)
+                            found_computer = self._find_computer_by_machine_id(bypass_cache=True)
+                            
+                            if found_computer:
+                                self.computer_db_id = found_computer['id']
+                                logger.info(f"Found existing computer on retry (ID: {self.computer_db_id}). Updating...")
+                                update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
+                                update_response = self.session.put(update_url, json=data)
+                                update_response.raise_for_status()
+                                logger.info("Update successful after retry.")
+                            else:
+                                logger.error("Machine ID exists but computer not found even after retry.")
+                                logger.error(f"Machine ID: {self.machine_id}")
+                                logger.error("This may indicate a database inconsistency. Skipping this update cycle.")
+                                # Don't raise error, just log and continue - will retry next cycle
+                                return
+                    else:
+                        res.raise_for_status()
+                else:
+                    res.raise_for_status()
+                    self.computer_db_id = res.json()['id']
+                    logger.info(f"Registration successful (ID: {self.computer_db_id}).")
+                
+        except requests.HTTPError as e:
+            logger.error(f"HTTP error: {e}")
+            if e.response is not None:
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response: {e.response.text}")
+            # Identify if auth error, maybe retry login?
+            if e.response and e.response.status_code == 401:
+                logger.warning("Token expired/invalid. Re-authenticating next loop.")
+                self.token = None
         except Exception as e:
             logger.error(f"Communication error: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}") # Log validation errors
-            # Identify if auth error, maybe retry login?
-            if isinstance(e, requests.HTTPError) and e.response.status_code == 401:
-                logger.warning("Token expired/invalid. Re-authenticating next loop.")
-                self.token = None
+                logger.error(f"Response: {e.response.text}")
 
     def send_detailed_report(self):
         """Send detailed hardware and software report to backend."""

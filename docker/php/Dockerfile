@@ -3,6 +3,7 @@ FROM php:8.4-cli-alpine
 # Install dependencies and extensions
 RUN apk add --no-cache \
     postgresql-dev \
+    postgresql-client \
     libzip-dev \
     unzip \
     git \

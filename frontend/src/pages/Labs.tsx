@@ -11,9 +11,19 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Lab {
     id: number;
@@ -45,6 +55,8 @@ export default function Labs() {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+    const [labToDelete, setLabToDelete] = useState<Lab | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const { toast } = useToast();
 
     const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<LabFormData>({
@@ -97,24 +109,49 @@ export default function Labs() {
         }
     };
 
-    const handleDelete = async (id: number) => {
-        if (!confirm('Tem certeza?')) return;
+    const handleDelete = async () => {
+        if (!labToDelete) return;
+        
         try {
-            await apiClient.delete(`/labs/${id}`);
+            setIsDeleting(true);
+            await apiClient.delete(`/labs/${labToDelete.id}`);
             toast({ title: 'Excluído', description: 'Laboratório excluído com sucesso' });
-            fetchLabs();
+            
+            // Force refresh by adjusting page if needed
+            const currentLabsCount = labs.length;
+            
+            // If we're on the last page and it only has one item, go to previous page
+            if (pagination && currentLabsCount === 1 && currentPage > 1) {
+                setCurrentPage(currentPage - 1);
+                // fetchLabs will be called automatically by useEffect
+            } else {
+                // Refresh to ensure we get fresh data
+                await fetchLabs();
+            }
+            
+            setLabToDelete(null);
         } catch (error) {
             toast({ title: 'Erro', description: 'Falha ao excluir laboratório', variant: 'destructive' });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
-    const handleExport = async (format: 'pdf' | 'csv' | 'xlsx') => {
+    const handleExport = async (format: 'pdf' | 'csv' | 'xlsx', async = true) => {
         try {
             const response = await apiClient.post('/reports/labs', {
                 format,
-            }, {
+                async,
+            }, async ? {
+                responseType: 'json',
+            } : {
                 responseType: 'blob',
             });
+
+            // If async, return early (user will be redirected to jobs page)
+            if (async && response.status === 202) {
+                return; // Job created, user will be redirected
+            }
 
             // Check if response is actually an error JSON
             const contentType = response.headers['content-type'] || '';
@@ -241,7 +278,10 @@ export default function Labs() {
                                             <DropdownMenuItem onClick={() => navigate(`/admin/labs/${lab.id}`)}>
                                                 Ver Detalhes
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleDelete(lab.id)} className="text-red-600">
+                                            <DropdownMenuItem 
+                                                onClick={() => setLabToDelete(lab)} 
+                                                className="text-red-600"
+                                            >
                                                 Excluir
                                             </DropdownMenuItem>
                                         </DropdownMenuContent>
@@ -320,6 +360,46 @@ export default function Labs() {
                     Mostrando {pagination.total} {pagination.total === 1 ? 'laboratório' : 'laboratórios'}
                 </div>
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={labToDelete !== null} onOpenChange={(open) => !open && setLabToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir o laboratório <strong>{labToDelete?.name}</strong>?
+                            <br />
+                            {labToDelete && labToDelete.computers_count && labToDelete.computers_count > 0 && (
+                                <span className="text-orange-600 font-semibold">
+                                    Atenção: Este laboratório possui {labToDelete.computers_count} computador(es) associado(s).
+                                </span>
+                            )}
+                            <br />
+                            <span className="text-red-600 font-semibold">Esta ação não pode ser desfeita.</span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-red-600 text-white hover:bg-red-700"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <span className="animate-spin mr-2">⏳</span>
+                                    Excluindo...
+                                </>
+                            ) : (
+                                <>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Excluir
+                                </>
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

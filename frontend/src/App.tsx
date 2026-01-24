@@ -11,6 +11,8 @@ import Computers from './pages/Computers';
 import ComputerDetails from './pages/ComputerDetails';
 import Softwares from './pages/Softwares';
 import AuditLogs from './pages/AuditLogs';
+import ReportJobs from './pages/ReportJobs';
+import Backups from './pages/Backups';
 import PublicComputerView from './pages/PublicComputerView';
 
 function App() {
@@ -30,6 +32,8 @@ function App() {
           <Route path="computers/:id" element={<ComputerDetails />} />
           <Route path="softwares" element={<Softwares />} />
           <Route path="audit-logs" element={<AuditLogs />} />
+          <Route path="report-jobs" element={<ReportJobs />} />
+          <Route path="backups" element={<Backups />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

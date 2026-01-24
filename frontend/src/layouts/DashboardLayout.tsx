@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText } from 'lucide-react';
+import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database } from 'lucide-react';
 
 export default function DashboardLayout() {
     const { isAuthenticated, logout, checkAuth } = useAuthStore();
@@ -50,6 +50,14 @@ export default function DashboardLayout() {
                     <Link to="/admin/audit-logs" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
                         <FileText className="mr-3 h-5 w-5" />
                         Logs de Auditoria
+                    </Link>
+                    <Link to="/admin/report-jobs" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Download className="mr-3 h-5 w-5" />
+                        Relatórios
+                    </Link>
+                    <Link to="/admin/backups" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Database className="mr-3 h-5 w-5" />
+                        Backups
                     </Link>
                 </nav>
                 <div className="p-4 border-t">

@@ -11,9 +11,20 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface Lab {
     id: number;
@@ -69,6 +80,8 @@ export default function Computers() {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+    const [computerToDelete, setComputerToDelete] = useState<Computer | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const { toast } = useToast();
 
     const { register, control, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ComputerFormData>({
@@ -130,7 +143,7 @@ export default function Computers() {
             toast({ title: 'Sucesso', description: 'Computador criado com sucesso' });
             setIsOpen(false);
             reset();
-            fetchComputers();
+            fetchComputers(); // Refresh to show new computer immediately
         } catch (error: any) {
             toast({
                 title: 'Erro',
@@ -140,14 +153,31 @@ export default function Computers() {
         }
     };
 
-    const handleDelete = async (id: number) => {
-        if (!confirm('Tem certeza?')) return;
+    const handleDelete = async () => {
+        if (!computerToDelete) return;
+        
         try {
-            await apiClient.delete(`/computers/${id}`);
+            setIsDeleting(true);
+            await apiClient.delete(`/computers/${computerToDelete.id}`);
             toast({ title: 'Excluído', description: 'Computador excluído com sucesso' });
-            fetchComputers();
+            
+            // Force refresh by bypassing cache and adjusting page if needed
+            const currentComputersCount = computers.length;
+            
+            // If we're on the last page and it only has one item, go to previous page
+            if (pagination && currentComputersCount === 1 && currentPage > 1) {
+                setCurrentPage(currentPage - 1);
+                // fetchComputers will be called automatically by useEffect
+            } else {
+                // Refresh to ensure we get fresh data
+                await fetchComputers();
+            }
+            
+            setComputerToDelete(null);
         } catch (error) {
             toast({ title: 'Erro', description: 'Falha ao excluir computador', variant: 'destructive' });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -257,10 +287,11 @@ export default function Computers() {
         }
     };
 
-    const handleExportReport = async (format: 'pdf' | 'csv' | 'xlsx') => {
+    const handleExportReport = async (format: 'pdf' | 'csv' | 'xlsx', async = true) => {
         try {
             const params: any = {
                 format,
+                async,
             };
 
             // Apply current filters
@@ -271,9 +302,16 @@ export default function Computers() {
                 params.lab_id = labFilter;
             }
 
-            const response = await apiClient.post('/reports/computers', params, {
+            const response = await apiClient.post('/reports/computers', params, async ? {
+                responseType: 'json',
+            } : {
                 responseType: 'blob',
             });
+
+            // If async, return early (user will be redirected to jobs page)
+            if (async && response.status === 202) {
+                return; // Job created, user will be redirected
+            }
 
             // Check if response is actually an error JSON
             const contentType = response.headers['content-type'] || '';
@@ -523,7 +561,10 @@ export default function Computers() {
                                             <DropdownMenuItem onClick={() => navigate(`/admin/computers/${pc.id}`)}>
                                                 Ver Detalhes
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleDelete(pc.id)} className="text-red-600">
+                                            <DropdownMenuItem 
+                                                onClick={() => setComputerToDelete(pc)} 
+                                                className="text-red-600"
+                                            >
                                                 Excluir
                                             </DropdownMenuItem>
                                         </DropdownMenuContent>
@@ -602,6 +643,40 @@ export default function Computers() {
                     Mostrando {pagination.total} {pagination.total === 1 ? 'computador' : 'computadores'}
                 </div>
             )}
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={computerToDelete !== null} onOpenChange={(open) => !open && setComputerToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir o computador <strong>{computerToDelete?.hostname || computerToDelete?.machine_id}</strong>?
+                            <br />
+                            <span className="text-red-600 font-semibold">Esta ação não pode ser desfeita.</span>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-red-600 text-white hover:bg-red-700"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <span className="animate-spin mr-2">⏳</span>
+                                    Excluindo...
+                                </>
+                            ) : (
+                                <>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Excluir
+                                </>
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

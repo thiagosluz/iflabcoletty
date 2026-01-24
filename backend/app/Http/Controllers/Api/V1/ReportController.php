@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Lab;
 use App\Models\Computer;
 use App\Models\Software;
+use App\Models\ReportJob;
+use App\Jobs\GenerateReportJob;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use League\Csv\Writer;
@@ -14,13 +16,85 @@ use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 class ReportController extends Controller
 {
     /**
-     * Export labs report
+     * Export labs report (async)
      */
     public function exportLabs(Request $request)
+    {
+        $validated = $request->validate([
+            'format' => 'required|in:pdf,csv,xlsx',
+            'search' => 'nullable|string',
+            'async' => 'nullable',
+        ]);
+
+        // Normalize async parameter (handle string "true"/"false" or boolean from frontend)
+        $async = $validated['async'] ?? false;
+        \Log::info("exportLabs - async parameter received: " . var_export($async, true) . " (type: " . gettype($async) . ")");
+        
+        if (is_string($async)) {
+            $async = filter_var($async, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($async === null) {
+                $async = false;
+            }
+        }
+        $async = (bool) $async;
+        
+        \Log::info("exportLabs - async parameter normalized: " . ($async ? 'true' : 'false'));
+
+        // If async is false or not set, use synchronous export (backward compatibility)
+        if (!$async) {
+            \Log::info("exportLabs - Using synchronous export");
+            return $this->exportLabsSync($request);
+        }
+        
+        \Log::info("exportLabs - Using asynchronous export");
+
+        // Create report job record
+        $reportJob = ReportJob::create([
+            'user_id' => auth()->id(),
+            'type' => 'labs',
+            'format' => $validated['format'],
+            'filters' => [
+                'search' => $validated['search'] ?? null,
+            ],
+            'status' => 'pending',
+        ]);
+
+        // Dispatch job to queue immediately
+        try {
+            GenerateReportJob::dispatch(
+                $reportJob->id,
+                'labs',
+                $validated['format'],
+                ['search' => $validated['search'] ?? null]
+            )->onQueue('default');
+            
+            \Log::info("Report job {$reportJob->id} dispatched to queue");
+        } catch (\Exception $e) {
+            \Log::error("Failed to dispatch report job {$reportJob->id}: " . $e->getMessage());
+            // Update job status to failed
+            $reportJob->update([
+                'status' => 'failed',
+                'error_message' => 'Falha ao despachar job para a fila: ' . $e->getMessage(),
+            ]);
+            throw $e;
+        }
+
+        return response()->json([
+            'message' => 'Relatório em processamento',
+            'job_id' => $reportJob->id,
+            'status' => 'pending',
+        ], 202);
+    }
+
+    /**
+     * Synchronous export for backward compatibility
+     */
+    private function exportLabsSync(Request $request)
     {
         $validated = $request->validate([
             'format' => 'required|in:pdf,csv,xlsx',
@@ -58,9 +132,71 @@ class ReportController extends Controller
     }
 
     /**
-     * Export computers report
+     * Export computers report (async)
      */
     public function exportComputers(Request $request)
+    {
+        $validated = $request->validate([
+            'format' => 'required|in:pdf,csv,xlsx',
+            'search' => 'nullable|string',
+            'lab_id' => 'nullable|exists:labs,id',
+            'status' => 'nullable|in:online,offline',
+            'async' => 'nullable|boolean',
+        ]);
+
+        // If async is false or not set, use synchronous export (backward compatibility)
+        if (!($validated['async'] ?? false)) {
+            return $this->exportComputersSync($request);
+        }
+
+        // Create report job record
+        $reportJob = ReportJob::create([
+            'user_id' => auth()->id(),
+            'type' => 'computers',
+            'format' => $validated['format'],
+            'filters' => [
+                'search' => $validated['search'] ?? null,
+                'lab_id' => $validated['lab_id'] ?? null,
+                'status' => $validated['status'] ?? null,
+            ],
+            'status' => 'pending',
+        ]);
+
+        // Dispatch job to queue immediately
+        try {
+            GenerateReportJob::dispatch(
+                $reportJob->id,
+                'computers',
+                $validated['format'],
+                [
+                    'search' => $validated['search'] ?? null,
+                    'lab_id' => $validated['lab_id'] ?? null,
+                    'status' => $validated['status'] ?? null,
+                ]
+            )->onQueue('default');
+            
+            \Log::info("Report job {$reportJob->id} dispatched to queue");
+        } catch (\Exception $e) {
+            \Log::error("Failed to dispatch report job {$reportJob->id}: " . $e->getMessage());
+            // Update job status to failed
+            $reportJob->update([
+                'status' => 'failed',
+                'error_message' => 'Falha ao despachar job para a fila: ' . $e->getMessage(),
+            ]);
+            throw $e;
+        }
+
+        return response()->json([
+            'message' => 'Relatório em processamento',
+            'job_id' => $reportJob->id,
+            'status' => 'pending',
+        ], 202);
+    }
+
+    /**
+     * Synchronous export for backward compatibility
+     */
+    private function exportComputersSync(Request $request)
     {
         $validated = $request->validate([
             'format' => 'required|in:pdf,csv,xlsx',
@@ -114,9 +250,73 @@ class ReportController extends Controller
     }
 
     /**
-     * Export softwares report
+     * Export softwares report (async)
      */
     public function exportSoftwares(Request $request)
+    {
+        $validated = $request->validate([
+            'format' => 'required|in:pdf,csv,xlsx',
+            'search' => 'nullable|string',
+            'async' => 'nullable',
+        ]);
+
+        // Normalize async parameter (handle string "true"/"false" or boolean from frontend)
+        $async = $validated['async'] ?? false;
+        if (is_string($async)) {
+            $async = filter_var($async, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($async === null) {
+                $async = false;
+            }
+        }
+        $async = (bool) $async;
+
+        // If async is false or not set, use synchronous export (backward compatibility)
+        if (!$async) {
+            return $this->exportSoftwaresSync($request);
+        }
+
+        // Create report job record
+        $reportJob = ReportJob::create([
+            'user_id' => auth()->id(),
+            'type' => 'softwares',
+            'format' => $validated['format'],
+            'filters' => [
+                'search' => $validated['search'] ?? null,
+            ],
+            'status' => 'pending',
+        ]);
+
+        // Dispatch job to queue immediately
+        try {
+            GenerateReportJob::dispatch(
+                $reportJob->id,
+                'softwares',
+                $validated['format'],
+                ['search' => $validated['search'] ?? null]
+            )->onQueue('default');
+            
+            \Log::info("Report job {$reportJob->id} dispatched to queue");
+        } catch (\Exception $e) {
+            \Log::error("Failed to dispatch report job {$reportJob->id}: " . $e->getMessage());
+            // Update job status to failed
+            $reportJob->update([
+                'status' => 'failed',
+                'error_message' => 'Falha ao despachar job para a fila: ' . $e->getMessage(),
+            ]);
+            throw $e;
+        }
+
+        return response()->json([
+            'message' => 'Relatório em processamento',
+            'job_id' => $reportJob->id,
+            'status' => 'pending',
+        ], 202);
+    }
+
+    /**
+     * Synchronous export for backward compatibility
+     */
+    private function exportSoftwaresSync(Request $request)
     {
         $validated = $request->validate([
             'format' => 'required|in:pdf,csv,xlsx',
@@ -152,6 +352,67 @@ class ReportController extends Controller
             default:
                 return response()->json(['message' => 'Formato inválido'], 400);
         }
+    }
+
+    /**
+     * Get report job status
+     */
+    public function getJobStatus(ReportJob $reportJob)
+    {
+        // Only allow users to see their own jobs
+        if ($reportJob->user_id !== auth()->id()) {
+            return response()->json(['message' => 'Não autorizado'], 403);
+        }
+
+        return response()->json([
+            'id' => $reportJob->id,
+            'type' => $reportJob->type,
+            'format' => $reportJob->format,
+            'status' => $reportJob->status,
+            'file_path' => $reportJob->file_path,
+            'download_url' => $reportJob->download_url,
+            'error_message' => $reportJob->error_message,
+            'started_at' => $reportJob->started_at,
+            'completed_at' => $reportJob->completed_at,
+            'failed_at' => $reportJob->failed_at,
+            'created_at' => $reportJob->created_at,
+        ]);
+    }
+
+    /**
+     * Download completed report
+     */
+    public function downloadReport(ReportJob $reportJob)
+    {
+        // Only allow users to download their own reports
+        if ($reportJob->user_id !== auth()->id()) {
+            return response()->json(['message' => 'Não autorizado'], 403);
+        }
+
+        if (!$reportJob->isCompleted() || !$reportJob->file_path) {
+            return response()->json(['message' => 'Relatório não disponível'], 404);
+        }
+
+        if (!Storage::exists($reportJob->file_path)) {
+            return response()->json(['message' => 'Arquivo não encontrado'], 404);
+        }
+
+        return Storage::download($reportJob->file_path);
+    }
+
+    /**
+     * List user's report jobs
+     */
+    public function listJobs(Request $request)
+    {
+        $query = ReportJob::where('user_id', auth()->id())
+            ->orderBy('created_at', 'desc');
+
+        // Pagination
+        $perPage = min(max((int)$request->query('per_page', 20), 5), 100);
+        $jobs = $query->paginate($perPage);
+
+        return response()->json($jobs);
     }
 
     // ========== PDF Export Methods ==========

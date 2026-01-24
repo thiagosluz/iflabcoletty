@@ -59,7 +59,7 @@ class DashboardController extends Controller
         $osDistribution = $this->getOSDistribution($allComputers);
         $totalSoftwares = $this->getTotalUniqueSoftwares();
 
-        return response()->json([
+        return [
             'total_labs' => Lab::count(),
             'total_computers' => Computer::count(),
             'online_computers' => Computer::where('updated_at', '>=', $threshold)->count(),
@@ -67,7 +67,7 @@ class DashboardController extends Controller
             'total_softwares' => $totalSoftwares,
             'hardware_averages' => $hardwareAverages,
             'os_distribution' => $osDistribution,
-        ]);
+        ];
     }
 
     /**

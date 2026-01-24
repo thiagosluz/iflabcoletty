@@ -13,6 +13,17 @@ class ComputerController extends Controller
     use LogsActivity;
     public function index(Request $request)
     {
+        $perPage = $request->query('per_page', 20);
+        $perPage = min(max((int)$perPage, 5), 100);
+        
+        return $this->buildComputerQuery($request)->paginate($perPage);
+    }
+
+    /**
+     * Helper method to build the query, extracted for reusability
+     */
+    private function buildComputerQuery(Request $request)
+    {
         // Optimized: Select only necessary fields and eager load lab with limited fields
         $query = Computer::with('lab:id,name')
             ->select('id', 'lab_id', 'hostname', 'machine_id', 'public_hash', 'updated_at', 'created_at');
@@ -33,7 +44,27 @@ class ComputerController extends Controller
         $perPage = $request->query('per_page', 20);
         $perPage = min(max((int)$perPage, 5), 100); // Limit between 5 and 100
 
-        return $query->orderBy('created_at', 'desc')->paginate($perPage);
+        return $query->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Find computer by machine_id (exact match)
+     * Useful for agents that need to find computers immediately after creation
+     */
+    public function findByMachineId(Request $request, string $machineId)
+    {
+        $computer = Computer::where('machine_id', $machineId)
+            ->select('id', 'lab_id', 'hostname', 'machine_id', 'public_hash', 'updated_at', 'created_at')
+            ->with('lab:id,name')
+            ->first();
+
+        if (!$computer) {
+            return response()->json([
+                'message' => 'Computador não encontrado'
+            ], 404);
+        }
+
+        return response()->json($computer);
     }
 
     public function store(Request $request)
