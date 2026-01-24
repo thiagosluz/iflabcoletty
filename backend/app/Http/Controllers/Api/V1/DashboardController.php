@@ -42,6 +42,8 @@ class DashboardController extends Controller
     )]
     public function stats()
     {
+        $this->authorize('dashboard.view');
+
         // "Online" threshold: updated in the last 5 minutes
         $threshold = Carbon::now()->subMinutes(5);
 

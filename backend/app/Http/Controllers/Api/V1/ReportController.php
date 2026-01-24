@@ -25,6 +25,8 @@ class ReportController extends Controller
      */
     public function exportLabs(Request $request)
     {
+        $this->authorize('reports.create');
+
         $validated = $request->validate([
             'format' => 'required|in:pdf,csv,xlsx',
             'search' => 'nullable|string',
@@ -254,6 +256,8 @@ class ReportController extends Controller
      */
     public function exportSoftwares(Request $request)
     {
+        $this->authorize('reports.create');
+
         $validated = $request->validate([
             'format' => 'required|in:pdf,csv,xlsx',
             'search' => 'nullable|string',
@@ -359,6 +363,8 @@ class ReportController extends Controller
      */
     public function getJobStatus(ReportJob $reportJob)
     {
+        $this->authorize('reports.view');
+
         // Only allow users to see their own jobs
         if ($reportJob->user_id !== auth()->id()) {
             return response()->json(['message' => 'Não autorizado'], 403);
@@ -384,6 +390,8 @@ class ReportController extends Controller
      */
     public function downloadReport(ReportJob $reportJob)
     {
+        $this->authorize('reports.download');
+
         // Only allow users to download their own reports
         if ($reportJob->user_id !== auth()->id()) {
             return response()->json(['message' => 'Não autorizado'], 403);

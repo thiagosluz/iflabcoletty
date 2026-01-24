@@ -16,6 +16,8 @@ class BackupController extends Controller
      */
     public function index(Request $request)
     {
+        $this->authorize('backups.view');
+
         $query = Backup::with('user:id,name,email')
             ->orderBy('created_at', 'desc');
 
@@ -53,6 +55,8 @@ class BackupController extends Controller
      */
     public function stats(BackupService $backupService)
     {
+        $this->authorize('backups.view');
+
         $stats = $backupService->getBackupStats();
         
         return response()->json([
@@ -70,6 +74,8 @@ class BackupController extends Controller
      */
     public function show(Backup $backup)
     {
+        $this->authorize('backups.view');
+
         $backup->load('user:id,name,email');
         
         // Add computed attributes
@@ -84,6 +90,8 @@ class BackupController extends Controller
      */
     public function store(Request $request, BackupService $backupService)
     {
+        $this->authorize('backups.create');
+
         $validated = $request->validate([
             'type' => 'nullable|in:database,full',
         ]);
@@ -125,6 +133,8 @@ class BackupController extends Controller
      */
     public function download(Backup $backup)
     {
+        $this->authorize('backups.view');
+
         if (!$backup->isCompleted()) {
             return response()->json([
                 'message' => 'Backup is not completed'
@@ -157,6 +167,8 @@ class BackupController extends Controller
      */
     public function destroy(Backup $backup)
     {
+        $this->authorize('backups.delete');
+
         try {
             // Delete file if exists
             if ($backup->fileExists()) {
@@ -184,6 +196,8 @@ class BackupController extends Controller
      */
     public function clean(Request $request, BackupService $backupService)
     {
+        $this->authorize('backups.delete');
+
         $validated = $request->validate([
             'retention_days' => 'nullable|integer|min:1|max:365',
         ]);
@@ -213,6 +227,8 @@ class BackupController extends Controller
      */
     public function restore(Backup $backup, BackupService $backupService)
     {
+        $this->authorize('backups.restore');
+
         // Refresh backup to get latest status
         $backup->refresh();
         

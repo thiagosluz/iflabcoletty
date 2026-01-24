@@ -25,6 +25,8 @@ class SoftwareController extends Controller
     )]
     public function index(Request $request)
     {
+        $this->authorize('softwares.view');
+
         $query = Software::withCount('computers');
 
         // Search
@@ -59,6 +61,8 @@ class SoftwareController extends Controller
     )]
     public function show(Software $software)
     {
+        $this->authorize('softwares.view');
+
         // Optimized: Eager load computers with lab to avoid N+1 queries
         return $software->load(['computers.lab:id,name']);
     }

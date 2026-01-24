@@ -19,8 +19,12 @@ class PerformanceTest extends TestCase
     public function test_computers_listing_is_performant(): void
     {
         $user = $this->actingAsUser();
-        Lab::factory()->count(5)->create();
-        Computer::factory()->count(100)->create();
+        $labs = Lab::factory()->count(5)->create();
+        
+        // Create computers with lab_id to avoid creating duplicate labs
+        foreach ($labs as $lab) {
+            Computer::factory()->count(20)->create(['lab_id' => $lab->id]);
+        }
 
         $startTime = microtime(true);
         
@@ -43,7 +47,7 @@ class PerformanceTest extends TestCase
         $user = $this->actingAsUser();
         $labs = Lab::factory()->count(20)->create();
         
-        // Create computers for each lab
+        // Create computers for each lab (using existing labs to avoid creating duplicate labs)
         foreach ($labs as $lab) {
             Computer::factory()->count(10)->create(['lab_id' => $lab->id]);
         }

@@ -27,6 +27,8 @@ class LabController extends Controller
     )]
     public function index(Request $request)
     {
+        $this->authorize('labs.view');
+
         // Optimized: Select only necessary fields
         $query = Lab::select('id', 'name', 'description', 'created_at', 'updated_at')
             ->withCount('computers');
@@ -61,6 +63,8 @@ class LabController extends Controller
     )]
     public function store(Request $request)
     {
+        $this->authorize('labs.create');
+
         $validated = $request->validate([
             'name' => 'required|string|unique:labs,name|max:255',
             'description' => 'nullable|string'
@@ -90,6 +94,8 @@ class LabController extends Controller
     )]
     public function show(Lab $lab)
     {
+        $this->authorize('labs.view');
+
         // Optimized: Load only necessary fields and relationships
         $lab->load(['computers' => function ($query) {
             $query->select('id', 'lab_id', 'hostname', 'machine_id', 'hardware_info', 'updated_at', 'created_at');
@@ -130,6 +136,8 @@ class LabController extends Controller
     )]
     public function getComputers(Request $request, Lab $lab)
     {
+        $this->authorize('labs.view');
+
         $query = $lab->computers()->with('lab');
 
         // Search
@@ -176,6 +184,8 @@ class LabController extends Controller
     )]
     public function getSoftwares(Request $request, Lab $lab)
     {
+        $this->authorize('labs.view');
+
         // Optimized: Use whereHas with lab_id directly instead of loading all computer IDs
         // Get unique softwares from all computers in the lab
         $query = Software::whereHas('computers', function ($q) use ($lab) {
@@ -336,6 +346,8 @@ class LabController extends Controller
 
     public function update(Request $request, Lab $lab)
     {
+        $this->authorize('labs.update');
+
         $oldValues = $lab->toArray();
         
         $validated = $request->validate([
@@ -353,6 +365,8 @@ class LabController extends Controller
 
     public function destroy(Lab $lab)
     {
+        $this->authorize('labs.delete');
+
         $oldValues = $lab->toArray();
         $resourceId = $lab->id;
         $resourceName = $lab->name;

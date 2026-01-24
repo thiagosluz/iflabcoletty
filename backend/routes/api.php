@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\V1\PublicController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\BackupController;
+use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\RoleController;
 
 Route::prefix('v1')->group(function () {
     // Public Routes (no authentication required) - Higher rate limit
@@ -69,6 +71,17 @@ Route::prefix('v1')->group(function () {
         Route::get('/backups/{backup}/download', [BackupController::class, 'download'])->name('api.v1.backups.download');
         Route::post('/backups/{backup}/restore', [BackupController::class, 'restore']);
         Route::post('/backups/clean', [BackupController::class, 'clean']);
+
+        // Users (requires users.* permissions)
+        Route::apiResource('users', UserController::class);
+
+        // Roles and Permissions (requires roles.* permissions)
+        Route::get('/roles', [RoleController::class, 'index']);
+        Route::get('/permissions', [RoleController::class, 'permissions']);
+        Route::post('/roles', [RoleController::class, 'store']);
+        Route::get('/roles/{role}', [RoleController::class, 'show']);
+        Route::put('/roles/{role}', [RoleController::class, 'update']);
+        Route::delete('/roles/{role}', [RoleController::class, 'destroy']);
     });
 });
 

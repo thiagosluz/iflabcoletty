@@ -24,6 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\AuditLogMiddleware::class,
         ]);
         
+        // Register permission middleware alias
+        $middleware->alias([
+            'permission' => \App\Http\Middleware\CheckPermission::class,
+        ]);
+        
         // Rate limiting is applied per route in routes/api.php
         // throttleApi is not applied globally to allow custom limits per endpoint
     })

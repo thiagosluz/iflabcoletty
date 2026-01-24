@@ -32,11 +32,51 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
+     * Setup the test environment.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        
+        // Reset cached roles and permissions
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        
+        // Seed roles and permissions for tests
+        // This ensures permissions exist before tests run
+        $seeder = new \Database\Seeders\RolePermissionSeeder();
+        $seeder->run();
+        
+        // Reset cache again after seeding
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+    }
+
+    /**
      * Create and authenticate a user for testing
      */
     protected function actingAsUser(): User
     {
         $user = User::factory()->create();
+        
+        // Get or create admin role
+        $adminRole = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']);
+        
+        // Ensure admin role has all permissions
+        if ($adminRole->permissions()->count() === 0) {
+            $allPermissions = \Spatie\Permission\Models\Permission::all();
+            if ($allPermissions->count() > 0) {
+                $adminRole->givePermissionTo($allPermissions);
+            }
+        }
+        
+        // Assign admin role to user
+        if (!$user->hasRole('admin')) {
+            $user->assignRole('admin');
+        }
+        
+        // Clear permission cache for this user
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        $user->refresh();
+        
         $this->actingAs($user, 'sanctum');
         return $user;
     }
@@ -49,6 +89,26 @@ abstract class TestCase extends BaseTestCase
         if (!$user) {
             $user = User::factory()->create();
         }
+        
+        // Get or create admin role
+        $adminRole = \Spatie\Permission\Models\Role::firstOrCreate(['name' => 'admin']);
+        
+        // Ensure admin role has all permissions
+        if ($adminRole->permissions()->count() === 0) {
+            $allPermissions = \Spatie\Permission\Models\Permission::all();
+            if ($allPermissions->count() > 0) {
+                $adminRole->givePermissionTo($allPermissions);
+            }
+        }
+        
+        // Assign admin role to user if not already assigned
+        if (!$user->hasRole('admin')) {
+            $user->assignRole('admin');
+        }
+        
+        // Clear permission cache and reload user
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        $user = $user->fresh(['roles', 'permissions']);
         
         $token = $user->createToken('test-token')->plainTextToken;
         

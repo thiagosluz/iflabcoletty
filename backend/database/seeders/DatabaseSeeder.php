@@ -19,6 +19,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Criar roles e permissions primeiro
+        $this->call(RolePermissionSeeder::class);
+
         // Criar usuário admin (se não existir)
         $admin = User::firstOrCreate(
             ['email' => 'admin@iflab.com'],
@@ -28,6 +31,11 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+
+        // Garantir que o admin tenha a role admin
+        if (!$admin->hasRole('admin')) {
+            $admin->assignRole('admin');
+        }
 
         if ($admin->wasRecentlyCreated) {
             $this->command->info('Usuário admin criado: admin@iflab.com / password');

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database } from 'lucide-react';
+import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database, Users, Shield } from 'lucide-react';
 
 export default function DashboardLayout() {
     const { isAuthenticated, logout, checkAuth } = useAuthStore();
@@ -58,6 +58,14 @@ export default function DashboardLayout() {
                     <Link to="/admin/backups" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
                         <Database className="mr-3 h-5 w-5" />
                         Backups
+                    </Link>
+                    <Link to="/admin/users" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Users className="mr-3 h-5 w-5" />
+                        Usuários
+                    </Link>
+                    <Link to="/admin/roles" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Shield className="mr-3 h-5 w-5" />
+                        Roles
                     </Link>
                 </nav>
                 <div className="p-4 border-t">

@@ -13,6 +13,8 @@ class ComputerController extends Controller
     use LogsActivity;
     public function index(Request $request)
     {
+        $this->authorize('computers.view');
+
         $perPage = $request->query('per_page', 20);
         $perPage = min(max((int)$perPage, 5), 100);
         
@@ -85,6 +87,8 @@ class ComputerController extends Controller
 
     public function show(Computer $computer)
     {
+        $this->authorize('computers.view');
+
         // Optimized: Eager load relationships to avoid N+1 queries
         return $computer->load([
             'lab:id,name,description',
@@ -123,6 +127,8 @@ class ComputerController extends Controller
 
     public function update(Request $request, Computer $computer)
     {
+        $this->authorize('computers.update');
+
         $oldValues = $computer->toArray();
         
         $validated = $request->validate([
@@ -142,6 +148,8 @@ class ComputerController extends Controller
 
     public function destroy(Computer $computer)
     {
+        $this->authorize('computers.delete');
+
         $oldValues = $computer->toArray();
         
         // Log activity before deleting (so we have the model reference)

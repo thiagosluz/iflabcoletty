@@ -31,6 +31,8 @@ class AuditLogController extends Controller
     )]
     public function index(Request $request)
     {
+        $this->authorize('audit-logs.view');
+
         $query = AuditLog::with('user:id,name,email');
 
         // Filter by user
@@ -102,6 +104,8 @@ class AuditLogController extends Controller
     )]
     public function show(string $id)
     {
+        $this->authorize('audit-logs.view');
+
         $log = AuditLog::with('user:id,name,email')->findOrFail($id);
 
         return response()->json($log);
@@ -119,6 +123,8 @@ class AuditLogController extends Controller
     )]
     public function stats()
     {
+        $this->authorize('audit-logs.view');
+
         $stats = [
             'total_logs' => AuditLog::count(),
             'logs_today' => AuditLog::whereDate('created_at', today())->count(),
