@@ -16,6 +16,8 @@ import Backups from './pages/Backups';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
 import Notifications from './pages/Notifications';
+import Alerts from './pages/Alerts';
+import AlertRules from './pages/AlertRules';
 import PublicComputerView from './pages/PublicComputerView';
 
 function App() {
@@ -40,6 +42,8 @@ function App() {
           <Route path="users" element={<Users />} />
           <Route path="roles" element={<Roles />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="alerts" element={<Alerts />} />
+          <Route path="alert-rules" element={<AlertRules />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

@@ -2,22 +2,19 @@
 
 namespace App\Events;
 
-use App\Models\Computer;
-use App\Models\Software;
+use App\Models\Notification;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class SoftwareInstalled implements ShouldBroadcast
+class NotificationCreated implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
-        public Computer $computer,
-        public Software $software,
-        public string $action // 'installed', 'removed'
+        public Notification $notification
     ) {
     }
 
@@ -26,9 +23,10 @@ class SoftwareInstalled implements ShouldBroadcast
      */
     public function broadcastOn(): array
     {
+        // Broadcast to the specific user's private channel
         return [
-            new PrivateChannel('computers'),
-            new PrivateChannel('dashboard'),
+            new PrivateChannel('user.' . $this->notification->user_id),
+            new PrivateChannel('notifications'),
         ];
     }
 
@@ -37,7 +35,7 @@ class SoftwareInstalled implements ShouldBroadcast
      */
     public function broadcastAs(): string
     {
-        return 'software.installed';
+        return 'notification.created';
     }
 
     /**
@@ -46,13 +44,13 @@ class SoftwareInstalled implements ShouldBroadcast
     public function broadcastWith(): array
     {
         return [
-            'computer_id' => $this->computer->id,
-            'computer_hostname' => $this->computer->hostname,
-            'software_id' => $this->software->id,
-            'software_name' => $this->software->name,
-            'software_version' => $this->software->version,
-            'action' => $this->action,
-            'lab_id' => $this->computer->lab_id,
+            'id' => $this->notification->id,
+            'type' => $this->notification->type,
+            'title' => $this->notification->title,
+            'message' => $this->notification->message,
+            'read' => $this->notification->read,
+            'data' => $this->notification->data,
+            'created_at' => $this->notification->created_at->toIso8601String(),
         ];
     }
 }

@@ -22,3 +22,9 @@ Schedule::command('computers:check-status')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Check alert rules every minute
+Schedule::command('alerts:check')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

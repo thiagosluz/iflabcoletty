@@ -12,6 +12,7 @@
         "endroid/qr-code": "^6.1",
         "laravel/framework": "^12.0",
         "laravel/octane": "^2.13",
+        "laravel/reverb": "^1.7",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "league/csv": "^9.15",

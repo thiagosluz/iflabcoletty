@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Broadcast;
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\LabController;
@@ -26,8 +27,83 @@ Route::prefix('v1')->group(function () {
     // Auth - Admin - Rate limit for login (10 attempts per minute per IP)
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1'); // 10 attempts per minute
 
+    // Broadcasting authentication route - needs to be outside the auth group to handle auth manually
+    Route::post('/broadcasting/auth', function (Request $request) {
+        Log::info('Broadcasting auth hit', [
+            'headers' => $request->headers->all(),
+            'bearer_token' => $request->bearerToken(),
+            'authorization_header' => $request->header('Authorization'),
+            'input' => $request->all(),
+        ]);
+
+        // Manually authenticate the user
+        $user = null;
+        if ($request->bearerToken()) {
+            try {
+                $user = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken())?->tokenable;
+                Log::info('Broadcasting auth token parsed', ['user_id' => $user?->id]);
+            } catch (\Exception $e) {
+                Log::warning('Broadcasting auth token validation failed', ['error' => $e->getMessage()]);
+            }
+        } else {
+             Log::warning('Broadcasting auth no bearer token found');
+        }
+        
+        if (!$user) {
+            Log::warning('Broadcasting auth failed: User not found or unauthenticated');
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+        
+        // Set the authenticated user
+        auth()->setUser($user);
+        
+        // Log all request data for debugging
+        Log::info('Broadcasting auth request', [
+            'channel_name' => $request->input('channel_name'),
+            'socket_id' => $request->input('socket_id'),
+            'all_input' => $request->all(),
+            'raw_content' => $request->getContent(),
+            'content_type' => $request->header('Content-Type'),
+            'user_id' => auth()->id(),
+            'has_token' => $request->bearerToken() !== null,
+            'authorization_header' => $request->header('Authorization'),
+            'request_method' => $request->method(),
+        ]);
+        
+        // Ensure channel_name and socket_id are present
+        if (!$request->has('channel_name') || !$request->has('socket_id')) {
+            Log::error('Broadcasting auth missing required parameters', [
+                'has_channel_name' => $request->has('channel_name'),
+                'has_socket_id' => $request->has('socket_id'),
+                'all_input' => $request->all(),
+            ]);
+            return response()->json([
+                'error' => 'Missing required parameters: channel_name and socket_id are required'
+            ], 400);
+        }
+        
+        try {
+            // Use Broadcast::auth() which handles the authentication
+            $response = Broadcast::auth($request);
+            Log::info('Broadcasting auth success', [
+                'channel_name' => $request->input('channel_name'),
+            ]);
+            return $response;
+        } catch (\Exception $e) {
+            Log::error('Broadcasting auth error', [
+                'channel_name' => $request->input('channel_name'),
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
+    })->middleware('throttle:60,1');
+    
     // Protected Routes - Rate limit of 60 requests per minute
     Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+        
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
@@ -94,6 +170,17 @@ Route::prefix('v1')->group(function () {
         Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
         Route::post('/notifications/delete-multiple', [NotificationController::class, 'deleteMultiple']);
         Route::post('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
+
+        // Alerts & Rules
+        Route::get('/alerts', [\App\Http\Controllers\Api\V1\AlertController::class, 'index']);
+        Route::get('/alerts/stats', [\App\Http\Controllers\Api\V1\AlertController::class, 'stats']);
+        Route::get('/alerts/{alert}', [\App\Http\Controllers\Api\V1\AlertController::class, 'show']);
+        Route::post('/alerts/{alert}/resolve', [\App\Http\Controllers\Api\V1\AlertController::class, 'resolve']);
+        
+        Route::get('/alert-rules', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesIndex']);
+        Route::post('/alert-rules', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesStore']);
+        Route::put('/alert-rules/{rule}', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesUpdate']);
+        Route::delete('/alert-rules/{rule}', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesDestroy']);
     });
 });
 

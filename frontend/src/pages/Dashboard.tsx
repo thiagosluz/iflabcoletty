@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import apiClient from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Monitor, Activity, Server, Cpu, MemoryStick, HardDrive, Package } from 'lucide-react';
+import echo from '@/lib/echo';
 
 interface HardwareAverages {
     cpu?: {
@@ -50,9 +51,31 @@ export default function Dashboard() {
         };
 
         fetchStats();
-        // Poll every 30 seconds
-        const interval = setInterval(fetchStats, 30000);
-        return () => clearInterval(interval);
+
+        // Listen for real-time updates via WebSocket
+        const token = localStorage.getItem('token');
+        if (token) {
+            const dashboardChannel = echo.private('dashboard');
+            
+            // Listen for computer status changes
+            dashboardChannel.listen('.computer.status.changed', (data: any) => {
+                fetchStats(); // Refresh stats when computer status changes
+            });
+
+            // Listen for software installation/removal
+            dashboardChannel.listen('.software.installed', (data: any) => {
+                fetchStats(); // Refresh stats when software changes
+            });
+
+            // Listen for hardware alerts
+            dashboardChannel.listen('.hardware.alert', (data: any) => {
+                fetchStats(); // Refresh stats when hardware alert occurs
+            });
+
+            return () => {
+                echo.leave('dashboard');
+            };
+        }
     }, []);
 
     if (!stats) return <div>Carregando dashboard...</div>;

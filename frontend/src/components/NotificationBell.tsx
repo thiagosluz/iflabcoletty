@@ -11,6 +11,7 @@ import apiClient from '@/lib/axios';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import echo from '@/lib/echo';
 
 interface Notification {
     id: number;
@@ -30,12 +31,116 @@ export default function NotificationBell() {
 
     useEffect(() => {
         fetchUnreadCount();
-        
-        // Poll for unread count every 30 seconds
-        const interval = setInterval(fetchUnreadCount, 30000);
-        
-        return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        // Listen for new notifications via WebSocket
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        let userChannel: any = null;
+        let notificationsChannel: any = null;
+        let userId: number | null = null;
+
+        // Fetch user info to get ID and set up listeners
+        apiClient.get('/me')
+            .then(({ data }) => {
+                userId = data.id;
+                if (!userId) {
+                    console.error('No user ID found');
+                    return;
+                }
+
+                console.log('Setting up WebSocket listeners for user:', userId);
+
+                // Listen to user-specific channel
+                userChannel = echo.private(`user.${userId}`);
+                
+                userChannel.subscribed(() => {
+                    console.log('Subscribed to user channel:', `user.${userId}`);
+                });
+
+                userChannel.error((error: any) => {
+                    console.error('Error subscribing to user channel:', error);
+                    console.error('Error details:', JSON.stringify(error, null, 2));
+                });
+
+                userChannel.listen('.notification.created', (eventData: any) => {
+                    console.log('Notification received on user channel:', eventData);
+                    // The event data is the notification object directly (from broadcastWith)
+                    const notification: Notification = {
+                        id: eventData.id,
+                        type: eventData.type,
+                        title: eventData.title,
+                        message: eventData.message,
+                        read: eventData.read || false,
+                        created_at: eventData.created_at,
+                        data: eventData.data,
+                    };
+                    setUnreadCount(prev => prev + 1);
+                    setNotifications(prev => {
+                        // Check if notification already exists to avoid duplicates
+                        if (prev.some(n => n.id === notification.id)) {
+                            return prev;
+                        }
+                        return [notification, ...prev];
+                    });
+                });
+
+                // Listen to general notifications channel
+                notificationsChannel = echo.private('notifications');
+                
+                notificationsChannel.subscribed(() => {
+                    console.log('Subscribed to notifications channel');
+                });
+
+                notificationsChannel.error((error: any) => {
+                    console.error('Error subscribing to notifications channel:', error);
+                    console.error('Error details:', JSON.stringify(error, null, 2));
+                });
+
+                notificationsChannel.listen('.notification.created', (eventData: any) => {
+                    console.log('Notification received on notifications channel:', eventData);
+                    // The event data is the notification object directly (from broadcastWith)
+                    const notification: Notification = {
+                        id: eventData.id,
+                        type: eventData.type,
+                        title: eventData.title,
+                        message: eventData.message,
+                        read: eventData.read || false,
+                        created_at: eventData.created_at,
+                        data: eventData.data,
+                    };
+                    // Only add if it's for the current user or if it's a general notification
+                    // Note: user_id is not in the broadcast data, so we'll accept all from this channel
+                    setUnreadCount(prev => prev + 1);
+                    setNotifications(prev => {
+                        // Check if notification already exists to avoid duplicates
+                        if (prev.some(n => n.id === notification.id)) {
+                            return prev;
+                        }
+                        return [notification, ...prev];
+                    });
+                });
+            })
+            .catch((error) => {
+                console.error('Error fetching user info for WebSocket:', error);
+            });
+
+        return () => {
+            // Clean up listeners
+            if (userChannel) {
+                userChannel.stopListening('.notification.created');
+                if (userId) {
+                    echo.leave(`user.${userId}`);
+                }
+            }
+            if (notificationsChannel) {
+                notificationsChannel.stopListening('.notification.created');
+                echo.leave('notifications');
+            }
+        };
+    }, []); // Empty dependency array - only run once on mount
 
     useEffect(() => {
         if (isOpen) {

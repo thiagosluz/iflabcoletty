@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\NotificationCreated;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +14,7 @@ class NotificationService
      */
     public function create(User $user, string $type, string $title, string $message, array $data = []): Notification
     {
-        return Notification::create([
+        $notification = Notification::create([
             'user_id' => $user->id,
             'type' => $type,
             'title' => $title,
@@ -21,6 +22,11 @@ class NotificationService
             'data' => $data,
             'read' => false,
         ]);
+
+        // Dispatch broadcast event
+        NotificationCreated::dispatch($notification);
+
+        return $notification;
     }
 
     /**

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database, Users, Shield } from 'lucide-react';
+import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database, Users, Shield, AlertTriangle, Settings } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 
 export default function DashboardLayout() {
@@ -47,6 +47,14 @@ export default function DashboardLayout() {
                     <Link to="/admin/softwares" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
                         <Package className="mr-3 h-5 w-5" />
                         Software
+                    </Link>
+                    <Link to="/admin/alerts" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <AlertTriangle className="mr-3 h-5 w-5" />
+                        Alertas
+                    </Link>
+                    <Link to="/admin/alert-rules" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Settings className="mr-3 h-5 w-5" />
+                        Regras de Alerta
                     </Link>
                     <Link to="/admin/audit-logs" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
                         <FileText className="mr-3 h-5 w-5" />

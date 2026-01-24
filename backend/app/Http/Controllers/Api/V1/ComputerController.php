@@ -167,7 +167,7 @@ class ComputerController extends Controller
     /**
      * Receive detailed report from agent
      */
-    public function report(Request $request, Computer $computer)
+    public function report(Request $request, Computer $computer, \App\Services\AlertService $alertService)
     {
         $validated = $request->validate([
             'hardware_info' => 'sometimes|array',
@@ -232,11 +232,15 @@ class ComputerController extends Controller
             event(new ComputerStatusChanged($computer, 'online', 'Computador voltou a reportar'));
         }
 
-        // Log activity
+        // Log activity with payload
         $computer->activities()->create([
             'type' => 'agent_report',
             'description' => 'Agente enviou relatório detalhado do sistema',
+            'payload' => $request->all(), // Save payload for alert processing
         ]);
+        
+        // Process alerts immediately
+        $alertService->processComputer($computer);
 
         return response()->json(['message' => 'Relatório recebido com sucesso']);
     }
