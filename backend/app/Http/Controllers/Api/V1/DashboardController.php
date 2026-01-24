@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Computer;
 use App\Models\Lab;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use OpenApi\Attributes as OA;
 
@@ -44,10 +45,19 @@ class DashboardController extends Controller
         // "Online" threshold: updated in the last 5 minutes
         $threshold = Carbon::now()->subMinutes(5);
 
-        $allComputers = Computer::all();
-        $hardwareAverages = $this->calculateHardwareAverages($allComputers);
+        // Use query builder instead of loading all models into memory
+        // Only load computers with hardware_info for calculations
+        // Filter in PHP after loading to handle JSON properly
+        $allComputers = Computer::get(['id', 'hardware_info']);
+        $computersWithHardware = $allComputers->filter(function ($computer) {
+            return !empty($computer->hardware_info) && 
+                   is_array($computer->hardware_info) && 
+                   !empty($computer->hardware_info);
+        });
+        
+        $hardwareAverages = $this->calculateHardwareAverages($computersWithHardware);
         $osDistribution = $this->getOSDistribution($allComputers);
-        $totalSoftwares = $this->getTotalUniqueSoftwares($allComputers);
+        $totalSoftwares = $this->getTotalUniqueSoftwares();
 
         return response()->json([
             'total_labs' => Lab::count(),
@@ -151,11 +161,23 @@ class DashboardController extends Controller
 
     /**
      * Get total unique softwares across all computers
+     * Optimized: Use direct query instead of loading all relationships
      */
-    private function getTotalUniqueSoftwares($computers)
+    private function getTotalUniqueSoftwares()
     {
-        return $computers->flatMap(function ($computer) {
-            return $computer->softwares;
-        })->unique('id')->count();
+        // Use distinct count from pivot table instead of loading all relationships
+        // PostgreSQL uses DISTINCT ON, MySQL uses DISTINCT differently
+        $driver = DB::getDriverName();
+        
+        if ($driver === 'pgsql') {
+            return DB::table('computer_software')
+                ->distinct('software_id')
+                ->count('software_id');
+        } else {
+            // MySQL/MariaDB
+            return DB::table('computer_software')
+                ->select(DB::raw('COUNT(DISTINCT software_id) as count'))
+                ->value('count') ?? 0;
+        }
     }
 }

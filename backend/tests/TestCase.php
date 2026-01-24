@@ -11,6 +11,27 @@ abstract class TestCase extends BaseTestCase
     use RefreshDatabase;
 
     /**
+     * Creates the application.
+     * Force SQLite in-memory database for all tests to avoid affecting development database.
+     */
+    public function createApplication()
+    {
+        // Force SQLite before creating application
+        putenv('DB_CONNECTION=sqlite');
+        putenv('DB_DATABASE=:memory:');
+        
+        $app = require __DIR__.'/../bootstrap/app.php';
+        
+        $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+        
+        // Ensure SQLite is used
+        config(['database.default' => 'sqlite']);
+        config(['database.connections.sqlite.database' => ':memory:']);
+        
+        return $app;
+    }
+
+    /**
      * Create and authenticate a user for testing
      */
     protected function actingAsUser(): User

@@ -46,8 +46,9 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        if (Auth::attempt($credentials)) {
-            $user = Auth::user();
+        // Try to authenticate using the web guard (default)
+        if (Auth::guard('web')->attempt($credentials)) {
+            $user = Auth::guard('web')->user();
             /** @var \App\Models\User $user */
             $token = $user->createToken('admin-token')->plainTextToken;
 
@@ -57,6 +58,7 @@ class AuthController extends Controller
             ]);
         }
 
+        // If authentication fails, return error
         return response()->json([
             'message' => 'As credenciais fornecidas não correspondem aos nossos registros.',
         ], 401);

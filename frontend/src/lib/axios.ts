@@ -18,14 +18,34 @@ apiClient.interceptors.request.use((config) => {
     return config;
 });
 
-// Response interceptor to handle 401
+// Response interceptor to handle errors
 apiClient.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Store rate limit headers for potential use
+        if (response.headers['x-ratelimit-limit']) {
+            // Could store in state if needed
+        }
+        return response;
+    },
     (error) => {
         if (error.response?.status === 401) {
             localStorage.removeItem('token');
             window.location.href = '/login';
         }
+        
+        // Handle rate limiting (429 Too Many Requests)
+        if (error.response?.status === 429) {
+            const retryAfter = error.response.headers['retry-after'] || 60;
+            const message = error.response.data?.message || 
+                `Muitas requisições. Tente novamente em ${retryAfter} segundos.`;
+            
+            // You could show a toast notification here
+            console.warn('Rate limit exceeded:', message);
+            
+            // Optionally, you could dispatch a toast notification
+            // toast.error(message);
+        }
+        
         return Promise.reject(error);
     }
 );

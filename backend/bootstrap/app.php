@@ -13,6 +13,19 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo(fn() => throw new \Illuminate\Auth\AuthenticationException());
+        
+        // CORS configuration
+        $middleware->api(prepend: [
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
+        
+        // Audit logging for authenticated API routes
+        $middleware->api(append: [
+            \App\Http\Middleware\AuditLogMiddleware::class,
+        ]);
+        
+        // Rate limiting is applied per route in routes/api.php
+        // throttleApi is not applied globally to allow custom limits per endpoint
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

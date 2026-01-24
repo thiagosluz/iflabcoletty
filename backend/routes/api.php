@@ -9,19 +9,21 @@ use App\Http\Controllers\Api\V1\ComputerController;
 use App\Http\Controllers\Api\V1\SoftwareController;
 use App\Http\Controllers\Api\V1\PublicController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\AuditLogController;
 
 Route::prefix('v1')->group(function () {
-    // Public Routes (no authentication required)
-    Route::prefix('public')->group(function () {
+    // Public Routes (no authentication required) - Higher rate limit
+    // These routes bypass throttleApi middleware
+    Route::prefix('public')->middleware('throttle:120,1')->group(function () {
         Route::get('/computers/{hash}', [PublicController::class, 'show']);
         Route::get('/computers/{hash}/softwares', [PublicController::class, 'getSoftwares']);
     });
 
-    // Auth - Admin
-    Route::post('/login', [AuthController::class, 'login']);
+    // Auth - Admin - Rate limit for login (10 attempts per minute per IP)
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1'); // 10 attempts per minute
 
-    // Protected Routes
-    Route::middleware('auth:sanctum')->group(function () {
+    // Protected Routes - Rate limit of 60 requests per minute
+    Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
@@ -47,6 +49,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/reports/labs', [ReportController::class, 'exportLabs']);
         Route::post('/reports/computers', [ReportController::class, 'exportComputers']);
         Route::post('/reports/softwares', [ReportController::class, 'exportSoftwares']);
+
+        // Audit Logs
+        Route::get('/audit-logs', [AuditLogController::class, 'index']);
+        Route::get('/audit-logs/stats', [AuditLogController::class, 'stats']);
+        Route::get('/audit-logs/{id}', [AuditLogController::class, 'show']);
     });
 });
 

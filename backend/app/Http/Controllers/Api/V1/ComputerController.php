@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Computer;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
+use App\Traits\LogsActivity;
 
 class ComputerController extends Controller
 {
+    use LogsActivity;
     public function index(Request $request)
     {
-        $query = Computer::with('lab');
+        // Optimized: Select only necessary fields and eager load lab with limited fields
+        $query = Computer::with('lab:id,name')
+            ->select('id', 'lab_id', 'hostname', 'machine_id', 'public_hash', 'updated_at', 'created_at');
 
         if ($request->has('lab_id')) {
             $query->where('lab_id', $request->query('lab_id'));
@@ -41,13 +45,18 @@ class ComputerController extends Controller
         ]);
 
         $computer = Computer::create($validated);
+        
+        // Log activity
+        $this->logActivity('create', $computer);
+        
         return response()->json($computer, 201);
     }
 
     public function show(Computer $computer)
     {
+        // Optimized: Eager load relationships to avoid N+1 queries
         return $computer->load([
-            'lab',
+            'lab:id,name,description',
             'activities' => function ($query) {
                 $query->latest()->limit(20);
             }
@@ -83,6 +92,8 @@ class ComputerController extends Controller
 
     public function update(Request $request, Computer $computer)
     {
+        $oldValues = $computer->toArray();
+        
         $validated = $request->validate([
             'lab_id' => 'sometimes|exists:labs,id',
             'hostname' => 'nullable|string',
@@ -91,12 +102,22 @@ class ComputerController extends Controller
         ]);
 
         $computer->update($validated);
+        
+        // Log activity
+        $this->logActivity('update', $computer, $oldValues, $computer->toArray());
+        
         return response()->json($computer);
     }
 
     public function destroy(Computer $computer)
     {
+        $oldValues = $computer->toArray();
+        
+        // Log activity before deleting (so we have the model reference)
+        $this->logActivity('delete', $computer, $oldValues);
+        
         $computer->delete();
+        
         return response()->noContent();
     }
 

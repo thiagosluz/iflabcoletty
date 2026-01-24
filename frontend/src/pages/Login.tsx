@@ -30,6 +30,8 @@ export default function Login() {
 
     const onSubmit = async (data: LoginFormData) => {
         try {
+            setError(''); // Clear previous errors
+            
             // Sanctum CSRF - using global axios to bypass baseURL
             await axios.get('/sanctum/csrf-cookie', { withCredentials: true }).catch(() => { });
 
@@ -37,7 +39,12 @@ export default function Login() {
             login(response.data.token, response.data.user);
             navigate('/admin/dashboard');
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Falha no login');
+            if (err.response?.status === 429) {
+                const retryAfter = err.response.headers['retry-after'] || 60;
+                setError(`Muitas tentativas de login. Aguarde ${retryAfter} segundos antes de tentar novamente.`);
+            } else {
+                setError(err.response?.data?.message || 'Falha no login. Verifique suas credenciais.');
+            }
         }
     };
 

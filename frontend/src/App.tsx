@@ -10,6 +10,7 @@ import LabDetails from './pages/LabDetails';
 import Computers from './pages/Computers';
 import ComputerDetails from './pages/ComputerDetails';
 import Softwares from './pages/Softwares';
+import AuditLogs from './pages/AuditLogs';
 import PublicComputerView from './pages/PublicComputerView';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
           <Route path="computers" element={<Computers />} />
           <Route path="computers/:id" element={<ComputerDetails />} />
           <Route path="softwares" element={<Softwares />} />
+          <Route path="audit-logs" element={<AuditLogs />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

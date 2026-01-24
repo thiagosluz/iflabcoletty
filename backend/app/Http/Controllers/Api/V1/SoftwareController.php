@@ -59,6 +59,7 @@ class SoftwareController extends Controller
     )]
     public function show(Software $software)
     {
-        return $software->load('computers');
+        // Optimized: Eager load computers with lab to avoid N+1 queries
+        return $software->load(['computers.lab:id,name']);
     }
 }

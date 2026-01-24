@@ -7,9 +7,11 @@ use App\Models\Lab;
 use App\Models\Software;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
+use App\Traits\LogsActivity;
 
 class LabController extends Controller
 {
+    use LogsActivity;
     #[OA\Get(
         path: "/api/v1/labs",
         summary: "Listar laboratórios",
@@ -25,7 +27,9 @@ class LabController extends Controller
     )]
     public function index(Request $request)
     {
-        $query = Lab::withCount('computers');
+        // Optimized: Select only necessary fields
+        $query = Lab::select('id', 'name', 'description', 'created_at', 'updated_at')
+            ->withCount('computers');
 
         // Pagination
         $perPage = $request->query('per_page', 20);
@@ -63,6 +67,10 @@ class LabController extends Controller
         ]);
 
         $lab = Lab::create($validated);
+        
+        // Log activity
+        $this->logActivity('create', $lab);
+        
         return response()->json($lab, 201);
     }
 
@@ -82,7 +90,10 @@ class LabController extends Controller
     )]
     public function show(Lab $lab)
     {
-        $lab->load('computers');
+        // Optimized: Load only necessary fields and relationships
+        $lab->load(['computers' => function ($query) {
+            $query->select('id', 'lab_id', 'hostname', 'machine_id', 'hardware_info', 'updated_at', 'created_at');
+        }]);
         
         $computers = $lab->computers;
         $stats = $this->calculateLabStats($computers);
@@ -165,14 +176,12 @@ class LabController extends Controller
     )]
     public function getSoftwares(Request $request, Lab $lab)
     {
-        // Get all computers in the lab
-        $computerIds = $lab->computers()->pluck('id');
-        
+        // Optimized: Use whereHas with lab_id directly instead of loading all computer IDs
         // Get unique softwares from all computers in the lab
-        $query = Software::whereHas('computers', function ($q) use ($computerIds) {
-            $q->whereIn('computers.id', $computerIds);
-        })->withCount(['computers' => function ($q) use ($computerIds) {
-            $q->whereIn('computers.id', $computerIds);
+        $query = Software::whereHas('computers', function ($q) use ($lab) {
+            $q->where('lab_id', $lab->id);
+        })->withCount(['computers' => function ($q) use ($lab) {
+            $q->where('lab_id', $lab->id);
         }]);
 
         // Search
@@ -327,18 +336,32 @@ class LabController extends Controller
 
     public function update(Request $request, Lab $lab)
     {
+        $oldValues = $lab->toArray();
+        
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:labs,name,' . $lab->id,
+            'name' => 'sometimes|required|string|max:255|unique:labs,name,' . $lab->id,
             'description' => 'nullable|string'
         ]);
 
         $lab->update($validated);
+        
+        // Log activity
+        $this->logActivity('update', $lab, $oldValues, $lab->toArray());
+        
         return response()->json($lab);
     }
 
     public function destroy(Lab $lab)
     {
+        $oldValues = $lab->toArray();
+        $resourceId = $lab->id;
+        $resourceName = $lab->name;
+        
+        // Log activity before deleting (so we have the model reference)
+        $this->logActivity('delete', $lab, $oldValues);
+        
         $lab->delete();
+        
         return response()->noContent();
     }
 }
