@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Computer;
+use App\Models\Software;
 use Illuminate\Http\Request;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Traits\LogsActivity;
+use App\Events\ComputerStatusChanged;
+use App\Events\SoftwareInstalled;
+use Illuminate\Support\Facades\DB;
 
 class ComputerController extends Controller
 {
@@ -173,24 +177,59 @@ class ComputerController extends Controller
             'softwares.*.vendor' => 'nullable|string',
         ]);
 
+        // Check if computer was offline before this report
+        $wasOffline = $computer->updated_at && $computer->updated_at->lt(now()->subMinutes(5));
+        
         // Update hardware info
         if (isset($validated['hardware_info'])) {
             $computer->update(['hardware_info' => $validated['hardware_info']]);
         }
 
-        // Sync software
+        // Sync software and detect changes
         if (isset($validated['softwares'])) {
+            $oldSoftwareIds = $computer->softwares()->pluck('software_id')->toArray();
             $softwareIds = [];
+            $newSoftwareIds = [];
+            
             foreach ($validated['softwares'] as $softwareData) {
-                $software = \App\Models\Software::firstOrCreate([
+                $software = Software::firstOrCreate([
                     'name' => $softwareData['name'],
                     'version' => $softwareData['version'] ?? null,
                 ], [
                     'vendor' => $softwareData['vendor'] ?? null,
                 ]);
                 $softwareIds[$software->id] = ['installed_at' => now()];
+                $newSoftwareIds[] = $software->id;
             }
+            
             $computer->softwares()->sync($softwareIds);
+            
+            // Detect installed software
+            $installed = array_diff($newSoftwareIds, $oldSoftwareIds);
+            foreach ($installed as $softwareId) {
+                $software = Software::find($softwareId);
+                if ($software) {
+                    event(new SoftwareInstalled($computer, $software, 'installed'));
+                }
+            }
+            
+            // Detect removed software
+            $removed = array_diff($oldSoftwareIds, $newSoftwareIds);
+            foreach ($removed as $softwareId) {
+                $software = Software::find($softwareId);
+                if ($software) {
+                    event(new SoftwareInstalled($computer, $software, 'removed'));
+                }
+            }
+        }
+        
+        // Update computer timestamp
+        $computer->touch();
+        $computer->refresh();
+        
+        // If computer was offline and now is online, notify
+        if ($wasOffline) {
+            event(new ComputerStatusChanged($computer, 'online', 'Computador voltou a reportar'));
         }
 
         // Log activity

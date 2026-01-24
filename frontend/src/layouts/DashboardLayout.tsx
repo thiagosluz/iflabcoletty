@@ -3,6 +3,7 @@ import { Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database, Users, Shield } from 'lucide-react';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function DashboardLayout() {
     const { isAuthenticated, logout, checkAuth } = useAuthStore();
@@ -78,6 +79,9 @@ export default function DashboardLayout() {
 
             {/* Main Content */}
             <main className="flex-1 p-8">
+                <div className="mb-4 flex justify-end">
+                    <NotificationBell />
+                </div>
                 <Outlet />
             </main>
         </div>

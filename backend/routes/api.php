@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\RoleController;
+use App\Http\Controllers\Api\V1\NotificationController;
 
 Route::prefix('v1')->group(function () {
     // Public Routes (no authentication required) - Higher rate limit
@@ -82,6 +83,17 @@ Route::prefix('v1')->group(function () {
         Route::get('/roles/{role}', [RoleController::class, 'show']);
         Route::put('/roles/{role}', [RoleController::class, 'update']);
         Route::delete('/roles/{role}', [RoleController::class, 'destroy']);
+
+        // Notifications
+        Route::get('/notifications', [NotificationController::class, 'index']);
+        Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::get('/notifications/{notification}', [NotificationController::class, 'show']);
+        Route::put('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+        Route::put('/notifications/{notification}/unread', [NotificationController::class, 'markAsUnread']);
+        Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy']);
+        Route::post('/notifications/delete-multiple', [NotificationController::class, 'deleteMultiple']);
+        Route::post('/notifications/delete-all', [NotificationController::class, 'deleteAll']);
     });
 });
 

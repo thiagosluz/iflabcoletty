@@ -15,6 +15,7 @@ import ReportJobs from './pages/ReportJobs';
 import Backups from './pages/Backups';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
+import Notifications from './pages/Notifications';
 import PublicComputerView from './pages/PublicComputerView';
 
 function App() {
@@ -38,6 +39,7 @@ function App() {
           <Route path="backups" element={<Backups />} />
           <Route path="users" element={<Users />} />
           <Route path="roles" element={<Roles />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 

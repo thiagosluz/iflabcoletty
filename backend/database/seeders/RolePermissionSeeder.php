@@ -65,6 +65,11 @@ class RolePermissionSeeder extends Seeder
             'roles.create',
             'roles.update',
             'roles.delete',
+            
+            // Notifications
+            'notifications.view',
+            'notifications.update',
+            'notifications.delete',
         ];
 
         foreach ($permissions as $permission) {
@@ -89,6 +94,7 @@ class RolePermissionSeeder extends Seeder
             'reports.view', 'reports.create', 'reports.download',
             'audit-logs.view',
             'backups.view', 'backups.create', 'backups.delete', 'backups.restore',
+            'notifications.view', 'notifications.update',
         ]);
 
         // Permissões para professor (pode visualizar e criar relatórios)
@@ -98,6 +104,7 @@ class RolePermissionSeeder extends Seeder
             'softwares.view',
             'dashboard.view',
             'reports.view', 'reports.create', 'reports.download',
+            'notifications.view', 'notifications.update', 'notifications.delete',
         ]);
 
         // Permissões para visualizador (apenas visualização)
@@ -107,6 +114,7 @@ class RolePermissionSeeder extends Seeder
             'softwares.view',
             'dashboard.view',
             'reports.view',
+            'notifications.view', 'notifications.update', 'notifications.delete',
         ]);
 
         // Atribuir role admin ao usuário admin existente (se existir)

@@ -50,10 +50,17 @@ class AuthController extends Controller
         if (Auth::guard('web')->attempt($credentials)) {
             $user = Auth::guard('web')->user();
             /** @var \App\Models\User $user */
+            
+            // Clear permission cache to ensure fresh permissions
+            app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+            
+            // Reload user with roles and permissions
+            $user->load('roles.permissions');
+            
             $token = $user->createToken('admin-token')->plainTextToken;
 
             return response()->json([
-                'user' => $user,
+                'user' => $user->load('roles:id,name', 'permissions:id,name'),
                 'token' => $token
             ]);
         }

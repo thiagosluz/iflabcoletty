@@ -16,3 +16,9 @@ Schedule::call(function () {
     \App\Services\BackupService::cleanOldBackups($retentionDays);
 })->weeklyOn(0, '03:00')
     ->timezone('America/Sao_Paulo');
+
+// Check computer status every 5 minutes
+Schedule::command('computers:check-status')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();
