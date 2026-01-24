@@ -2,14 +2,13 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
-use App\Models\Lab;
 use App\Models\Computer;
+use App\Models\Lab;
 use App\Models\Software;
 use App\Services\CacheService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Tests\TestCase;
 
 class CacheTest extends TestCase
 {
@@ -96,27 +95,27 @@ class CacheTest extends TestCase
     public function test_cache_is_invalidated_when_lab_is_created(): void
     {
         $user = $this->actingAsUser();
-        
+
         // Clear cache first
         Cache::flush();
-        
+
         // Warm cache
         $response = $this->getJson('/api/v1/labs?per_page=20', $this->getAuthHeaders($user));
         $response->assertStatus(200);
-        
+
         $cacheKey = CacheService::labsListKey(['per_page' => 20]);
         // Note: Cache may not exist immediately in some drivers, so we'll just test invalidation
-        
+
         // Create new lab
         $this->postJson('/api/v1/labs', [
-            'name' => 'New Lab ' . uniqid(),
+            'name' => 'New Lab '.uniqid(),
             'description' => 'Test',
         ], $this->getAuthHeaders($user))->assertStatus(201);
 
         // After creating, make another request - should get fresh data (not cached)
         $response2 = $this->getJson('/api/v1/labs?per_page=20', $this->getAuthHeaders($user));
         $response2->assertStatus(200);
-        
+
         // The response should include the new lab (cache was invalidated)
         $this->assertGreaterThanOrEqual($response->json('total'), $response2->json('total'));
     }
@@ -131,12 +130,12 @@ class CacheTest extends TestCase
 
         // Update lab - this should trigger cache invalidation
         $response = $this->putJson("/api/v1/labs/{$lab->id}", [
-            'name' => 'Updated Lab ' . uniqid(),
+            'name' => 'Updated Lab '.uniqid(),
             'description' => $lab->description,
         ], $this->getAuthHeaders($user));
-        
+
         $response->assertStatus(200);
-        
+
         // Verify the update was successful
         $this->assertNotEquals($lab->name, $response->json('name'), 'Lab name should be updated');
     }
@@ -153,7 +152,7 @@ class CacheTest extends TestCase
         // Delete lab - this should trigger cache invalidation
         $response = $this->deleteJson("/api/v1/labs/{$lab->id}", [], $this->getAuthHeaders($user));
         $response->assertStatus(204);
-        
+
         // Verify the lab was deleted
         $this->assertDatabaseMissing('labs', ['id' => $labId]);
     }
@@ -162,7 +161,7 @@ class CacheTest extends TestCase
     {
         $user = $this->actingAsUser();
         $lab = Lab::factory()->create();
-        $machineId = 'test-machine-' . uniqid();
+        $machineId = 'test-machine-'.uniqid();
 
         // Warm cache
         $this->getJson('/api/v1/computers?per_page=20', $this->getAuthHeaders($user))->assertStatus(200);
@@ -172,9 +171,9 @@ class CacheTest extends TestCase
             'lab_id' => $lab->id,
             'machine_id' => $machineId,
         ], $this->getAuthHeaders($user));
-        
+
         $createResponse->assertStatus(201);
-        
+
         // Verify the computer was created
         $this->assertDatabaseHas('computers', ['machine_id' => $machineId]);
     }
@@ -190,13 +189,13 @@ class CacheTest extends TestCase
 
         // Update computer
         $this->putJson("/api/v1/computers/{$computer->id}", [
-            'hostname' => 'updated-hostname-' . uniqid(),
+            'hostname' => 'updated-hostname-'.uniqid(),
         ], $this->getAuthHeaders($user))->assertStatus(200);
 
         // After updating, make another request - should get fresh data
         $response2 = $this->getJson('/api/v1/computers?per_page=20', $this->getAuthHeaders($user));
         $response2->assertStatus(200);
-        
+
         // Verify the updated computer appears in the response
         $computerIds = collect($response2->json('data'))->pluck('id');
         $this->assertTrue($computerIds->contains($computer->id), 'Updated computer should appear in response');
@@ -214,7 +213,7 @@ class CacheTest extends TestCase
         // Delete computer - this should trigger cache invalidation
         $response = $this->deleteJson("/api/v1/computers/{$computer->id}", [], $this->getAuthHeaders($user));
         $response->assertStatus(204);
-        
+
         // Verify the computer was deleted
         $this->assertDatabaseMissing('computers', ['id' => $computerId]);
     }
@@ -239,7 +238,7 @@ class CacheTest extends TestCase
         // After report, make another request - should get fresh data
         $response2 = $this->getJson('/api/v1/computers?per_page=20', $this->getAuthHeaders($user));
         $response2->assertStatus(200);
-        
+
         // Verify the computer still appears (wasn't deleted)
         $computerIds = collect($response2->json('data'))->pluck('id');
         $this->assertTrue($computerIds->contains($computer->id), 'Computer should still appear after report');

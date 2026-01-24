@@ -28,7 +28,7 @@ class CheckAlerts extends Command
     public function handle(AlertService $alertService)
     {
         $this->info('Starting alert check...');
-        
+
         // Chunk to avoid memory issues
         Computer::chunk(100, function ($computers) use ($alertService) {
             foreach ($computers as $computer) {

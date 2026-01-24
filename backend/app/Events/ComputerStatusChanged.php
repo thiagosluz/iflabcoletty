@@ -3,9 +3,7 @@
 namespace App\Events;
 
 use App\Models\Computer;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -19,8 +17,7 @@ class ComputerStatusChanged implements ShouldBroadcast
         public Computer $computer,
         public string $status, // 'online', 'offline'
         public ?string $reason = null
-    ) {
-    }
+    ) {}
 
     /**
      * Get the channels the event should broadcast on.

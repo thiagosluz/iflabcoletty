@@ -2,16 +2,16 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
-use App\Models\Lab;
-use App\Models\Computer;
-use App\Models\Software;
-use App\Models\Notification;
 use App\Events\ComputerStatusChanged;
 use App\Events\SoftwareInstalled;
+use App\Models\Computer;
+use App\Models\Lab;
+use App\Models\Notification;
+use App\Models\Software;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Tests\TestCase;
 
 class NotificationTest extends TestCase
 {
@@ -20,7 +20,7 @@ class NotificationTest extends TestCase
     public function test_user_can_list_notifications(): void
     {
         $user = $this->actingAsUser();
-        
+
         // Create notifications for the user
         Notification::factory()->count(5)->create(['user_id' => $user->id]);
 
@@ -37,7 +37,7 @@ class NotificationTest extends TestCase
                         'message',
                         'read',
                         'created_at',
-                    ]
+                    ],
                 ],
                 'current_page',
                 'total',
@@ -47,7 +47,7 @@ class NotificationTest extends TestCase
     public function test_user_can_get_unread_count(): void
     {
         $user = $this->actingAsUser();
-        
+
         Notification::factory()->count(3)->create([
             'user_id' => $user->id,
             'read' => false,
@@ -68,7 +68,7 @@ class NotificationTest extends TestCase
     public function test_user_can_mark_notification_as_read(): void
     {
         $user = $this->actingAsUser();
-        
+
         $notification = Notification::factory()->create([
             'user_id' => $user->id,
             'read' => false,
@@ -88,7 +88,7 @@ class NotificationTest extends TestCase
     public function test_user_can_mark_notification_as_unread(): void
     {
         $user = $this->actingAsUser();
-        
+
         $notification = Notification::factory()->create([
             'user_id' => $user->id,
             'read' => true,
@@ -109,7 +109,7 @@ class NotificationTest extends TestCase
     public function test_user_can_mark_all_notifications_as_read(): void
     {
         $user = $this->actingAsUser();
-        
+
         Notification::factory()->count(5)->create([
             'user_id' => $user->id,
             'read' => false,
@@ -129,7 +129,7 @@ class NotificationTest extends TestCase
     {
         $user1 = $this->actingAsUser();
         $user2 = User::factory()->create();
-        
+
         $notification = Notification::factory()->create([
             'user_id' => $user2->id,
         ]);
@@ -145,7 +145,7 @@ class NotificationTest extends TestCase
     public function test_computer_status_changed_event_creates_notification(): void
     {
         Event::fake();
-        
+
         $user = $this->actingAsUser();
         $lab = Lab::factory()->create();
         $computer = Computer::factory()->create(['lab_id' => $lab->id]);
@@ -160,7 +160,7 @@ class NotificationTest extends TestCase
     public function test_software_installed_event_creates_notification(): void
     {
         Event::fake();
-        
+
         $lab = Lab::factory()->create();
         $computer = Computer::factory()->create(['lab_id' => $lab->id]);
         $software = Software::factory()->create();
@@ -175,7 +175,7 @@ class NotificationTest extends TestCase
     public function test_notifications_can_be_filtered_by_read_status(): void
     {
         $user = $this->actingAsUser();
-        
+
         Notification::factory()->count(3)->create([
             'user_id' => $user->id,
             'read' => false,
@@ -197,7 +197,7 @@ class NotificationTest extends TestCase
     public function test_notifications_can_be_filtered_by_type(): void
     {
         $user = $this->actingAsUser();
-        
+
         Notification::factory()->count(3)->create([
             'user_id' => $user->id,
             'type' => 'computer.offline',

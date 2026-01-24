@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
-use App\Models\Lab;
-use App\Models\Computer;
 use App\Models\AuditLog;
+use App\Models\Computer;
+use App\Models\Lab;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class AuditLogTest extends TestCase
 {
@@ -16,7 +16,7 @@ class AuditLogTest extends TestCase
     public function test_authenticated_user_can_list_audit_logs(): void
     {
         $user = $this->actingAsUser();
-        
+
         // Create some audit logs
         AuditLog::factory()->count(5)->create(['user_id' => $user->id]);
 
@@ -33,7 +33,7 @@ class AuditLogTest extends TestCase
                         'resource_id',
                         'description',
                         'created_at',
-                    ]
+                    ],
                 ],
                 'current_page',
                 'total',
@@ -83,7 +83,7 @@ class AuditLogTest extends TestCase
     {
         $user1 = $this->actingAsUser();
         $user2 = User::factory()->create();
-        
+
         AuditLog::factory()->create(['user_id' => $user1->id]);
         AuditLog::factory()->create(['user_id' => $user2->id]);
 
@@ -240,7 +240,7 @@ class AuditLogTest extends TestCase
 
         $response = $this->postJson('/api/v1/computers', [
             'lab_id' => $lab->id,
-            'machine_id' => 'test-machine-' . uniqid(),
+            'machine_id' => 'test-machine-'.uniqid(),
             'hostname' => 'test-pc',
         ], $this->getAuthHeaders($user));
 

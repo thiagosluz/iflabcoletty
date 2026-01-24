@@ -17,9 +17,9 @@ class PublicController extends Controller
             ->with('lab:id,name')
             ->first();
 
-        if (!$computer) {
+        if (! $computer) {
             return response()->json([
-                'message' => 'Computador não encontrado'
+                'message' => 'Computador não encontrado',
             ], 404);
         }
 
@@ -30,7 +30,7 @@ class PublicController extends Controller
         return response()->json([
             'hostname' => $computer->hostname,
             'lab' => [
-                'name' => $computer->lab->name ?? 'Desconhecido'
+                'name' => $computer->lab->name ?? 'Desconhecido',
             ],
             'hardware_info' => $computer->hardware_info,
             'status' => $this->getStatus($computer->updated_at),
@@ -45,9 +45,9 @@ class PublicController extends Controller
     {
         $computer = Computer::where('public_hash', $hash)->first();
 
-        if (!$computer) {
+        if (! $computer) {
             return response()->json([
-                'message' => 'Computador não encontrado'
+                'message' => 'Computador não encontrado',
             ], 404);
         }
 
@@ -64,7 +64,7 @@ class PublicController extends Controller
 
         // Pagination
         $perPage = $request->query('per_page', 50);
-        $perPage = min(max((int)$perPage, 5), 100); // Limit between 5 and 100
+        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
 
         // Get paginated results with pivot data
         $softwares = $query->orderBy('name')->paginate($perPage);
@@ -79,6 +79,7 @@ class PublicController extends Controller
     {
         // Calculate minutes since update (always positive)
         $minutesSinceUpdate = abs(now()->diffInMinutes($updatedAt));
+
         return $minutesSinceUpdate < 5 ? 'online' : 'offline';
     }
 }

@@ -2,14 +2,14 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\ServiceProvider;
 use App\Events\ComputerStatusChanged;
-use App\Events\SoftwareInstalled;
 use App\Events\HardwareAlert;
+use App\Events\SoftwareInstalled;
+use App\Listeners\CreateHardwareAlertListener;
 use App\Listeners\CreateNotificationListener;
 use App\Listeners\CreateSoftwareNotificationListener;
-use App\Listeners\CreateHardwareAlertListener;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {

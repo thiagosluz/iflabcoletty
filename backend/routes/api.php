@@ -1,20 +1,19 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Broadcast;
-
+use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
-use App\Http\Controllers\Api\V1\LabController;
+use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\ComputerController;
-use App\Http\Controllers\Api\V1\SoftwareController;
+use App\Http\Controllers\Api\V1\LabController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PublicController;
 use App\Http\Controllers\Api\V1\ReportController;
-use App\Http\Controllers\Api\V1\AuditLogController;
-use App\Http\Controllers\Api\V1\BackupController;
-use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\RoleController;
-use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\SoftwareController;
+use App\Http\Controllers\Api\V1\UserController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     // Public Routes (no authentication required) - Higher rate limit
@@ -46,17 +45,18 @@ Route::prefix('v1')->group(function () {
                 Log::warning('Broadcasting auth token validation failed', ['error' => $e->getMessage()]);
             }
         } else {
-             Log::warning('Broadcasting auth no bearer token found');
+            Log::warning('Broadcasting auth no bearer token found');
         }
-        
-        if (!$user) {
+
+        if (! $user) {
             Log::warning('Broadcasting auth failed: User not found or unauthenticated');
+
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
-        
+
         // Set the authenticated user
         auth()->setUser($user);
-        
+
         // Log all request data for debugging
         Log::info('Broadcasting auth request', [
             'channel_name' => $request->input('channel_name'),
@@ -69,25 +69,27 @@ Route::prefix('v1')->group(function () {
             'authorization_header' => $request->header('Authorization'),
             'request_method' => $request->method(),
         ]);
-        
+
         // Ensure channel_name and socket_id are present
-        if (!$request->has('channel_name') || !$request->has('socket_id')) {
+        if (! $request->has('channel_name') || ! $request->has('socket_id')) {
             Log::error('Broadcasting auth missing required parameters', [
                 'has_channel_name' => $request->has('channel_name'),
                 'has_socket_id' => $request->has('socket_id'),
                 'all_input' => $request->all(),
             ]);
+
             return response()->json([
-                'error' => 'Missing required parameters: channel_name and socket_id are required'
+                'error' => 'Missing required parameters: channel_name and socket_id are required',
             ], 400);
         }
-        
+
         try {
             // Use Broadcast::auth() which handles the authentication
             $response = Broadcast::auth($request);
             Log::info('Broadcasting auth success', [
                 'channel_name' => $request->input('channel_name'),
             ]);
+
             return $response;
         } catch (\Exception $e) {
             Log::error('Broadcasting auth error', [
@@ -100,10 +102,10 @@ Route::prefix('v1')->group(function () {
             throw $e;
         }
     })->middleware('throttle:60,1');
-    
+
     // Protected Routes - Rate limit of 60 requests per minute
     Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
-        
+
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
@@ -176,7 +178,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/alerts/stats', [\App\Http\Controllers\Api\V1\AlertController::class, 'stats']);
         Route::get('/alerts/{alert}', [\App\Http\Controllers\Api\V1\AlertController::class, 'show']);
         Route::post('/alerts/{alert}/resolve', [\App\Http\Controllers\Api\V1\AlertController::class, 'resolve']);
-        
+
         Route::get('/alert-rules', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesIndex']);
         Route::post('/alert-rules', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesStore']);
         Route::put('/alert-rules/{rule}', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesUpdate']);

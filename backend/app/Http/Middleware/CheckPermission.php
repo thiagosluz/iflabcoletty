@@ -15,17 +15,17 @@ class CheckPermission
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        if (!auth()->check()) {
+        if (! auth()->check()) {
             return response()->json([
-                'message' => 'Não autenticado'
+                'message' => 'Não autenticado',
             ], 401);
         }
 
         $user = auth()->user();
 
-        if (!$user->can($permission)) {
+        if (! $user->can($permission)) {
             return response()->json([
-                'message' => 'Você não tem permissão para realizar esta ação'
+                'message' => 'Você não tem permissão para realizar esta ação',
             ], 403);
         }
 

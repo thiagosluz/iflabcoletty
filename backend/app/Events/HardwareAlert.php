@@ -18,8 +18,7 @@ class HardwareAlert implements ShouldBroadcast
         public string $alertType, // 'cpu_high', 'memory_high', 'disk_full', etc.
         public string $message,
         public array $data = []
-    ) {
-    }
+    ) {}
 
     /**
      * Get the channels the event should broadcast on.

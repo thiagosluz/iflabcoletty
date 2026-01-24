@@ -19,7 +19,7 @@ class AlertController extends Controller
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
-        
+
         if ($request->has('severity')) {
             $query->where('severity', $request->severity);
         }
@@ -45,14 +45,14 @@ class AlertController extends Controller
 
         return response()->json($alert);
     }
-    
+
     public function stats()
     {
         return response()->json([
             'total_active' => Alert::active()->count(),
             'by_severity' => Alert::active()->selectRaw('severity, count(*) as count')
                 ->groupBy('severity')->pluck('count', 'severity'),
-            'recent' => Alert::with('computer')->orderBy('created_at', 'desc')->limit(5)->get()
+            'recent' => Alert::with('computer')->orderBy('created_at', 'desc')->limit(5)->get(),
         ]);
     }
 
@@ -107,6 +107,7 @@ class AlertController extends Controller
     public function rulesDestroy(AlertRule $rule)
     {
         $rule->delete();
+
         return response()->json(null, 204);
     }
 }

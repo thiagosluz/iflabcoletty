@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Events\NotificationCreated;
 use App\Models\Notification;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 
 class NotificationService
 {
@@ -35,7 +34,7 @@ class NotificationService
     public function notifyAdmins(string $type, string $title, string $message, array $data = []): void
     {
         $admins = User::role('admin')->get();
-        
+
         foreach ($admins as $admin) {
             $this->create($admin, $type, $title, $message, $data);
         }
@@ -47,7 +46,7 @@ class NotificationService
     public function notifyUsersWithPermission(string $permission, string $type, string $title, string $message, array $data = []): void
     {
         $users = User::permission($permission)->get();
-        
+
         foreach ($users as $user) {
             $this->create($user, $type, $title, $message, $data);
         }

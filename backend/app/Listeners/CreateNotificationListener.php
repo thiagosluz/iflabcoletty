@@ -3,11 +3,7 @@
 namespace App\Listeners;
 
 use App\Events\ComputerStatusChanged;
-use App\Events\SoftwareInstalled;
-use App\Events\HardwareAlert;
 use App\Services\NotificationService;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
 
 class CreateNotificationListener
 {
@@ -25,7 +21,7 @@ class CreateNotificationListener
     {
         $computer = $event->computer;
         $status = $event->status;
-        
+
         if ($status === 'offline') {
             $this->notificationService->notifyResourceViewers(
                 'computers',
@@ -54,4 +50,3 @@ class CreateNotificationListener
         }
     }
 }
-

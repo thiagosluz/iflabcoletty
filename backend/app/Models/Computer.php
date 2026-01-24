@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 class Computer extends Model
 {
@@ -15,7 +14,7 @@ class Computer extends Model
         'machine_id',
         'public_hash',
         'hostname',
-        'hardware_info'
+        'hardware_info',
     ];
 
     protected $casts = [

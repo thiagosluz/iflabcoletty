@@ -17,22 +17,23 @@ class AlertServiceTest extends TestCase
     use RefreshDatabase;
 
     protected $notificationService;
+
     protected $alertService;
 
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         $this->notificationService = Mockery::mock(NotificationService::class);
         $this->notificationService->shouldReceive('notifyAdmin')->byDefault();
-        
+
         $this->alertService = new AlertService($this->notificationService);
     }
 
     public function test_it_triggers_cpu_usage_alert()
     {
         $computer = Computer::factory()->create();
-        
+
         // Create rule: CPU > 90%
         $rule = AlertRule::factory()->create([
             'type' => 'metric',
@@ -61,7 +62,7 @@ class AlertServiceTest extends TestCase
     public function test_it_does_not_trigger_alert_if_below_threshold()
     {
         $computer = Computer::factory()->create();
-        
+
         // Create rule: CPU > 90%
         $rule = AlertRule::factory()->create([
             'type' => 'metric',
@@ -89,7 +90,7 @@ class AlertServiceTest extends TestCase
     public function test_it_triggers_offline_alert()
     {
         $computer = Computer::factory()->create();
-        
+
         // Create rule: Offline > 10 mins
         $rule = AlertRule::factory()->create([
             'type' => 'status',
@@ -104,7 +105,7 @@ class AlertServiceTest extends TestCase
             'type' => 'heartbeat',
             'payload' => [],
         ]);
-        
+
         $activity->created_at = now()->subMinutes(20);
         $activity->save();
 

@@ -3,10 +3,10 @@
 namespace App\Services;
 
 use App\Models\Backup;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class BackupService
 {
@@ -25,9 +25,9 @@ class BackupService
 
         try {
             $filePath = $this->performDatabaseBackup($backup->filename);
-            
+
             // Get file size from filesystem
-            $fullPath = storage_path('app/' . $filePath);
+            $fullPath = storage_path('app/'.$filePath);
             $fileSize = file_exists($fullPath) ? filesize($fullPath) : 0;
 
             $backup->update([
@@ -46,7 +46,7 @@ class BackupService
                 'error_message' => $e->getMessage(),
             ]);
 
-            Log::error("Database backup failed: " . $e->getMessage());
+            Log::error('Database backup failed: '.$e->getMessage());
 
             throw $e;
         }
@@ -63,7 +63,7 @@ class BackupService
 
         $backupDir = 'backups';
         Storage::makeDirectory($backupDir);
-        $filePath = $backupDir . '/' . $filename;
+        $filePath = $backupDir.'/'.$filename;
 
         switch ($driver) {
             case 'pgsql':
@@ -92,9 +92,9 @@ class BackupService
         // Set PGPASSWORD environment variable
         putenv("PGPASSWORD={$password}");
 
-        $tempFile = storage_path('app/' . $filePath);
+        $tempFile = storage_path('app/'.$filePath);
         $tempDir = dirname($tempFile);
-        if (!is_dir($tempDir)) {
+        if (! is_dir($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
 
@@ -116,11 +116,11 @@ class BackupService
         putenv('PGPASSWORD');
 
         if ($returnVar !== 0) {
-            throw new \Exception("PostgreSQL backup failed: " . implode("\n", $output));
+            throw new \Exception('PostgreSQL backup failed: '.implode("\n", $output));
         }
 
-        if (!file_exists($tempFile)) {
-            throw new \Exception("Backup file was not created");
+        if (! file_exists($tempFile)) {
+            throw new \Exception('Backup file was not created');
         }
 
         return $filePath;
@@ -165,9 +165,9 @@ class BackupService
         $username = $config['username'];
         $password = $config['password'];
 
-        $tempFile = storage_path('app/' . $filePath);
+        $tempFile = storage_path('app/'.$filePath);
         $tempDir = dirname($tempFile);
-        if (!is_dir($tempDir)) {
+        if (! is_dir($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
 
@@ -187,11 +187,11 @@ class BackupService
         exec($command, $output, $returnVar);
 
         if ($returnVar !== 0) {
-            throw new \Exception("MySQL backup failed: " . implode("\n", $output));
+            throw new \Exception('MySQL backup failed: '.implode("\n", $output));
         }
 
-        if (!file_exists($tempFile)) {
-            throw new \Exception("Backup file was not created");
+        if (! file_exists($tempFile)) {
+            throw new \Exception('Backup file was not created');
         }
 
         return $filePath;
@@ -204,19 +204,19 @@ class BackupService
     {
         $database = $config['database'];
 
-        if (!file_exists($database)) {
+        if (! file_exists($database)) {
             throw new \Exception("SQLite database file not found: {$database}");
         }
 
-        $tempFile = storage_path('app/' . $filePath);
+        $tempFile = storage_path('app/'.$filePath);
         $tempDir = dirname($tempFile);
-        if (!is_dir($tempDir)) {
+        if (! is_dir($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
 
         // Copy SQLite file
-        if (!copy($database, $tempFile)) {
-            throw new \Exception("Failed to copy SQLite database file");
+        if (! copy($database, $tempFile)) {
+            throw new \Exception('Failed to copy SQLite database file');
         }
 
         return $filePath;
@@ -229,20 +229,21 @@ class BackupService
     {
         $timestamp = now()->format('Y-m-d_His');
         $extension = config('database.default') === 'pgsql' ? 'dump' : 'sql';
+
         return "backup_{$type}_{$timestamp}.{$extension}";
     }
 
     /**
      * Clean old backups based on retention policy
      */
-    public static function cleanOldBackups(int $retentionDays = null): int
+    public static function cleanOldBackups(?int $retentionDays = null): int
     {
         if ($retentionDays === null) {
             $retentionDays = (int) config('backup.retention_days', 30);
         }
-        
+
         $cutoffDate = Carbon::now()->subDays($retentionDays);
-        
+
         $oldBackups = Backup::where('created_at', '<', $cutoffDate)
             ->where('status', 'completed')
             ->get();
@@ -262,7 +263,7 @@ class BackupService
 
                 Log::info("Deleted old backup: {$backup->filename}");
             } catch (\Exception $e) {
-                Log::error("Failed to delete backup {$backup->id}: " . $e->getMessage());
+                Log::error("Failed to delete backup {$backup->id}: ".$e->getMessage());
             }
         }
 
@@ -297,11 +298,11 @@ class BackupService
      */
     public function restoreDatabaseBackup(Backup $backup): void
     {
-        if (!$backup->isCompleted()) {
+        if (! $backup->isCompleted()) {
             throw new \Exception('Backup is not completed');
         }
 
-        if (!$backup->fileExists()) {
+        if (! $backup->fileExists()) {
             throw new \Exception('Backup file not found');
         }
 
@@ -309,7 +310,7 @@ class BackupService
         $driver = $connection->getDriverName();
         $config = $connection->getConfig();
 
-        $filePath = storage_path('app/' . $backup->file_path);
+        $filePath = storage_path('app/'.$backup->file_path);
 
         switch ($driver) {
             case 'pgsql':
@@ -339,9 +340,9 @@ class BackupService
         $password = $config['password'];
 
         $pgRestorePath = $this->findPgRestore();
-        
-        if (!$pgRestorePath) {
-            throw new \Exception("pg_restore command not found. Please install postgresql-client package.");
+
+        if (! $pgRestorePath) {
+            throw new \Exception('pg_restore command not found. Please install postgresql-client package.');
         }
 
         // Set PGPASSWORD environment variable
@@ -371,7 +372,7 @@ class BackupService
         putenv('PGPASSWORD');
 
         // Filter out non-critical warnings/errors
-        $criticalErrors = array_filter($output, function($line) {
+        $criticalErrors = array_filter($output, function ($line) {
             // Ignore warnings about unrecognized configuration parameters
             // and other non-critical messages
             $ignoredPatterns = [
@@ -380,37 +381,37 @@ class BackupService
                 'WARNING:',
                 'warning:',
             ];
-            
+
             foreach ($ignoredPatterns as $pattern) {
                 if (stripos($line, $pattern) !== false) {
                     return false; // Not a critical error
                 }
             }
-            
+
             // Check for actual ERROR messages (not warnings)
-            if (stripos($line, 'ERROR:') !== false && 
+            if (stripos($line, 'ERROR:') !== false &&
                 stripos($line, 'unrecognized configuration parameter') === false) {
                 return true; // Critical error
             }
-            
+
             return false;
         });
 
         // Only fail if there are critical errors or return code indicates failure
         // Note: pg_restore may return non-zero even on success if there are warnings
-        if ($returnVar !== 0 && !empty($criticalErrors)) {
+        if ($returnVar !== 0 && ! empty($criticalErrors)) {
             $error = implode("\n", $output);
             throw new \Exception("PostgreSQL restore failed: {$error}");
         }
-        
+
         // Log warnings but don't fail
-        if (!empty($output)) {
-            $warnings = array_filter($output, function($line) {
-                return stripos($line, 'warning') !== false || 
+        if (! empty($output)) {
+            $warnings = array_filter($output, function ($line) {
+                return stripos($line, 'warning') !== false ||
                        stripos($line, 'WARNING') !== false;
             });
-            if (!empty($warnings)) {
-                Log::warning("PostgreSQL restore warnings: " . implode("\n", $warnings));
+            if (! empty($warnings)) {
+                Log::warning('PostgreSQL restore warnings: '.implode("\n", $warnings));
             }
         }
     }
@@ -442,7 +443,7 @@ class BackupService
         exec($command, $output, $returnVar);
 
         if ($returnVar !== 0) {
-            throw new \Exception("MySQL restore failed: " . implode("\n", $output));
+            throw new \Exception('MySQL restore failed: '.implode("\n", $output));
         }
     }
 
@@ -453,14 +454,14 @@ class BackupService
     {
         $database = $config['database'];
         $databaseDir = dirname($database);
-        
-        if (!is_dir($databaseDir)) {
+
+        if (! is_dir($databaseDir)) {
             mkdir($databaseDir, 0755, true);
         }
 
         // Copy backup file to database location
-        if (!copy($filePath, $database)) {
-            throw new \Exception("Failed to restore SQLite database file");
+        if (! copy($filePath, $database)) {
+            throw new \Exception('Failed to restore SQLite database file');
         }
     }
 

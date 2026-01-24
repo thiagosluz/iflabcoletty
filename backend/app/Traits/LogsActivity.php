@@ -17,17 +17,17 @@ trait LogsActivity
         ?array $newValues = null,
         ?string $description = null
     ): void {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return;
         }
 
         try {
             $resourceType = $resource ? class_basename(get_class($resource)) : $this->getResourceType();
-            
-            if (!$resourceType) {
+
+            if (! $resourceType) {
                 return; // Can't log without resource type
             }
-            
+
             $resourceId = $resource?->id;
 
             AuditLog::create([
@@ -43,7 +43,7 @@ trait LogsActivity
             ]);
         } catch (\Exception $e) {
             // Don't break the request if logging fails
-            \Log::error('Failed to create audit log: ' . $e->getMessage());
+            \Log::error('Failed to create audit log: '.$e->getMessage());
         }
     }
 
@@ -54,9 +54,9 @@ trait LogsActivity
     {
         $className = class_basename($this);
         $resourceType = str_replace('Controller', '', $className);
-        
+
         // Map controller names to model names
-        return match($resourceType) {
+        return match ($resourceType) {
             'Lab' => 'Lab',
             'Computer' => 'Computer',
             'Software' => 'Software',
@@ -70,13 +70,13 @@ trait LogsActivity
     protected function generateDescription(string $action, string $resourceType, $resource = null): string
     {
         $user = Auth::user();
-        if (!$user) {
+        if (! $user) {
             return "Ação {$action} em {$resourceType}";
         }
-        
+
         $userName = $user->name ?? $user->email;
-        
-        $actionText = match($action) {
+
+        $actionText = match ($action) {
             'create' => 'criou',
             'update' => 'atualizou',
             'delete' => 'removeu',

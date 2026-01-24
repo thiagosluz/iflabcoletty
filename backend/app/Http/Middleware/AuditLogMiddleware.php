@@ -2,11 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AuditLog;
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
-use App\Models\AuditLog;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 class AuditLogMiddleware
 {
@@ -40,7 +40,7 @@ class AuditLogMiddleware
         ];
 
         $path = $request->path();
-        
+
         foreach ($skipRoutes as $skipRoute) {
             if (str_contains($path, $skipRoute)) {
                 return false;
@@ -62,7 +62,7 @@ class AuditLogMiddleware
             $resourceId = $this->getResourceId($request, $response);
 
             // Only log if we can determine the resource type
-            if (!$resourceType) {
+            if (! $resourceType) {
                 return;
             }
 
@@ -79,7 +79,7 @@ class AuditLogMiddleware
             ]);
         } catch (\Exception $e) {
             // Don't break the request if logging fails
-            \Log::error('Failed to create audit log: ' . $e->getMessage());
+            \Log::error('Failed to create audit log: '.$e->getMessage());
         }
     }
 
@@ -89,8 +89,8 @@ class AuditLogMiddleware
     private function getAction(Request $request): string
     {
         $method = $request->method();
-        
-        return match($method) {
+
+        return match ($method) {
             'POST' => 'create',
             'PUT', 'PATCH' => 'update',
             'DELETE' => 'delete',
@@ -104,13 +104,13 @@ class AuditLogMiddleware
     private function getResourceType(Request $request): ?string
     {
         $path = $request->path();
-        
+
         // Extract resource type from path like /api/v1/labs, /api/v1/computers, etc.
         if (preg_match('/\/api\/v1\/(\w+)/', $path, $matches)) {
             $resource = $matches[1];
-            
+
             // Map to model names
-            return match($resource) {
+            return match ($resource) {
                 'labs' => 'Lab',
                 'computers' => 'Computer',
                 'softwares' => 'Software',
@@ -127,8 +127,8 @@ class AuditLogMiddleware
     private function getResourceId(Request $request, Response $response): ?int
     {
         // Try to get from route parameters
-        $resourceId = $request->route('lab')?->id 
-                   ?? $request->route('computer')?->id 
+        $resourceId = $request->route('lab')?->id
+                   ?? $request->route('computer')?->id
                    ?? $request->route('software')?->id;
 
         if ($resourceId) {
@@ -169,11 +169,11 @@ class AuditLogMiddleware
         }
 
         $data = $request->all();
-        
+
         // Remove sensitive data
         unset($data['password'], $data['password_confirmation']);
-        
-        return !empty($data) ? $data : null;
+
+        return ! empty($data) ? $data : null;
     }
 
     /**
@@ -183,7 +183,7 @@ class AuditLogMiddleware
     {
         $user = Auth::user();
         $userName = $user->name ?? $user->email;
-        
+
         return sprintf(
             '%s %s %s',
             $userName,

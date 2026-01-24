@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Models\ComputerActivity;
 use App\Models\Computer;
+use App\Models\ComputerActivity;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**

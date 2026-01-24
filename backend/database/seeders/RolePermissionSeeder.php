@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\Models\Permission;
 use App\Models\User;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class RolePermissionSeeder extends Seeder
 {
@@ -24,48 +24,48 @@ class RolePermissionSeeder extends Seeder
             'labs.create',
             'labs.update',
             'labs.delete',
-            
+
             // Computers
             'computers.view',
             'computers.create',
             'computers.update',
             'computers.delete',
-            
+
             // Softwares
             'softwares.view',
             'softwares.create',
             'softwares.update',
             'softwares.delete',
-            
+
             // Dashboard
             'dashboard.view',
-            
+
             // Reports
             'reports.view',
             'reports.create',
             'reports.download',
-            
+
             // Audit Logs
             'audit-logs.view',
-            
+
             // Backups
             'backups.view',
             'backups.create',
             'backups.delete',
             'backups.restore',
-            
+
             // Users
             'users.view',
             'users.create',
             'users.update',
             'users.delete',
-            
+
             // Roles
             'roles.view',
             'roles.create',
             'roles.update',
             'roles.delete',
-            
+
             // Notifications
             'notifications.view',
             'notifications.update',
@@ -119,14 +119,14 @@ class RolePermissionSeeder extends Seeder
 
         // Atribuir role admin ao usuário admin existente (se existir)
         $adminUser = User::where('email', 'admin@iflab.com')->first();
-        if ($adminUser && !$adminUser->hasRole('admin')) {
+        if ($adminUser && ! $adminUser->hasRole('admin')) {
             $adminUser->assignRole('admin');
         }
 
         if ($this->command) {
             $this->command->info('Roles e permissions criados com sucesso!');
             $this->command->info('Roles: admin, technician, professor, viewer');
-            $this->command->info('Total de permissions: ' . Permission::count());
+            $this->command->info('Total de permissions: '.Permission::count());
         }
     }
 }

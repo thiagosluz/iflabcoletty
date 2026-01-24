@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Models\ReportJob;
 use App\Jobs\GenerateReportJob;
+use App\Models\ReportJob;
+use Illuminate\Console\Command;
 
 class RetryPendingReportJobs extends Command
 {
@@ -31,6 +31,7 @@ class RetryPendingReportJobs extends Command
 
         if ($pendingJobs->isEmpty()) {
             $this->info('No pending jobs found.');
+
             return 0;
         }
 
@@ -38,7 +39,7 @@ class RetryPendingReportJobs extends Command
 
         foreach ($pendingJobs as $job) {
             $this->comment("Dispatching job {$job->id} ({$job->type} - {$job->format})...");
-            
+
             GenerateReportJob::dispatch(
                 $job->id,
                 $job->type,
@@ -48,6 +49,7 @@ class RetryPendingReportJobs extends Command
         }
 
         $this->info('All pending jobs have been dispatched to the queue.');
+
         return 0;
     }
 }

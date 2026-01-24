@@ -12,7 +12,6 @@ use App\Models\Notification;
 use App\Models\Software;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
@@ -33,6 +32,7 @@ class BroadcastingTest extends TestCase
         $user = $user ?? User::factory()->create();
         $user->assignRole('admin');
         $this->actingAs($user, 'sanctum');
+
         return $user;
     }
 
@@ -57,7 +57,7 @@ class BroadcastingTest extends TestCase
 
         $response = $this->postJson('/broadcasting/auth', [
             'socket_id' => 'test-socket-id',
-            'channel_name' => 'private-user.' . $user->id,
+            'channel_name' => 'private-user.'.$user->id,
         ]);
 
         $response->assertStatus(200);

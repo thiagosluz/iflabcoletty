@@ -4,21 +4,21 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\Models\Permission;
 use OpenApi\Attributes as OA;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
 {
     #[OA\Get(
-        path: "/api/v1/roles",
-        summary: "Listar roles",
-        tags: ["Roles"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/roles',
+        summary: 'Listar roles',
+        tags: ['Roles'],
+        security: [['sanctum' => []]],
         responses: [
-            new OA\Response(response: 200, description: "Lista de roles"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 403, description: "Sem permissão"),
+            new OA\Response(response: 200, description: 'Lista de roles'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Sem permissão'),
         ]
     )]
     public function index()
@@ -31,14 +31,14 @@ class RoleController extends Controller
     }
 
     #[OA\Get(
-        path: "/api/v1/permissions",
-        summary: "Listar permissions",
-        tags: ["Roles"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/permissions',
+        summary: 'Listar permissions',
+        tags: ['Roles'],
+        security: [['sanctum' => []]],
         responses: [
-            new OA\Response(response: 200, description: "Lista de permissions"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 403, description: "Sem permissão"),
+            new OA\Response(response: 200, description: 'Lista de permissions'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Sem permissão'),
         ]
     )]
     public function permissions()
@@ -51,25 +51,25 @@ class RoleController extends Controller
     }
 
     #[OA\Post(
-        path: "/api/v1/roles",
-        summary: "Criar role",
-        tags: ["Roles"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/roles',
+        summary: 'Criar role',
+        tags: ['Roles'],
+        security: [['sanctum' => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["name"],
+                required: ['name'],
                 properties: [
-                    new OA\Property(property: "name", type: "string"),
-                    new OA\Property(property: "permissions", type: "array", items: new OA\Items(type: "string")),
+                    new OA\Property(property: 'name', type: 'string'),
+                    new OA\Property(property: 'permissions', type: 'array', items: new OA\Items(type: 'string')),
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Role criada"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 403, description: "Sem permissão"),
-            new OA\Response(response: 422, description: "Erro de validação"),
+            new OA\Response(response: 201, description: 'Role criada'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Sem permissão'),
+            new OA\Response(response: 422, description: 'Erro de validação'),
         ]
     )]
     public function store(Request $request)
@@ -94,18 +94,18 @@ class RoleController extends Controller
     }
 
     #[OA\Get(
-        path: "/api/v1/roles/{id}",
-        summary: "Obter detalhes da role",
-        tags: ["Roles"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/roles/{id}',
+        summary: 'Obter detalhes da role',
+        tags: ['Roles'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Detalhes da role"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 403, description: "Sem permissão"),
-            new OA\Response(response: 404, description: "Role não encontrada"),
+            new OA\Response(response: 200, description: 'Detalhes da role'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Sem permissão'),
+            new OA\Response(response: 404, description: 'Role não encontrada'),
         ]
     )]
     public function show(Role $role)
@@ -118,28 +118,28 @@ class RoleController extends Controller
     }
 
     #[OA\Put(
-        path: "/api/v1/roles/{id}",
-        summary: "Atualizar role",
-        tags: ["Roles"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/roles/{id}',
+        summary: 'Atualizar role',
+        tags: ['Roles'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
         ],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
                 properties: [
-                    new OA\Property(property: "name", type: "string"),
-                    new OA\Property(property: "permissions", type: "array", items: new OA\Items(type: "string")),
+                    new OA\Property(property: 'name', type: 'string'),
+                    new OA\Property(property: 'permissions', type: 'array', items: new OA\Items(type: 'string')),
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 200, description: "Role atualizada"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 403, description: "Sem permissão"),
-            new OA\Response(response: 404, description: "Role não encontrada"),
-            new OA\Response(response: 422, description: "Erro de validação"),
+            new OA\Response(response: 200, description: 'Role atualizada'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Sem permissão'),
+            new OA\Response(response: 404, description: 'Role não encontrada'),
+            new OA\Response(response: 422, description: 'Erro de validação'),
         ]
     )]
     public function update(Request $request, Role $role)
@@ -149,7 +149,7 @@ class RoleController extends Controller
         // Não permitir alterar roles do sistema (admin)
         if (in_array($role->name, ['admin']) && $request->has('permissions')) {
             return response()->json([
-                'message' => 'Não é permitido alterar permissões da role admin'
+                'message' => 'Não é permitido alterar permissões da role admin',
             ], 403);
         }
 
@@ -173,18 +173,18 @@ class RoleController extends Controller
     }
 
     #[OA\Delete(
-        path: "/api/v1/roles/{id}",
-        summary: "Excluir role",
-        tags: ["Roles"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/roles/{id}',
+        summary: 'Excluir role',
+        tags: ['Roles'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
         ],
         responses: [
-            new OA\Response(response: 204, description: "Role excluída"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 403, description: "Sem permissão"),
-            new OA\Response(response: 404, description: "Role não encontrada"),
+            new OA\Response(response: 204, description: 'Role excluída'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Sem permissão'),
+            new OA\Response(response: 404, description: 'Role não encontrada'),
         ]
     )]
     public function destroy(Role $role)
@@ -194,7 +194,7 @@ class RoleController extends Controller
         // Não permitir excluir roles do sistema
         if (in_array($role->name, ['admin', 'technician', 'professor', 'viewer'])) {
             return response()->json([
-                'message' => 'Não é permitido excluir roles do sistema'
+                'message' => 'Não é permitido excluir roles do sistema',
             ], 403);
         }
 

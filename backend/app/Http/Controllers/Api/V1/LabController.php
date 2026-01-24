@@ -5,24 +5,25 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Lab;
 use App\Models\Software;
+use App\Traits\LogsActivity;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
-use App\Traits\LogsActivity;
 
 class LabController extends Controller
 {
     use LogsActivity;
+
     #[OA\Get(
-        path: "/api/v1/labs",
-        summary: "Listar laboratórios",
-        tags: ["Laboratórios"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/labs',
+        summary: 'Listar laboratórios',
+        tags: ['Laboratórios'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "per_page", in: "query", required: false, schema: new OA\Schema(type: "integer", example: 20)),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', example: 20)),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Lista de laboratórios"),
-            new OA\Response(response: 401, description: "Não autenticado"),
+            new OA\Response(response: 200, description: 'Lista de laboratórios'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
     public function index(Request $request)
@@ -35,30 +36,30 @@ class LabController extends Controller
 
         // Pagination
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100); // Limit between 5 and 100
+        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
 
         return $query->orderBy('name')->paginate($perPage);
     }
 
     #[OA\Post(
-        path: "/api/v1/labs",
-        summary: "Criar laboratório",
-        tags: ["Laboratórios"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/labs',
+        summary: 'Criar laboratório',
+        tags: ['Laboratórios'],
+        security: [['sanctum' => []]],
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ["name"],
+                required: ['name'],
                 properties: [
-                    new OA\Property(property: "name", type: "string", example: "Laboratório de Informática"),
-                    new OA\Property(property: "description", type: "string", nullable: true, example: "Descrição do laboratório"),
+                    new OA\Property(property: 'name', type: 'string', example: 'Laboratório de Informática'),
+                    new OA\Property(property: 'description', type: 'string', nullable: true, example: 'Descrição do laboratório'),
                 ]
             )
         ),
         responses: [
-            new OA\Response(response: 201, description: "Laboratório criado com sucesso"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 422, description: "Erro de validação"),
+            new OA\Response(response: 201, description: 'Laboratório criado com sucesso'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 422, description: 'Erro de validação'),
         ]
     )]
     public function store(Request $request)
@@ -67,29 +68,29 @@ class LabController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|unique:labs,name|max:255',
-            'description' => 'nullable|string'
+            'description' => 'nullable|string',
         ]);
 
         $lab = Lab::create($validated);
-        
+
         // Log activity
         $this->logActivity('create', $lab);
-        
+
         return response()->json($lab, 201);
     }
 
     #[OA\Get(
-        path: "/api/v1/labs/{id}",
-        summary: "Obter detalhes do laboratório",
-        tags: ["Laboratórios"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/labs/{id}',
+        summary: 'Obter detalhes do laboratório',
+        tags: ['Laboratórios'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Detalhes do laboratório"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 404, description: "Laboratório não encontrado"),
+            new OA\Response(response: 200, description: 'Detalhes do laboratório'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 404, description: 'Laboratório não encontrado'),
         ]
     )]
     public function show(Lab $lab)
@@ -100,10 +101,10 @@ class LabController extends Controller
         $lab->load(['computers' => function ($query) {
             $query->select('id', 'lab_id', 'hostname', 'machine_id', 'hardware_info', 'updated_at', 'created_at');
         }]);
-        
+
         $computers = $lab->computers;
         $stats = $this->calculateLabStats($computers);
-        
+
         return response()->json([
             'lab' => [
                 'id' => $lab->id,
@@ -119,19 +120,19 @@ class LabController extends Controller
      * Get paginated computers for a lab
      */
     #[OA\Get(
-        path: "/api/v1/labs/{id}/computers",
-        summary: "Listar computadores do laboratório",
-        tags: ["Laboratórios"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/labs/{id}/computers',
+        summary: 'Listar computadores do laboratório',
+        tags: ['Laboratórios'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
-            new OA\Parameter(name: "search", in: "query", required: false, schema: new OA\Schema(type: "string")),
-            new OA\Parameter(name: "status", in: "query", required: false, schema: new OA\Schema(type: "string", enum: ["online", "offline"])),
-            new OA\Parameter(name: "per_page", in: "query", required: false, schema: new OA\Schema(type: "integer", example: 20)),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'search', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'status', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['online', 'offline'])),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', example: 20)),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Lista de computadores"),
-            new OA\Response(response: 401, description: "Não autenticado"),
+            new OA\Response(response: 200, description: 'Lista de computadores'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
     public function getComputers(Request $request, Lab $lab)
@@ -159,7 +160,7 @@ class LabController extends Controller
 
         // Pagination
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100);
+        $perPage = min(max((int) $perPage, 5), 100);
 
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
     }
@@ -168,18 +169,18 @@ class LabController extends Controller
      * Get paginated unique softwares for a lab
      */
     #[OA\Get(
-        path: "/api/v1/labs/{id}/softwares",
-        summary: "Listar softwares do laboratório",
-        tags: ["Laboratórios"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/labs/{id}/softwares',
+        summary: 'Listar softwares do laboratório',
+        tags: ['Laboratórios'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
-            new OA\Parameter(name: "search", in: "query", required: false, schema: new OA\Schema(type: "string")),
-            new OA\Parameter(name: "per_page", in: "query", required: false, schema: new OA\Schema(type: "integer", example: 20)),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'search', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', example: 20)),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Lista de softwares"),
-            new OA\Response(response: 401, description: "Não autenticado"),
+            new OA\Response(response: 200, description: 'Lista de softwares'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
     public function getSoftwares(Request $request, Lab $lab)
@@ -205,7 +206,7 @@ class LabController extends Controller
 
         // Pagination
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100);
+        $perPage = min(max((int) $perPage, 5), 100);
 
         return $query->orderBy('name')->paginate($perPage);
     }
@@ -216,7 +217,7 @@ class LabController extends Controller
     private function calculateLabStats($computers)
     {
         $totalComputers = $computers->count();
-        
+
         if ($totalComputers === 0) {
             return [
                 'total_computers' => 0,
@@ -261,7 +262,7 @@ class LabController extends Controller
     private function calculateHardwareAverages($computers)
     {
         $computersWithHardware = $computers->filter(function ($computer) {
-            return !empty($computer->hardware_info);
+            return ! empty($computer->hardware_info);
         });
 
         if ($computersWithHardware->isEmpty()) {
@@ -295,8 +296,8 @@ class LabController extends Controller
         });
 
         // Calculate average disk usage percentage
-        $avgDiskUsagePercent = $avgDiskTotal > 0 
-            ? round(($avgDiskUsed / $avgDiskTotal) * 100, 2) 
+        $avgDiskUsagePercent = $avgDiskTotal > 0
+            ? round(($avgDiskUsed / $avgDiskTotal) * 100, 2)
             : 0;
 
         return [
@@ -323,14 +324,14 @@ class LabController extends Controller
     private function getOSDistribution($computers)
     {
         $osCounts = [];
-        
+
         foreach ($computers as $computer) {
-            if (!empty($computer->hardware_info['os']['system'])) {
+            if (! empty($computer->hardware_info['os']['system'])) {
                 $osName = $computer->hardware_info['os']['system'];
                 $osRelease = $computer->hardware_info['os']['release'] ?? 'Desconhecido';
-                $osKey = $osName . ' ' . $osRelease;
-                
-                if (!isset($osCounts[$osKey])) {
+                $osKey = $osName.' '.$osRelease;
+
+                if (! isset($osCounts[$osKey])) {
                     $osCounts[$osKey] = [
                         'system' => $osName,
                         'release' => $osRelease,
@@ -349,17 +350,17 @@ class LabController extends Controller
         $this->authorize('labs.update');
 
         $oldValues = $lab->toArray();
-        
+
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255|unique:labs,name,' . $lab->id,
-            'description' => 'nullable|string'
+            'name' => 'sometimes|required|string|max:255|unique:labs,name,'.$lab->id,
+            'description' => 'nullable|string',
         ]);
 
         $lab->update($validated);
-        
+
         // Log activity
         $this->logActivity('update', $lab, $oldValues, $lab->toArray());
-        
+
         return response()->json($lab);
     }
 
@@ -370,12 +371,12 @@ class LabController extends Controller
         $oldValues = $lab->toArray();
         $resourceId = $lab->id;
         $resourceName = $lab->name;
-        
+
         // Log activity before deleting (so we have the model reference)
         $this->logActivity('delete', $lab, $oldValues);
-        
+
         $lab->delete();
-        
+
         return response()->noContent();
     }
 }

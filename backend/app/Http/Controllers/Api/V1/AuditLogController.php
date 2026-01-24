@@ -10,23 +10,23 @@ use OpenApi\Attributes as OA;
 class AuditLogController extends Controller
 {
     #[OA\Get(
-        path: "/api/v1/audit-logs",
-        summary: "Listar logs de auditoria",
-        tags: ["Auditoria"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/audit-logs',
+        summary: 'Listar logs de auditoria',
+        tags: ['Auditoria'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "per_page", in: "query", required: false, schema: new OA\Schema(type: "integer", example: 20)),
-            new OA\Parameter(name: "user_id", in: "query", required: false, schema: new OA\Schema(type: "integer")),
-            new OA\Parameter(name: "action", in: "query", required: false, schema: new OA\Schema(type: "string", enum: ["create", "update", "delete", "view"])),
-            new OA\Parameter(name: "resource_type", in: "query", required: false, schema: new OA\Schema(type: "string", example: "Lab")),
-            new OA\Parameter(name: "resource_id", in: "query", required: false, schema: new OA\Schema(type: "integer")),
-            new OA\Parameter(name: "date_from", in: "query", required: false, schema: new OA\Schema(type: "string", format: "date")),
-            new OA\Parameter(name: "date_to", in: "query", required: false, schema: new OA\Schema(type: "string", format: "date")),
-            new OA\Parameter(name: "search", in: "query", required: false, schema: new OA\Schema(type: "string")),
+            new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', example: 20)),
+            new OA\Parameter(name: 'user_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'action', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['create', 'update', 'delete', 'view'])),
+            new OA\Parameter(name: 'resource_type', in: 'query', required: false, schema: new OA\Schema(type: 'string', example: 'Lab')),
+            new OA\Parameter(name: 'resource_id', in: 'query', required: false, schema: new OA\Schema(type: 'integer')),
+            new OA\Parameter(name: 'date_from', in: 'query', required: false, schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'date_to', in: 'query', required: false, schema: new OA\Schema(type: 'string', format: 'date')),
+            new OA\Parameter(name: 'search', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Lista de logs de auditoria"),
-            new OA\Response(response: 401, description: "Não autenticado"),
+            new OA\Response(response: 200, description: 'Lista de logs de auditoria'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
     public function index(Request $request)
@@ -69,18 +69,18 @@ class AuditLogController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('description', 'like', "%{$search}%")
-                  ->orWhere('action', 'like', "%{$search}%")
-                  ->orWhere('resource_type', 'like', "%{$search}%")
-                  ->orWhereHas('user', function ($userQuery) use ($search) {
-                      $userQuery->where('name', 'like', "%{$search}%")
-                                ->orWhere('email', 'like', "%{$search}%");
-                  });
+                    ->orWhere('action', 'like', "%{$search}%")
+                    ->orWhere('resource_type', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($userQuery) use ($search) {
+                        $userQuery->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
             });
         }
 
         // Pagination
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100); // Limit between 5 and 100
+        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
 
         // Order by most recent first
         $logs = $query->orderBy('created_at', 'desc')->paginate($perPage);
@@ -89,17 +89,17 @@ class AuditLogController extends Controller
     }
 
     #[OA\Get(
-        path: "/api/v1/audit-logs/{id}",
-        summary: "Obter detalhes de um log de auditoria",
-        tags: ["Auditoria"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/audit-logs/{id}',
+        summary: 'Obter detalhes de um log de auditoria',
+        tags: ['Auditoria'],
+        security: [['sanctum' => []]],
         parameters: [
-            new OA\Parameter(name: "id", in: "path", required: true, schema: new OA\Schema(type: "integer")),
+            new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
         ],
         responses: [
-            new OA\Response(response: 200, description: "Detalhes do log de auditoria"),
-            new OA\Response(response: 401, description: "Não autenticado"),
-            new OA\Response(response: 404, description: "Log não encontrado"),
+            new OA\Response(response: 200, description: 'Detalhes do log de auditoria'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 404, description: 'Log não encontrado'),
         ]
     )]
     public function show(string $id)
@@ -112,13 +112,13 @@ class AuditLogController extends Controller
     }
 
     #[OA\Get(
-        path: "/api/v1/audit-logs/stats",
-        summary: "Obter estatísticas dos logs de auditoria",
-        tags: ["Auditoria"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/audit-logs/stats',
+        summary: 'Obter estatísticas dos logs de auditoria',
+        tags: ['Auditoria'],
+        security: [['sanctum' => []]],
         responses: [
-            new OA\Response(response: 200, description: "Estatísticas dos logs"),
-            new OA\Response(response: 401, description: "Não autenticado"),
+            new OA\Response(response: 200, description: 'Estatísticas dos logs'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
     public function stats()

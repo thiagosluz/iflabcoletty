@@ -18,8 +18,7 @@ class SoftwareInstalled implements ShouldBroadcast
         public Computer $computer,
         public Software $software,
         public string $action // 'installed', 'removed'
-    ) {
-    }
+    ) {}
 
     /**
      * Get the channels the event should broadcast on.

@@ -2,29 +2,30 @@
 
 namespace App\Jobs;
 
+use App\Models\Computer;
+use App\Models\Lab;
+use App\Models\ReportJob;
+use App\Models\Software;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use App\Models\ReportJob;
-use App\Models\Lab;
-use App\Models\Computer;
-use App\Models\Software;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use League\Csv\Writer;
-use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
 
 class GenerateReportJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 300; // 5 minutes
+
     public $tries = 3;
 
     /**
@@ -45,7 +46,7 @@ class GenerateReportJob implements ShouldQueue
     public function handle(): void
     {
         $reportJob = ReportJob::findOrFail($this->reportJobId);
-        
+
         try {
             // Update status to processing
             $reportJob->update([
@@ -54,7 +55,7 @@ class GenerateReportJob implements ShouldQueue
             ]);
 
             // Generate report based on type
-            $filePath = match($this->type) {
+            $filePath = match ($this->type) {
                 'labs' => $this->generateLabsReport(),
                 'computers' => $this->generateComputersReport(),
                 'softwares' => $this->generateSoftwaresReport(),
@@ -70,8 +71,8 @@ class GenerateReportJob implements ShouldQueue
 
             Log::info("Report job {$this->reportJobId} completed successfully. File: {$filePath}");
         } catch (\Exception $e) {
-            Log::error("Report job {$this->reportJobId} failed: " . $e->getMessage());
-            
+            Log::error("Report job {$this->reportJobId} failed: ".$e->getMessage());
+
             $reportJob->update([
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),
@@ -90,7 +91,7 @@ class GenerateReportJob implements ShouldQueue
         $query = Lab::withCount('computers');
 
         // Apply search filter
-        if (!empty($this->filters['search'])) {
+        if (! empty($this->filters['search'])) {
             $query->where(function ($q) {
                 $q->where('name', 'like', "%{$this->filters['search']}%")
                     ->orWhere('description', 'like', "%{$this->filters['search']}%");
@@ -103,7 +104,7 @@ class GenerateReportJob implements ShouldQueue
             throw new \Exception('Nenhum laboratório encontrado para exportar.');
         }
 
-        return match($this->format) {
+        return match ($this->format) {
             'pdf' => $this->exportLabsAsPdf($labs),
             'csv' => $this->exportLabsAsCsv($labs),
             'xlsx' => $this->exportLabsAsXlsx($labs),
@@ -119,7 +120,7 @@ class GenerateReportJob implements ShouldQueue
         $query = Computer::with('lab');
 
         // Apply search filter
-        if (!empty($this->filters['search'])) {
+        if (! empty($this->filters['search'])) {
             $query->where(function ($q) {
                 $q->where('hostname', 'like', "%{$this->filters['search']}%")
                     ->orWhere('machine_id', 'like', "%{$this->filters['search']}%");
@@ -127,12 +128,12 @@ class GenerateReportJob implements ShouldQueue
         }
 
         // Apply lab filter
-        if (!empty($this->filters['lab_id'])) {
+        if (! empty($this->filters['lab_id'])) {
             $query->where('lab_id', $this->filters['lab_id']);
         }
 
         // Apply status filter
-        if (!empty($this->filters['status'])) {
+        if (! empty($this->filters['status'])) {
             if ($this->filters['status'] === 'online') {
                 $query->where('updated_at', '>=', now()->subMinutes(5));
             } else {
@@ -144,11 +145,11 @@ class GenerateReportJob implements ShouldQueue
 
         if ($computers->isEmpty()) {
             // Don't throw exception, just log and mark as failed with message
-            \Log::warning("No computers found for export with filters: " . json_encode($this->filters));
+            \Log::warning('No computers found for export with filters: '.json_encode($this->filters));
             throw new \Exception('Nenhum computador encontrado para exportar com os filtros aplicados.');
         }
 
-        return match($this->format) {
+        return match ($this->format) {
             'pdf' => $this->exportComputersAsPdf($computers),
             'csv' => $this->exportComputersAsCsv($computers),
             'xlsx' => $this->exportComputersAsXlsx($computers),
@@ -164,7 +165,7 @@ class GenerateReportJob implements ShouldQueue
         $query = Software::withCount('computers');
 
         // Apply search filter
-        if (!empty($this->filters['search'])) {
+        if (! empty($this->filters['search'])) {
             $query->where(function ($q) {
                 $q->where('name', 'like', "%{$this->filters['search']}%")
                     ->orWhere('version', 'like', "%{$this->filters['search']}%")
@@ -178,7 +179,7 @@ class GenerateReportJob implements ShouldQueue
             throw new \Exception('Nenhum software encontrado para exportar.');
         }
 
-        return match($this->format) {
+        return match ($this->format) {
             'pdf' => $this->exportSoftwaresAsPdf($softwares),
             'csv' => $this->exportSoftwaresAsCsv($softwares),
             'xlsx' => $this->exportSoftwaresAsXlsx($softwares),
@@ -194,12 +195,12 @@ class GenerateReportJob implements ShouldQueue
         $pdf = Pdf::loadView('reports.labs', [
             'labs' => $labs,
             'exportDate' => $timestamp,
-            'totalLabs' => $labs->count()
+            'totalLabs' => $labs->count(),
         ]);
 
-        $filename = 'reports/laboratorios-' . now()->format('Y-m-d_His') . '.pdf';
+        $filename = 'reports/laboratorios-'.now()->format('Y-m-d_His').'.pdf';
         Storage::put($filename, $pdf->output());
-        
+
         return $filename;
     }
 
@@ -209,12 +210,12 @@ class GenerateReportJob implements ShouldQueue
         $pdf = Pdf::loadView('reports.computers', [
             'computers' => $computers,
             'exportDate' => $timestamp,
-            'totalComputers' => $computers->count()
+            'totalComputers' => $computers->count(),
         ]);
 
-        $filename = 'reports/computadores-' . now()->format('Y-m-d_His') . '.pdf';
+        $filename = 'reports/computadores-'.now()->format('Y-m-d_His').'.pdf';
         Storage::put($filename, $pdf->output());
-        
+
         return $filename;
     }
 
@@ -224,12 +225,12 @@ class GenerateReportJob implements ShouldQueue
         $pdf = Pdf::loadView('reports.softwares', [
             'softwares' => $softwares,
             'exportDate' => $timestamp,
-            'totalSoftwares' => $softwares->count()
+            'totalSoftwares' => $softwares->count(),
         ]);
 
-        $filename = 'reports/softwares-' . now()->format('Y-m-d_His') . '.pdf';
+        $filename = 'reports/softwares-'.now()->format('Y-m-d_His').'.pdf';
         Storage::put($filename, $pdf->output());
-        
+
         return $filename;
     }
 
@@ -251,9 +252,9 @@ class GenerateReportJob implements ShouldQueue
             ]);
         }
 
-        $filename = 'reports/laboratorios-' . now()->format('Y-m-d_His') . '.csv';
+        $filename = 'reports/laboratorios-'.now()->format('Y-m-d_His').'.csv';
         Storage::put($filename, $csv->toString());
-        
+
         return $filename;
     }
 
@@ -264,13 +265,13 @@ class GenerateReportJob implements ShouldQueue
         $csv->insertOne([
             'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status',
             'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos',
-            'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional'
+            'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional',
         ]);
 
         foreach ($computers as $computer) {
             $isOnline = now()->diffInMinutes($computer->updated_at) < 5;
             $status = $isOnline ? 'Online' : 'Offline';
-            
+
             $hardwareInfo = $computer->hardware_info ?? [];
             $physicalCores = $hardwareInfo['cpu']['physical_cores'] ?? '';
             $logicalCores = $hardwareInfo['cpu']['logical_cores'] ?? '';
@@ -293,9 +294,9 @@ class GenerateReportJob implements ShouldQueue
             ]);
         }
 
-        $filename = 'reports/computadores-' . now()->format('Y-m-d_His') . '.csv';
+        $filename = 'reports/computadores-'.now()->format('Y-m-d_His').'.csv';
         Storage::put($filename, $csv->toString());
-        
+
         return $filename;
     }
 
@@ -316,9 +317,9 @@ class GenerateReportJob implements ShouldQueue
             ]);
         }
 
-        $filename = 'reports/softwares-' . now()->format('Y-m-d_His') . '.csv';
+        $filename = 'reports/softwares-'.now()->format('Y-m-d_His').'.csv';
         Storage::put($filename, $csv->toString());
-        
+
         return $filename;
     }
 
@@ -326,7 +327,8 @@ class GenerateReportJob implements ShouldQueue
 
     private function exportLabsAsXlsx($labs): string
     {
-        $export = new class($labs) implements FromCollection, WithHeadings, WithMapping {
+        $export = new class($labs) implements FromCollection, WithHeadings, WithMapping
+        {
             private $labs;
 
             public function __construct($labs)
@@ -356,15 +358,16 @@ class GenerateReportJob implements ShouldQueue
             }
         };
 
-        $filename = 'reports/laboratorios-' . now()->format('Y-m-d_His') . '.xlsx';
+        $filename = 'reports/laboratorios-'.now()->format('Y-m-d_His').'.xlsx';
         Excel::store($export, $filename);
-        
+
         return $filename;
     }
 
     private function exportComputersAsXlsx($computers): string
     {
-        $export = new class($computers) implements FromCollection, WithHeadings, WithMapping {
+        $export = new class($computers) implements FromCollection, WithHeadings, WithMapping
+        {
             private $computers;
 
             public function __construct($computers)
@@ -382,7 +385,7 @@ class GenerateReportJob implements ShouldQueue
                 return [
                     'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status',
                     'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos',
-                    'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional'
+                    'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional',
                 ];
             }
 
@@ -408,15 +411,16 @@ class GenerateReportJob implements ShouldQueue
             }
         };
 
-        $filename = 'reports/computadores-' . now()->format('Y-m-d_His') . '.xlsx';
+        $filename = 'reports/computadores-'.now()->format('Y-m-d_His').'.xlsx';
         Excel::store($export, $filename);
-        
+
         return $filename;
     }
 
     private function exportSoftwaresAsXlsx($softwares): string
     {
-        $export = new class($softwares) implements FromCollection, WithHeadings, WithMapping {
+        $export = new class($softwares) implements FromCollection, WithHeadings, WithMapping
+        {
             private $softwares;
 
             public function __construct($softwares)
@@ -447,9 +451,9 @@ class GenerateReportJob implements ShouldQueue
             }
         };
 
-        $filename = 'reports/softwares-' . now()->format('Y-m-d_His') . '.xlsx';
+        $filename = 'reports/softwares-'.now()->format('Y-m-d_His').'.xlsx';
         Excel::store($export, $filename);
-        
+
         return $filename;
     }
 }

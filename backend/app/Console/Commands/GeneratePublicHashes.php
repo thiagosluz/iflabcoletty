@@ -34,11 +34,12 @@ class GeneratePublicHashes extends Command
 
         if ($computers->isEmpty()) {
             $this->info('✓ Todos os computadores já possuem public_hash.');
+
             return 0;
         }
 
         $this->info("Encontrados {$computers->count()} computador(es) sem public_hash.");
-        
+
         $bar = $this->output->createProgressBar($computers->count());
         $bar->start();
 

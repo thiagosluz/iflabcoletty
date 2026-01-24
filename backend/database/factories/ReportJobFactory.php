@@ -67,7 +67,7 @@ class ReportJobFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'completed',
-            'file_path' => 'reports/test-' . fake()->uuid() . '.pdf',
+            'file_path' => 'reports/test-'.fake()->uuid().'.pdf',
             'started_at' => now()->subMinutes(5),
             'completed_at' => now(),
         ]);

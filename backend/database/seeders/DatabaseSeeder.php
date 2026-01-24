@@ -2,10 +2,10 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use App\Models\Lab;
 use App\Models\Computer;
+use App\Models\Lab;
 use App\Models\Software;
+use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
@@ -33,7 +33,7 @@ class DatabaseSeeder extends Seeder
         );
 
         // Garantir que o admin tenha a role admin
-        if (!$admin->hasRole('admin')) {
+        if (! $admin->hasRole('admin')) {
             $admin->assignRole('admin');
         }
 
@@ -45,11 +45,11 @@ class DatabaseSeeder extends Seeder
 
         // Criar laboratórios
         $labs = $this->createLabs();
-        $this->command->info('Laboratórios criados: ' . $labs->count());
+        $this->command->info('Laboratórios criados: '.$labs->count());
 
         // Criar softwares comuns
         $softwares = $this->createSoftwares();
-        $this->command->info('Softwares criados: ' . $softwares->count());
+        $this->command->info('Softwares criados: '.$softwares->count());
 
         // Criar computadores para cada laboratório
         $totalComputers = 0;
@@ -57,7 +57,7 @@ class DatabaseSeeder extends Seeder
             $computers = $this->createComputersForLab($lab, $softwares);
             $totalComputers += $computers->count();
         }
-        $this->command->info('Computadores criados: ' . $totalComputers);
+        $this->command->info('Computadores criados: '.$totalComputers);
     }
 
     /**
@@ -110,44 +110,44 @@ class DatabaseSeeder extends Seeder
             ['name' => 'IntelliJ IDEA', 'version' => '2023.3', 'vendor' => 'JetBrains'],
             ['name' => 'Eclipse IDE', 'version' => '2023-12', 'vendor' => 'Eclipse Foundation'],
             ['name' => 'NetBeans', 'version' => '20', 'vendor' => 'Apache'],
-            
+
             // Compiladores e Runtimes
             ['name' => 'Java JDK', 'version' => '21.0.1', 'vendor' => 'Oracle'],
             ['name' => 'Python', 'version' => '3.12.0', 'vendor' => 'Python Software Foundation'],
             ['name' => 'Node.js', 'version' => '20.10.0', 'vendor' => 'Node.js Foundation'],
             ['name' => 'GCC', 'version' => '13.2.0', 'vendor' => 'GNU'],
-            
+
             // Bancos de dados
             ['name' => 'MySQL', 'version' => '8.0.35', 'vendor' => 'Oracle'],
             ['name' => 'PostgreSQL', 'version' => '16.1', 'vendor' => 'PostgreSQL Global Development Group'],
             ['name' => 'MongoDB', 'version' => '7.0.4', 'vendor' => 'MongoDB Inc.'],
             ['name' => 'SQLite', 'version' => '3.44.0', 'vendor' => 'SQLite Development Team'],
-            
+
             // Ferramentas de desenvolvimento
             ['name' => 'Git', 'version' => '2.43.0', 'vendor' => 'Git'],
             ['name' => 'Docker Desktop', 'version' => '4.25.0', 'vendor' => 'Docker Inc.'],
             ['name' => 'Postman', 'version' => '10.21.0', 'vendor' => 'Postman'],
             ['name' => 'Wireshark', 'version' => '4.2.0', 'vendor' => 'Wireshark Foundation'],
-            
+
             // Office
             ['name' => 'Microsoft Office', 'version' => '2021', 'vendor' => 'Microsoft'],
             ['name' => 'LibreOffice', 'version' => '7.6.0', 'vendor' => 'The Document Foundation'],
-            
+
             // Navegadores
             ['name' => 'Google Chrome', 'version' => '120.0.6099.109', 'vendor' => 'Google'],
             ['name' => 'Mozilla Firefox', 'version' => '121.0', 'vendor' => 'Mozilla'],
             ['name' => 'Microsoft Edge', 'version' => '120.0.2210.91', 'vendor' => 'Microsoft'],
-            
+
             // Design e Multimídia
             ['name' => 'GIMP', 'version' => '2.10.36', 'vendor' => 'GIMP Team'],
             ['name' => 'Inkscape', 'version' => '1.3.2', 'vendor' => 'Inkscape'],
             ['name' => 'Blender', 'version' => '4.0.2', 'vendor' => 'Blender Foundation'],
             ['name' => 'Audacity', 'version' => '3.4.2', 'vendor' => 'Audacity Team'],
-            
+
             // Virtualização
             ['name' => 'VirtualBox', 'version' => '7.0.12', 'vendor' => 'Oracle'],
             ['name' => 'VMware Workstation', 'version' => '17.5.0', 'vendor' => 'VMware'],
-            
+
             // Segurança
             ['name' => 'Nmap', 'version' => '7.95', 'vendor' => 'Nmap Project'],
             ['name' => 'Metasploit', 'version' => '6.3.0', 'vendor' => 'Rapid7'],
@@ -169,7 +169,7 @@ class DatabaseSeeder extends Seeder
      */
     private function createComputersForLab(Lab $lab, $softwares)
     {
-        $computerCount = match($lab->name) {
+        $computerCount = match ($lab->name) {
             'Laboratório de Informática 1' => 25,
             'Laboratório de Informática 2' => 20,
             'Laboratório de Redes' => 15,
@@ -188,15 +188,15 @@ class DatabaseSeeder extends Seeder
 
         for ($i = 1; $i <= $computerCount; $i++) {
             $os = fake()->randomElement($osOptions);
-            
-            $hostname = strtolower(str_replace(' ', '-', $lab->name)) . '-pc' . str_pad($i, 2, '0', STR_PAD_LEFT);
+
+            $hostname = strtolower(str_replace(' ', '-', $lab->name)).'-pc'.str_pad($i, 2, '0', STR_PAD_LEFT);
             $machineId = Str::uuid()->toString();
-            
+
             // Calcular valores do disco antes de criar
             $diskTotal = fake()->randomElement([256, 512, 1000, 2000]);
             $diskUsed = fake()->randomFloat(2, $diskTotal * 0.2, $diskTotal * 0.8);
             $diskFree = round($diskTotal - $diskUsed, 2);
-            
+
             $computer = Computer::firstOrCreate(
                 ['machine_id' => $machineId],
                 [

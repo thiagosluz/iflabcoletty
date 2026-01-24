@@ -2,26 +2,26 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Events\ComputerStatusChanged;
+use App\Events\SoftwareInstalled;
 use App\Http\Controllers\Controller;
 use App\Models\Computer;
 use App\Models\Software;
-use Illuminate\Http\Request;
-use Barryvdh\DomPDF\Facade\Pdf;
 use App\Traits\LogsActivity;
-use App\Events\ComputerStatusChanged;
-use App\Events\SoftwareInstalled;
-use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 
 class ComputerController extends Controller
 {
     use LogsActivity;
+
     public function index(Request $request)
     {
         $this->authorize('computers.view');
 
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100);
-        
+        $perPage = min(max((int) $perPage, 5), 100);
+
         return $this->buildComputerQuery($request)->paginate($perPage);
     }
 
@@ -48,7 +48,7 @@ class ComputerController extends Controller
 
         // Pagination
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100); // Limit between 5 and 100
+        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
 
         return $query->orderBy('created_at', 'desc');
     }
@@ -64,9 +64,9 @@ class ComputerController extends Controller
             ->with('lab:id,name')
             ->first();
 
-        if (!$computer) {
+        if (! $computer) {
             return response()->json([
-                'message' => 'Computador não encontrado'
+                'message' => 'Computador não encontrado',
             ], 404);
         }
 
@@ -82,10 +82,10 @@ class ComputerController extends Controller
         ]);
 
         $computer = Computer::create($validated);
-        
+
         // Log activity
         $this->logActivity('create', $computer);
-        
+
         return response()->json($computer, 201);
     }
 
@@ -98,7 +98,7 @@ class ComputerController extends Controller
             'lab:id,name,description',
             'activities' => function ($query) {
                 $query->latest()->limit(20);
-            }
+            },
         ]);
     }
 
@@ -120,7 +120,7 @@ class ComputerController extends Controller
 
         // Pagination
         $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int)$perPage, 5), 100); // Limit between 5 and 100
+        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
 
         // Get paginated results with pivot data
         // Note: withPivot is already set in the relationship, so pivot data comes automatically
@@ -134,19 +134,19 @@ class ComputerController extends Controller
         $this->authorize('computers.update');
 
         $oldValues = $computer->toArray();
-        
+
         $validated = $request->validate([
             'lab_id' => 'sometimes|exists:labs,id',
             'hostname' => 'nullable|string',
-            'machine_id' => 'sometimes|string|unique:computers,machine_id,' . $computer->id,
+            'machine_id' => 'sometimes|string|unique:computers,machine_id,'.$computer->id,
             'hardware_info' => 'sometimes|array',
         ]);
 
         $computer->update($validated);
-        
+
         // Log activity
         $this->logActivity('update', $computer, $oldValues, $computer->toArray());
-        
+
         return response()->json($computer);
     }
 
@@ -155,12 +155,12 @@ class ComputerController extends Controller
         $this->authorize('computers.delete');
 
         $oldValues = $computer->toArray();
-        
+
         // Log activity before deleting (so we have the model reference)
         $this->logActivity('delete', $computer, $oldValues);
-        
+
         $computer->delete();
-        
+
         return response()->noContent();
     }
 
@@ -179,7 +179,7 @@ class ComputerController extends Controller
 
         // Check if computer was offline before this report
         $wasOffline = $computer->updated_at && $computer->updated_at->lt(now()->subMinutes(5));
-        
+
         // Update hardware info
         if (isset($validated['hardware_info'])) {
             $computer->update(['hardware_info' => $validated['hardware_info']]);
@@ -190,7 +190,7 @@ class ComputerController extends Controller
             $oldSoftwareIds = $computer->softwares()->pluck('software_id')->toArray();
             $softwareIds = [];
             $newSoftwareIds = [];
-            
+
             foreach ($validated['softwares'] as $softwareData) {
                 $software = Software::firstOrCreate([
                     'name' => $softwareData['name'],
@@ -201,9 +201,9 @@ class ComputerController extends Controller
                 $softwareIds[$software->id] = ['installed_at' => now()];
                 $newSoftwareIds[] = $software->id;
             }
-            
+
             $computer->softwares()->sync($softwareIds);
-            
+
             // Detect installed software
             $installed = array_diff($newSoftwareIds, $oldSoftwareIds);
             foreach ($installed as $softwareId) {
@@ -212,7 +212,7 @@ class ComputerController extends Controller
                     event(new SoftwareInstalled($computer, $software, 'installed'));
                 }
             }
-            
+
             // Detect removed software
             $removed = array_diff($oldSoftwareIds, $newSoftwareIds);
             foreach ($removed as $softwareId) {
@@ -222,11 +222,11 @@ class ComputerController extends Controller
                 }
             }
         }
-        
+
         // Update computer timestamp
         $computer->touch();
         $computer->refresh();
-        
+
         // If computer was offline and now is online, notify
         if ($wasOffline) {
             event(new ComputerStatusChanged($computer, 'online', 'Computador voltou a reportar'));
@@ -238,7 +238,7 @@ class ComputerController extends Controller
             'description' => 'Agente enviou relatório detalhado do sistema',
             'payload' => $request->all(), // Save payload for alert processing
         ]);
-        
+
         // Process alerts immediately
         $alertService->processComputer($computer);
 
@@ -253,7 +253,7 @@ class ComputerController extends Controller
         // Verify computer has public_hash
         if (empty($computer->public_hash)) {
             return response()->json([
-                'message' => 'Este computador não possui public_hash. Gere um hash primeiro.'
+                'message' => 'Este computador não possui public_hash. Gere um hash primeiro.',
             ], 400);
         }
 
@@ -261,13 +261,13 @@ class ComputerController extends Controller
         $frontendUrl = config('app.frontend_url');
         if (empty($frontendUrl)) {
             return response()->json([
-                'message' => 'FRONTEND_URL não está configurado. Configure a variável de ambiente FRONTEND_URL no arquivo .env ou docker-compose.yml.'
+                'message' => 'FRONTEND_URL não está configurado. Configure a variável de ambiente FRONTEND_URL no arquivo .env ou docker-compose.yml.',
             ], 500);
         }
 
-        $publicUrl = $frontendUrl . '/public/pc/' . $computer->public_hash;
+        $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
 
-        $builder = new \Endroid\QrCode\Builder\Builder();
+        $builder = new \Endroid\QrCode\Builder\Builder;
         $result = $builder->build(
             data: $publicUrl,
             size: 300,
@@ -294,7 +294,7 @@ class ComputerController extends Controller
             $frontendUrl = config('app.frontend_url');
             if (empty($frontendUrl)) {
                 return response()->json([
-                    'message' => 'FRONTEND_URL não está configurado. Configure a variável de ambiente FRONTEND_URL no arquivo .env ou docker-compose.yml.'
+                    'message' => 'FRONTEND_URL não está configurado. Configure a variável de ambiente FRONTEND_URL no arquivo .env ou docker-compose.yml.',
                 ], 500);
             }
 
@@ -309,18 +309,18 @@ class ComputerController extends Controller
             // Validate empty list
             if ($computers->isEmpty()) {
                 return response()->json([
-                    'message' => 'Nenhum computador encontrado para exportar. Verifique os filtros selecionados.'
+                    'message' => 'Nenhum computador encontrado para exportar. Verifique os filtros selecionados.',
                 ], 404);
             }
 
             // Filter computers that have public_hash
             $computersWithHash = $computers->filter(function ($computer) {
-                return !empty($computer->public_hash);
+                return ! empty($computer->public_hash);
             });
 
             if ($computersWithHash->isEmpty()) {
                 return response()->json([
-                    'message' => 'Nenhum computador possui public_hash configurado. Execute o comando: php artisan computers:generate-hashes'
+                    'message' => 'Nenhum computador possui public_hash configurado. Execute o comando: php artisan computers:generate-hashes',
                 ], 404);
             }
 
@@ -330,12 +330,13 @@ class ComputerController extends Controller
                 return $this->exportAsZip($computersWithHash);
             }
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes: ' . $e->getMessage(), [
+            \Log::error('Erro ao exportar QR codes: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
-                'request' => $request->all()
+                'request' => $request->all(),
             ]);
+
             return response()->json([
-                'message' => 'Erro ao exportar QR codes: ' . $e->getMessage()
+                'message' => 'Erro ao exportar QR codes: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -350,9 +351,9 @@ class ComputerController extends Controller
             $frontendUrl = config('app.frontend_url');
 
             foreach ($computers as $computer) {
-                $publicUrl = $frontendUrl . '/public/pc/' . $computer->public_hash;
+                $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
 
-                $builder = new \Endroid\QrCode\Builder\Builder();
+                $builder = new \Endroid\QrCode\Builder\Builder;
                 $result = $builder->build(
                     data: $publicUrl,
                     size: 200,
@@ -368,27 +369,29 @@ class ComputerController extends Controller
 
             if (empty($qrCodes)) {
                 return response()->json([
-                    'message' => 'Nenhum QR code foi gerado.'
+                    'message' => 'Nenhum QR code foi gerado.',
                 ], 400);
             }
 
             $timestamp = now()->format('Y-m-d H:i:s');
-            
+
             // Use DomPDF facade
             $pdf = Pdf::loadView('qrcodes.pdf', [
                 'qrCodes' => $qrCodes,
                 'exportDate' => $timestamp,
-                'totalComputers' => count($qrCodes)
+                'totalComputers' => count($qrCodes),
             ]);
 
-            $downloadName = 'qrcodes-' . now()->format('Y-m-d_His') . '.pdf';
+            $downloadName = 'qrcodes-'.now()->format('Y-m-d_His').'.pdf';
+
             return $pdf->download($downloadName);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes como PDF: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            \Log::error('Erro ao exportar QR codes como PDF: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return response()->json([
-                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+                'message' => 'Erro ao gerar PDF: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -399,23 +402,23 @@ class ComputerController extends Controller
     private function exportAsZip($computers)
     {
         try {
-            $zip = new \ZipArchive();
+            $zip = new \ZipArchive;
             $timestamp = now()->format('Y-m-d_His');
-            $zipFileName = storage_path('app/temp/qrcodes-' . $timestamp . '.zip');
+            $zipFileName = storage_path('app/temp/qrcodes-'.$timestamp.'.zip');
 
             // Create temp directory if it doesn't exist
             $tempDir = storage_path('app/temp');
-            if (!file_exists($tempDir)) {
-                if (!mkdir($tempDir, 0755, true)) {
+            if (! file_exists($tempDir)) {
+                if (! mkdir($tempDir, 0755, true)) {
                     return response()->json([
-                        'message' => 'Não foi possível criar o diretório temporário.'
+                        'message' => 'Não foi possível criar o diretório temporário.',
                     ], 500);
                 }
             }
 
             if ($zip->open($zipFileName, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
                 return response()->json([
-                    'message' => 'Não foi possível criar o arquivo ZIP.'
+                    'message' => 'Não foi possível criar o arquivo ZIP.',
                 ], 500);
             }
 
@@ -423,9 +426,9 @@ class ComputerController extends Controller
             $usedFilenames = [];
 
             foreach ($computers as $computer) {
-                $publicUrl = $frontendUrl . '/public/pc/' . $computer->public_hash;
+                $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
 
-                $builder = new \Endroid\QrCode\Builder\Builder();
+                $builder = new \Endroid\QrCode\Builder\Builder;
                 $result = $builder->build(
                     data: $publicUrl,
                     size: 300,
@@ -436,34 +439,36 @@ class ComputerController extends Controller
                 $baseFilename = ($computer->hostname ?: $computer->machine_id);
                 // Sanitize filename
                 $baseFilename = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseFilename);
-                $filename = $baseFilename . '.png';
+                $filename = $baseFilename.'.png';
                 $counter = 1;
-                
+
                 while (in_array($filename, $usedFilenames)) {
-                    $filename = $baseFilename . '_' . $counter . '.png';
+                    $filename = $baseFilename.'_'.$counter.'.png';
                     $counter++;
                 }
-                
+
                 $usedFilenames[] = $filename;
                 $zip->addFromString($filename, $result->getString());
             }
 
             $zip->close();
 
-            if (!file_exists($zipFileName)) {
+            if (! file_exists($zipFileName)) {
                 return response()->json([
-                    'message' => 'O arquivo ZIP não foi criado corretamente.'
+                    'message' => 'O arquivo ZIP não foi criado corretamente.',
                 ], 500);
             }
 
-            $downloadName = 'qrcodes-' . $timestamp . '.zip';
+            $downloadName = 'qrcodes-'.$timestamp.'.zip';
+
             return response()->download($zipFileName, $downloadName)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes como ZIP: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            \Log::error('Erro ao exportar QR codes como ZIP: '.$e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return response()->json([
-                'message' => 'Erro ao gerar ZIP: ' . $e->getMessage()
+                'message' => 'Erro ao gerar ZIP: '.$e->getMessage(),
             ], 500);
         }
     }

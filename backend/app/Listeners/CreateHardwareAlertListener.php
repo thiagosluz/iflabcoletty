@@ -4,8 +4,6 @@ namespace App\Listeners;
 
 use App\Events\HardwareAlert;
 use App\Services\NotificationService;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
 
 class CreateHardwareAlertListener
 {
@@ -22,7 +20,7 @@ class CreateHardwareAlertListener
     public function handle(HardwareAlert $event): void
     {
         $computer = $event->computer;
-        
+
         $this->notificationService->notifyResourceViewers(
             'computers',
             $computer->id,

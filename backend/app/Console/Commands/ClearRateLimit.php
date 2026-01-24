@@ -27,7 +27,7 @@ class ClearRateLimit extends Command
     public function handle()
     {
         $ip = $this->option('ip');
-        
+
         if ($ip) {
             // Clear rate limit for specific IP
             $this->clearIpRateLimit($ip);
@@ -37,10 +37,10 @@ class ClearRateLimit extends Command
             Cache::flush();
             $this->info('All rate limiting cache cleared');
         }
-        
+
         return Command::SUCCESS;
     }
-    
+
     /**
      * Clear rate limit for a specific IP
      */
@@ -50,13 +50,13 @@ class ClearRateLimit extends Command
         // For Redis, we can try to clear specific patterns
         try {
             $store = Cache::getStore();
-            
+
             // If using Redis store
             if (method_exists($store, 'getRedis')) {
                 $redis = $store->getRedis();
                 $pattern = "*throttle*{$ip}*";
                 $keys = $redis->keys($pattern);
-                
+
                 foreach ($keys as $key) {
                     $redis->del($key);
                 }

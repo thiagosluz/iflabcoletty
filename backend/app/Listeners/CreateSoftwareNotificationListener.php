@@ -4,8 +4,6 @@ namespace App\Listeners;
 
 use App\Events\SoftwareInstalled;
 use App\Services\NotificationService;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
 
 class CreateSoftwareNotificationListener
 {
@@ -24,9 +22,9 @@ class CreateSoftwareNotificationListener
         $computer = $event->computer;
         $software = $event->software;
         $action = $event->action;
-        
+
         $actionText = $action === 'installed' ? 'instalado' : 'removido';
-        
+
         $this->notificationService->notifyResourceViewers(
             'computers',
             $computer->id,

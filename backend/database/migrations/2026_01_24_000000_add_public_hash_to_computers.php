@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('computers', function (Blueprint $table) {
             // Check if column doesn't exist before adding
-            if (!Schema::hasColumn('computers', 'public_hash')) {
+            if (! Schema::hasColumn('computers', 'public_hash')) {
                 $table->string('public_hash')->unique()->after('machine_id');
             }
         });

@@ -22,7 +22,7 @@ class CacheService
      */
     public static function dashboardStatsKey(): string
     {
-        return self::PREFIX . 'dashboard:stats';
+        return self::PREFIX.'dashboard:stats';
     }
 
     /**
@@ -30,10 +30,11 @@ class CacheService
      */
     public static function labsListKey(array $filters = []): string
     {
-        $key = self::PREFIX . 'labs:list';
-        if (!empty($filters)) {
-            $key .= ':' . md5(json_encode($filters));
+        $key = self::PREFIX.'labs:list';
+        if (! empty($filters)) {
+            $key .= ':'.md5(json_encode($filters));
         }
+
         return $key;
     }
 
@@ -42,10 +43,11 @@ class CacheService
      */
     public static function computersListKey(array $filters = []): string
     {
-        $key = self::PREFIX . 'computers:list';
-        if (!empty($filters)) {
-            $key .= ':' . md5(json_encode($filters));
+        $key = self::PREFIX.'computers:list';
+        if (! empty($filters)) {
+            $key .= ':'.md5(json_encode($filters));
         }
+
         return $key;
     }
 
@@ -54,10 +56,11 @@ class CacheService
      */
     public static function softwaresListKey(array $filters = []): string
     {
-        $key = self::PREFIX . 'softwares:list';
-        if (!empty($filters)) {
-            $key .= ':' . md5(json_encode($filters));
+        $key = self::PREFIX.'softwares:list';
+        if (! empty($filters)) {
+            $key .= ':'.md5(json_encode($filters));
         }
+
         return $key;
     }
 
@@ -66,7 +69,7 @@ class CacheService
      */
     public static function labDetailsKey(int $labId): string
     {
-        return self::PREFIX . 'lab:' . $labId;
+        return self::PREFIX.'lab:'.$labId;
     }
 
     /**
@@ -74,7 +77,7 @@ class CacheService
      */
     public static function computerDetailsKey(int $computerId): string
     {
-        return self::PREFIX . 'computer:' . $computerId;
+        return self::PREFIX.'computer:'.$computerId;
     }
 
     /**
@@ -82,7 +85,7 @@ class CacheService
      */
     public static function softwareDetailsKey(int $softwareId): string
     {
-        return self::PREFIX . 'software:' . $softwareId;
+        return self::PREFIX.'software:'.$softwareId;
     }
 
     /**
@@ -93,11 +96,11 @@ class CacheService
         try {
             // Invalidate dashboard stats (depends on labs)
             Cache::forget(self::dashboardStatsKey());
-            
+
             // Invalidate all labs list caches (using tags if available, otherwise pattern matching)
-            self::invalidateByPattern(self::PREFIX . 'labs:*');
+            self::invalidateByPattern(self::PREFIX.'labs:*');
         } catch (\Exception $e) {
-            Log::error('Failed to invalidate labs cache: ' . $e->getMessage());
+            Log::error('Failed to invalidate labs cache: '.$e->getMessage());
         }
     }
 
@@ -109,11 +112,11 @@ class CacheService
         try {
             // Invalidate dashboard stats (depends on computers)
             Cache::forget(self::dashboardStatsKey());
-            
+
             // Invalidate all computers list caches
-            self::invalidateByPattern(self::PREFIX . 'computers:*');
+            self::invalidateByPattern(self::PREFIX.'computers:*');
         } catch (\Exception $e) {
-            Log::error('Failed to invalidate computers cache: ' . $e->getMessage());
+            Log::error('Failed to invalidate computers cache: '.$e->getMessage());
         }
     }
 
@@ -125,11 +128,11 @@ class CacheService
         try {
             // Invalidate dashboard stats (depends on softwares)
             Cache::forget(self::dashboardStatsKey());
-            
+
             // Invalidate all softwares list caches
-            self::invalidateByPattern(self::PREFIX . 'softwares:*');
+            self::invalidateByPattern(self::PREFIX.'softwares:*');
         } catch (\Exception $e) {
-            Log::error('Failed to invalidate softwares cache: ' . $e->getMessage());
+            Log::error('Failed to invalidate softwares cache: '.$e->getMessage());
         }
     }
 
@@ -142,7 +145,7 @@ class CacheService
             Cache::forget(self::labDetailsKey($labId));
             self::invalidateLabs(); // Also invalidate lists
         } catch (\Exception $e) {
-            Log::error("Failed to invalidate lab {$labId} cache: " . $e->getMessage());
+            Log::error("Failed to invalidate lab {$labId} cache: ".$e->getMessage());
         }
     }
 
@@ -155,7 +158,7 @@ class CacheService
             Cache::forget(self::computerDetailsKey($computerId));
             self::invalidateComputers(); // Also invalidate lists
         } catch (\Exception $e) {
-            Log::error("Failed to invalidate computer {$computerId} cache: " . $e->getMessage());
+            Log::error("Failed to invalidate computer {$computerId} cache: ".$e->getMessage());
         }
     }
 
@@ -168,7 +171,7 @@ class CacheService
             Cache::forget(self::softwareDetailsKey($softwareId));
             self::invalidateSoftwares(); // Also invalidate lists
         } catch (\Exception $e) {
-            Log::error("Failed to invalidate software {$softwareId} cache: " . $e->getMessage());
+            Log::error("Failed to invalidate software {$softwareId} cache: ".$e->getMessage());
         }
     }
 
@@ -180,7 +183,7 @@ class CacheService
         try {
             Cache::flush();
         } catch (\Exception $e) {
-            Log::error('Failed to flush cache: ' . $e->getMessage());
+            Log::error('Failed to flush cache: '.$e->getMessage());
         }
     }
 
@@ -191,12 +194,12 @@ class CacheService
     {
         try {
             $driver = config('cache.default');
-            
+
             if ($driver === 'redis') {
                 $redis = Cache::getStore()->getRedis();
                 $keys = $redis->keys($pattern);
-                
-                if (!empty($keys)) {
+
+                if (! empty($keys)) {
                     $redis->del($keys);
                 }
             } else {
@@ -205,7 +208,7 @@ class CacheService
                 Cache::forget(self::dashboardStatsKey());
             }
         } catch (\Exception $e) {
-            Log::warning('Failed to invalidate cache by pattern: ' . $e->getMessage());
+            Log::warning('Failed to invalidate cache by pattern: '.$e->getMessage());
         }
     }
 
@@ -224,11 +227,11 @@ class CacheService
     {
         try {
             $driver = config('cache.default');
-            
+
             if ($driver === 'redis') {
                 $redis = Cache::getStore()->getRedis();
                 $info = $redis->info('stats');
-                
+
                 return [
                     'driver' => $driver,
                     'keys' => $redis->dbSize(),
@@ -236,7 +239,7 @@ class CacheService
                     'misses' => $info['keyspace_misses'] ?? 0,
                 ];
             }
-            
+
             return [
                 'driver' => $driver,
                 'keys' => 0,
@@ -244,7 +247,8 @@ class CacheService
                 'misses' => 0,
             ];
         } catch (\Exception $e) {
-            Log::error('Failed to get cache stats: ' . $e->getMessage());
+            Log::error('Failed to get cache stats: '.$e->getMessage());
+
             return [
                 'driver' => config('cache.default'),
                 'error' => $e->getMessage(),

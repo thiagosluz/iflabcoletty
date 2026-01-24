@@ -25,7 +25,7 @@ class AlertService
         $rules = AlertRule::where('is_active', true)
             ->where(function ($query) use ($computer) {
                 $query->whereNull('lab_id')
-                      ->orWhere('lab_id', $computer->lab_id);
+                    ->orWhere('lab_id', $computer->lab_id);
             })
             ->get();
 
@@ -33,7 +33,7 @@ class AlertService
             try {
                 $this->evaluateRule($rule, $computer);
             } catch (\Exception $e) {
-                Log::error("Error evaluating alert rule {$rule->id} for computer {$computer->id}: " . $e->getMessage());
+                Log::error("Error evaluating alert rule {$rule->id} for computer {$computer->id}: ".$e->getMessage());
             }
         }
     }
@@ -50,7 +50,7 @@ class AlertService
             case 'status':
                 [$isTriggered, $triggerValue] = $this->evaluateStatus($rule, $computer);
                 break;
-            // TODO: Software changes
+                // TODO: Software changes
         }
 
         if ($isTriggered) {
@@ -67,17 +67,17 @@ class AlertService
             ->whereIn('type', ['heartbeat', 'metrics'])
             ->latest()
             ->first();
-        
-        if (!$lastActivity || empty($lastActivity->payload)) {
+
+        if (! $lastActivity || empty($lastActivity->payload)) {
             return [false, null];
         }
-        
+
         $metrics = $lastActivity->payload;
         $value = null;
-        
+
         switch ($rule->metric) {
             case 'cpu_usage':
-                $value = $metrics['cpu_percent'] ?? null; 
+                $value = $metrics['cpu_percent'] ?? null;
                 break;
             case 'memory_usage':
                 $value = $metrics['memory_percent'] ?? null;
@@ -114,21 +114,21 @@ class AlertService
     {
         if ($rule->metric === 'offline') {
             $lastActivity = $computer->activities()->latest()->first();
-            
+
             // If never seen, assume online to avoid spam or handle as specific case
-            if (!$lastActivity) {
+            if (! $lastActivity) {
                 return [false, null];
             }
-            
+
             // Check time since last activity
             $minutesSinceLastSeen = $lastActivity->created_at->diffInMinutes(now());
-            
+
             // If recently seen (within 5 mins), it is considered online
             // But if the rule has a duration, we respect that.
             // If rule duration is 0, any offline (e.g. > 5 mins no contact) triggers it.
-            
-            $defaultOfflineThreshold = 5; 
-            
+
+            $defaultOfflineThreshold = 5;
+
             if ($minutesSinceLastSeen < $defaultOfflineThreshold) {
                 return [false, 0]; // It is online
             }
@@ -136,14 +136,14 @@ class AlertService
             // It is offline (more than 5 mins). Now check rule duration.
             // If rule says "Offline for > 30 mins", we check $minutesSinceLastSeen >= 30
             $duration = $rule->duration_minutes > 0 ? $rule->duration_minutes : $defaultOfflineThreshold;
-            
+
             if ($minutesSinceLastSeen >= $duration) {
                 return [true, $minutesSinceLastSeen];
             }
-            
+
             return [false, $minutesSinceLastSeen];
         }
-        
+
         return [false, null];
     }
 
@@ -189,7 +189,7 @@ class AlertService
                 'status' => 'resolved',
                 'resolved_at' => now(),
             ]);
-            
+
             // Optionally notify resolution
         }
     }
@@ -197,6 +197,7 @@ class AlertService
     protected function generateAlertDescription(AlertRule $rule, Computer $computer, $value)
     {
         $metricName = str_replace('_', ' ', $rule->metric);
+
         return "The {$metricName} is {$value} (Threshold: {$rule->condition} {$rule->threshold})";
     }
 
@@ -212,7 +213,7 @@ class AlertService
                 ['alert_id' => $alert->id, 'computer_id' => $alert->computer_id]
             );
         }
-        
+
         // Future: Implement email, webhook
     }
 }

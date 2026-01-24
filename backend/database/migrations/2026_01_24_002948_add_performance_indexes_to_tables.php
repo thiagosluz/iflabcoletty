@@ -16,10 +16,10 @@ return new class extends Migration
             // lab_id already has foreign key index, but add composite index for common queries
             $table->index(['lab_id', 'updated_at'], 'computers_lab_id_updated_at_index');
             $table->index(['lab_id', 'created_at'], 'computers_lab_id_created_at_index');
-            
+
             // Index for status queries (online/offline based on updated_at)
             $table->index('updated_at', 'computers_updated_at_index');
-            
+
             // Index for hostname searches (partial index would be better but not all DBs support)
             // Using regular index for LIKE queries (PostgreSQL can use it)
             $table->index('hostname', 'computers_hostname_index');
@@ -35,7 +35,7 @@ return new class extends Migration
         Schema::table('softwares', function (Blueprint $table) {
             // Index for name ordering and searches
             $table->index('name', 'softwares_name_index');
-            
+
             // Composite index for common search patterns
             $table->index(['name', 'version'], 'softwares_name_version_index');
         });
@@ -46,10 +46,10 @@ return new class extends Migration
             // Skip index check for SQLite (doesn't support information_schema queries the same way)
             $driver = \Illuminate\Support\Facades\DB::getDriverName();
             if ($driver !== 'sqlite') {
-                if (!$this->hasIndex('computer_software', 'computer_software_computer_id_index')) {
+                if (! $this->hasIndex('computer_software', 'computer_software_computer_id_index')) {
                     $table->index('computer_id', 'computer_software_computer_id_index');
                 }
-                if (!$this->hasIndex('computer_software', 'computer_software_software_id_index')) {
+                if (! $this->hasIndex('computer_software', 'computer_software_software_id_index')) {
                     $table->index('software_id', 'computer_software_software_id_index');
                 }
             }
@@ -61,7 +61,7 @@ return new class extends Migration
         Schema::table('computer_activities', function (Blueprint $table) {
             // computer_id should have foreign key index, but add composite for common queries
             $table->index(['computer_id', 'created_at'], 'computer_activities_computer_created_index');
-            
+
             // Index for ordering by created_at
             $table->index('created_at', 'computer_activities_created_at_index');
         });
@@ -102,20 +102,22 @@ return new class extends Migration
     {
         $connection = Schema::getConnection();
         $database = $connection->getDatabaseName();
-        
+
         if ($connection->getDriverName() === 'pgsql') {
             $result = $connection->selectOne(
-                "SELECT COUNT(*) as count FROM pg_indexes WHERE tablename = ? AND indexname = ?",
+                'SELECT COUNT(*) as count FROM pg_indexes WHERE tablename = ? AND indexname = ?',
                 [$table, $index]
             );
+
             return $result->count > 0;
         }
-        
+
         // For MySQL/MariaDB
         $result = $connection->selectOne(
-            "SELECT COUNT(*) as count FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
+            'SELECT COUNT(*) as count FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?',
             [$database, $table, $index]
         );
+
         return $result->count > 0;
     }
 };

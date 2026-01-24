@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use Database\Factories\NotificationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Database\Factories\NotificationFactory;
 
 class Notification extends Model
 {
@@ -50,7 +50,7 @@ class Notification extends Model
      */
     public function markAsRead(): void
     {
-        if (!$this->read) {
+        if (! $this->read) {
             $this->update([
                 'read' => true,
                 'read_at' => now(),

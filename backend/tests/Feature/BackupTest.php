@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\Backup;
+use App\Models\User;
 use App\Services\BackupService;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
 
 class BackupTest extends TestCase
 {
@@ -37,7 +37,7 @@ class BackupTest extends TestCase
                         'type',
                         'status',
                         'created_at',
-                    ]
+                    ],
                 ],
                 'current_page',
                 'total',
@@ -56,7 +56,7 @@ class BackupTest extends TestCase
                 'status' => 'completed',
             ]);
             $backup->save();
-            
+
             $mock->shouldReceive('createDatabaseBackup')
                 ->once()
                 ->with($user->id)
@@ -177,7 +177,7 @@ class BackupTest extends TestCase
     public function test_backup_service_can_clean_old_backups(): void
     {
         $user = User::factory()->create();
-        
+
         // Create old backup (31 days ago)
         $oldBackup = Backup::factory()->create([
             'user_id' => $user->id,

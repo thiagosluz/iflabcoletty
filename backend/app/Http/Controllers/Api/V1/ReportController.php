@@ -3,20 +3,19 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Lab;
-use App\Models\Computer;
-use App\Models\Software;
-use App\Models\ReportJob;
 use App\Jobs\GenerateReportJob;
-use Illuminate\Http\Request;
+use App\Models\Computer;
+use App\Models\Lab;
+use App\Models\ReportJob;
+use App\Models\Software;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use League\Csv\Writer;
-use Maatwebsite\Excel\Facades\Excel;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ReportController extends Controller
 {
@@ -35,8 +34,8 @@ class ReportController extends Controller
 
         // Normalize async parameter (handle string "true"/"false" or boolean from frontend)
         $async = $validated['async'] ?? false;
-        \Log::info("exportLabs - async parameter received: " . var_export($async, true) . " (type: " . gettype($async) . ")");
-        
+        \Log::info('exportLabs - async parameter received: '.var_export($async, true).' (type: '.gettype($async).')');
+
         if (is_string($async)) {
             $async = filter_var($async, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
             if ($async === null) {
@@ -44,16 +43,17 @@ class ReportController extends Controller
             }
         }
         $async = (bool) $async;
-        
-        \Log::info("exportLabs - async parameter normalized: " . ($async ? 'true' : 'false'));
+
+        \Log::info('exportLabs - async parameter normalized: '.($async ? 'true' : 'false'));
 
         // If async is false or not set, use synchronous export (backward compatibility)
-        if (!$async) {
-            \Log::info("exportLabs - Using synchronous export");
+        if (! $async) {
+            \Log::info('exportLabs - Using synchronous export');
+
             return $this->exportLabsSync($request);
         }
-        
-        \Log::info("exportLabs - Using asynchronous export");
+
+        \Log::info('exportLabs - Using asynchronous export');
 
         // Create report job record
         $reportJob = ReportJob::create([
@@ -74,14 +74,14 @@ class ReportController extends Controller
                 $validated['format'],
                 ['search' => $validated['search'] ?? null]
             )->onQueue('default');
-            
+
             \Log::info("Report job {$reportJob->id} dispatched to queue");
         } catch (\Exception $e) {
-            \Log::error("Failed to dispatch report job {$reportJob->id}: " . $e->getMessage());
+            \Log::error("Failed to dispatch report job {$reportJob->id}: ".$e->getMessage());
             // Update job status to failed
             $reportJob->update([
                 'status' => 'failed',
-                'error_message' => 'Falha ao despachar job para a fila: ' . $e->getMessage(),
+                'error_message' => 'Falha ao despachar job para a fila: '.$e->getMessage(),
             ]);
             throw $e;
         }
@@ -106,7 +106,7 @@ class ReportController extends Controller
         $query = Lab::withCount('computers');
 
         // Apply search filter
-        if (!empty($validated['search'])) {
+        if (! empty($validated['search'])) {
             $query->where(function ($q) use ($validated) {
                 $q->where('name', 'like', "%{$validated['search']}%")
                     ->orWhere('description', 'like', "%{$validated['search']}%");
@@ -117,7 +117,7 @@ class ReportController extends Controller
 
         if ($labs->isEmpty()) {
             return response()->json([
-                'message' => 'Nenhum laboratório encontrado para exportar.'
+                'message' => 'Nenhum laboratório encontrado para exportar.',
             ], 404);
         }
 
@@ -147,7 +147,7 @@ class ReportController extends Controller
         ]);
 
         // If async is false or not set, use synchronous export (backward compatibility)
-        if (!($validated['async'] ?? false)) {
+        if (! ($validated['async'] ?? false)) {
             return $this->exportComputersSync($request);
         }
 
@@ -176,14 +176,14 @@ class ReportController extends Controller
                     'status' => $validated['status'] ?? null,
                 ]
             )->onQueue('default');
-            
+
             \Log::info("Report job {$reportJob->id} dispatched to queue");
         } catch (\Exception $e) {
-            \Log::error("Failed to dispatch report job {$reportJob->id}: " . $e->getMessage());
+            \Log::error("Failed to dispatch report job {$reportJob->id}: ".$e->getMessage());
             // Update job status to failed
             $reportJob->update([
                 'status' => 'failed',
-                'error_message' => 'Falha ao despachar job para a fila: ' . $e->getMessage(),
+                'error_message' => 'Falha ao despachar job para a fila: '.$e->getMessage(),
             ]);
             throw $e;
         }
@@ -210,7 +210,7 @@ class ReportController extends Controller
         $query = Computer::with('lab');
 
         // Apply search filter
-        if (!empty($validated['search'])) {
+        if (! empty($validated['search'])) {
             $query->where(function ($q) use ($validated) {
                 $q->where('hostname', 'like', "%{$validated['search']}%")
                     ->orWhere('machine_id', 'like', "%{$validated['search']}%");
@@ -218,12 +218,12 @@ class ReportController extends Controller
         }
 
         // Apply lab filter
-        if (!empty($validated['lab_id'])) {
+        if (! empty($validated['lab_id'])) {
             $query->where('lab_id', $validated['lab_id']);
         }
 
         // Apply status filter
-        if (!empty($validated['status'])) {
+        if (! empty($validated['status'])) {
             if ($validated['status'] === 'online') {
                 $query->where('updated_at', '>=', now()->subMinutes(5));
             } else {
@@ -235,7 +235,7 @@ class ReportController extends Controller
 
         if ($computers->isEmpty()) {
             return response()->json([
-                'message' => 'Nenhum computador encontrado para exportar.'
+                'message' => 'Nenhum computador encontrado para exportar.',
             ], 404);
         }
 
@@ -275,7 +275,7 @@ class ReportController extends Controller
         $async = (bool) $async;
 
         // If async is false or not set, use synchronous export (backward compatibility)
-        if (!$async) {
+        if (! $async) {
             return $this->exportSoftwaresSync($request);
         }
 
@@ -298,14 +298,14 @@ class ReportController extends Controller
                 $validated['format'],
                 ['search' => $validated['search'] ?? null]
             )->onQueue('default');
-            
+
             \Log::info("Report job {$reportJob->id} dispatched to queue");
         } catch (\Exception $e) {
-            \Log::error("Failed to dispatch report job {$reportJob->id}: " . $e->getMessage());
+            \Log::error("Failed to dispatch report job {$reportJob->id}: ".$e->getMessage());
             // Update job status to failed
             $reportJob->update([
                 'status' => 'failed',
-                'error_message' => 'Falha ao despachar job para a fila: ' . $e->getMessage(),
+                'error_message' => 'Falha ao despachar job para a fila: '.$e->getMessage(),
             ]);
             throw $e;
         }
@@ -330,7 +330,7 @@ class ReportController extends Controller
         $query = Software::withCount('computers');
 
         // Apply search filter
-        if (!empty($validated['search'])) {
+        if (! empty($validated['search'])) {
             $query->where(function ($q) use ($validated) {
                 $q->where('name', 'like', "%{$validated['search']}%")
                     ->orWhere('version', 'like', "%{$validated['search']}%")
@@ -342,7 +342,7 @@ class ReportController extends Controller
 
         if ($softwares->isEmpty()) {
             return response()->json([
-                'message' => 'Nenhum software encontrado para exportar.'
+                'message' => 'Nenhum software encontrado para exportar.',
             ], 404);
         }
 
@@ -397,11 +397,11 @@ class ReportController extends Controller
             return response()->json(['message' => 'Não autorizado'], 403);
         }
 
-        if (!$reportJob->isCompleted() || !$reportJob->file_path) {
+        if (! $reportJob->isCompleted() || ! $reportJob->file_path) {
             return response()->json(['message' => 'Relatório não disponível'], 404);
         }
 
-        if (!Storage::exists($reportJob->file_path)) {
+        if (! Storage::exists($reportJob->file_path)) {
             return response()->json(['message' => 'Arquivo não encontrado'], 404);
         }
 
@@ -417,7 +417,7 @@ class ReportController extends Controller
             ->orderBy('created_at', 'desc');
 
         // Pagination
-        $perPage = min(max((int)$request->query('per_page', 20), 5), 100);
+        $perPage = min(max((int) $request->query('per_page', 20), 5), 100);
         $jobs = $query->paginate($perPage);
 
         return response()->json($jobs);
@@ -432,15 +432,17 @@ class ReportController extends Controller
             $pdf = Pdf::loadView('reports.labs', [
                 'labs' => $labs,
                 'exportDate' => $timestamp,
-                'totalLabs' => $labs->count()
+                'totalLabs' => $labs->count(),
             ]);
 
-            $filename = 'laboratorios-' . now()->format('Y-m-d_His') . '.pdf';
+            $filename = 'laboratorios-'.now()->format('Y-m-d_His').'.pdf';
+
             return $pdf->download($filename);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar laboratórios como PDF: ' . $e->getMessage());
+            \Log::error('Erro ao exportar laboratórios como PDF: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+                'message' => 'Erro ao gerar PDF: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -452,15 +454,17 @@ class ReportController extends Controller
             $pdf = Pdf::loadView('reports.computers', [
                 'computers' => $computers,
                 'exportDate' => $timestamp,
-                'totalComputers' => $computers->count()
+                'totalComputers' => $computers->count(),
             ]);
 
-            $filename = 'computadores-' . now()->format('Y-m-d_His') . '.pdf';
+            $filename = 'computadores-'.now()->format('Y-m-d_His').'.pdf';
+
             return $pdf->download($filename);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar computadores como PDF: ' . $e->getMessage());
+            \Log::error('Erro ao exportar computadores como PDF: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+                'message' => 'Erro ao gerar PDF: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -472,15 +476,17 @@ class ReportController extends Controller
             $pdf = Pdf::loadView('reports.softwares', [
                 'softwares' => $softwares,
                 'exportDate' => $timestamp,
-                'totalSoftwares' => $softwares->count()
+                'totalSoftwares' => $softwares->count(),
             ]);
 
-            $filename = 'softwares-' . now()->format('Y-m-d_His') . '.pdf';
+            $filename = 'softwares-'.now()->format('Y-m-d_His').'.pdf';
+
             return $pdf->download($filename);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar softwares como PDF: ' . $e->getMessage());
+            \Log::error('Erro ao exportar softwares como PDF: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar PDF: ' . $e->getMessage()
+                'message' => 'Erro ao gerar PDF: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -504,14 +510,16 @@ class ReportController extends Controller
                 ]);
             }
 
-            $filename = 'laboratorios-' . now()->format('Y-m-d_His') . '.csv';
+            $filename = 'laboratorios-'.now()->format('Y-m-d_His').'.csv';
+
             return response($csv->toString(), 200)
                 ->header('Content-Type', 'text/csv; charset=UTF-8')
-                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar laboratórios como CSV: ' . $e->getMessage());
+            \Log::error('Erro ao exportar laboratórios como CSV: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar CSV: ' . $e->getMessage()
+                'message' => 'Erro ao gerar CSV: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -522,15 +530,15 @@ class ReportController extends Controller
             $csv = Writer::createFromString();
             $csv->setOutputBOM(Writer::BOM_UTF8);
             $csv->insertOne([
-                'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status', 
-                'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos', 
-                'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional'
+                'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status',
+                'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos',
+                'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional',
             ]);
 
             foreach ($computers as $computer) {
                 $isOnline = now()->diffInMinutes($computer->updated_at) < 5;
                 $status = $isOnline ? 'Online' : 'Offline';
-                
+
                 $hardwareInfo = $computer->hardware_info ?? [];
                 $physicalCores = $hardwareInfo['cpu']['physical_cores'] ?? '';
                 $logicalCores = $hardwareInfo['cpu']['logical_cores'] ?? '';
@@ -553,14 +561,16 @@ class ReportController extends Controller
                 ]);
             }
 
-            $filename = 'computadores-' . now()->format('Y-m-d_His') . '.csv';
+            $filename = 'computadores-'.now()->format('Y-m-d_His').'.csv';
+
             return response($csv->toString(), 200)
                 ->header('Content-Type', 'text/csv; charset=UTF-8')
-                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar computadores como CSV: ' . $e->getMessage());
+            \Log::error('Erro ao exportar computadores como CSV: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar CSV: ' . $e->getMessage()
+                'message' => 'Erro ao gerar CSV: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -583,14 +593,16 @@ class ReportController extends Controller
                 ]);
             }
 
-            $filename = 'softwares-' . now()->format('Y-m-d_His') . '.csv';
+            $filename = 'softwares-'.now()->format('Y-m-d_His').'.csv';
+
             return response($csv->toString(), 200)
                 ->header('Content-Type', 'text/csv; charset=UTF-8')
-                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+                ->header('Content-Disposition', 'attachment; filename="'.$filename.'"');
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar softwares como CSV: ' . $e->getMessage());
+            \Log::error('Erro ao exportar softwares como CSV: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar CSV: ' . $e->getMessage()
+                'message' => 'Erro ao gerar CSV: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -600,7 +612,8 @@ class ReportController extends Controller
     private function exportLabsAsXlsx($labs)
     {
         try {
-            $export = new class($labs) implements FromCollection, WithHeadings, WithMapping {
+            $export = new class($labs) implements FromCollection, WithHeadings, WithMapping
+            {
                 private $labs;
 
                 public function __construct($labs)
@@ -630,12 +643,14 @@ class ReportController extends Controller
                 }
             };
 
-            $filename = 'laboratorios-' . now()->format('Y-m-d_His') . '.xlsx';
+            $filename = 'laboratorios-'.now()->format('Y-m-d_His').'.xlsx';
+
             return Excel::download($export, $filename);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar laboratórios como XLSX: ' . $e->getMessage());
+            \Log::error('Erro ao exportar laboratórios como XLSX: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar XLSX: ' . $e->getMessage()
+                'message' => 'Erro ao gerar XLSX: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -643,7 +658,8 @@ class ReportController extends Controller
     private function exportComputersAsXlsx($computers)
     {
         try {
-            $export = new class($computers) implements FromCollection, WithHeadings, WithMapping {
+            $export = new class($computers) implements FromCollection, WithHeadings, WithMapping
+            {
                 private $computers;
 
                 public function __construct($computers)
@@ -661,7 +677,7 @@ class ReportController extends Controller
                     return [
                         'ID', 'Hostname', 'ID da Máquina', 'Laboratório', 'Status',
                         'Última Atualização', 'Núcleos Físicos', 'Núcleos Lógicos',
-                        'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional'
+                        'Memória Total (GB)', 'Armazenamento Total (GB)', 'Sistema Operacional',
                     ];
                 }
 
@@ -687,12 +703,14 @@ class ReportController extends Controller
                 }
             };
 
-            $filename = 'computadores-' . now()->format('Y-m-d_His') . '.xlsx';
+            $filename = 'computadores-'.now()->format('Y-m-d_His').'.xlsx';
+
             return Excel::download($export, $filename);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar computadores como XLSX: ' . $e->getMessage());
+            \Log::error('Erro ao exportar computadores como XLSX: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar XLSX: ' . $e->getMessage()
+                'message' => 'Erro ao gerar XLSX: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -700,7 +718,8 @@ class ReportController extends Controller
     private function exportSoftwaresAsXlsx($softwares)
     {
         try {
-            $export = new class($softwares) implements FromCollection, WithHeadings, WithMapping {
+            $export = new class($softwares) implements FromCollection, WithHeadings, WithMapping
+            {
                 private $softwares;
 
                 public function __construct($softwares)
@@ -731,12 +750,14 @@ class ReportController extends Controller
                 }
             };
 
-            $filename = 'softwares-' . now()->format('Y-m-d_His') . '.xlsx';
+            $filename = 'softwares-'.now()->format('Y-m-d_His').'.xlsx';
+
             return Excel::download($export, $filename);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar softwares como XLSX: ' . $e->getMessage());
+            \Log::error('Erro ao exportar softwares como XLSX: '.$e->getMessage());
+
             return response()->json([
-                'message' => 'Erro ao gerar XLSX: ' . $e->getMessage()
+                'message' => 'Erro ao gerar XLSX: '.$e->getMessage(),
             ], 500);
         }
     }

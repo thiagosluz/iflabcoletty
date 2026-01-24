@@ -15,8 +15,7 @@ class NotificationCreated implements ShouldBroadcast
 
     public function __construct(
         public Notification $notification
-    ) {
-    }
+    ) {}
 
     /**
      * Get the channels the event should broadcast on.
@@ -25,7 +24,7 @@ class NotificationCreated implements ShouldBroadcast
     {
         // Broadcast to the specific user's private channel
         return [
-            new PrivateChannel('user.' . $this->notification->user_id),
+            new PrivateChannel('user.'.$this->notification->user_id),
             new PrivateChannel('notifications'),
         ];
     }

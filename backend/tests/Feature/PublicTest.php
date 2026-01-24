@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
 use App\Models\Computer;
 use App\Models\Lab;
 use App\Models\Software;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 class PublicTest extends TestCase
 {
@@ -62,7 +62,7 @@ class PublicTest extends TestCase
         // Use DB::table to bypass model timestamps and set updated_at to 10 minutes ago
         $offlineTime = now()->subMinutes(10);
         \DB::table('computers')->where('id', $computer->id)->update(['updated_at' => $offlineTime]);
-        
+
         // Refresh the model to get the updated timestamp
         $computer->refresh();
 

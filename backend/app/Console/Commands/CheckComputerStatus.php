@@ -2,10 +2,9 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Models\Computer;
 use App\Events\ComputerStatusChanged;
-use Carbon\Carbon;
+use App\Models\Computer;
+use Illuminate\Console\Command;
 
 class CheckComputerStatus extends Command
 {
@@ -41,10 +40,10 @@ class CheckComputerStatus extends Command
         foreach ($offlineComputers as $computer) {
             // Check if we already notified about this computer being offline
             // by checking if it was offline in the last check (5-10 minutes ago)
-            $wasRecentlyOffline = $computer->updated_at->lt(now()->subMinutes(5)) 
+            $wasRecentlyOffline = $computer->updated_at->lt(now()->subMinutes(5))
                 && $computer->updated_at->gte(now()->subMinutes(10));
-            
-            if (!$wasRecentlyOffline) {
+
+            if (! $wasRecentlyOffline) {
                 event(new ComputerStatusChanged($computer, 'offline', 'Computador não reportou há mais de 5 minutos'));
                 $this->info("Computador {$computer->hostname} ({$computer->machine_id}) está offline");
             }
@@ -58,7 +57,7 @@ class CheckComputerStatus extends Command
         foreach ($onlineComputers as $computer) {
             // Only notify if computer was offline for at least 5 minutes
             $wasOfflineForAWhile = $computer->updated_at->lt(now()->subMinutes(5));
-            
+
             if ($wasOfflineForAWhile) {
                 event(new ComputerStatusChanged($computer, 'online', 'Computador voltou a reportar'));
                 $this->info("Computador {$computer->hostname} ({$computer->machine_id}) voltou online");

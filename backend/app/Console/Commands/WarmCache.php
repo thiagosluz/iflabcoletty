@@ -2,12 +2,11 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Services\CacheService;
+use App\Http\Controllers\Api\V1\ComputerController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\LabController;
-use App\Http\Controllers\Api\V1\ComputerController;
 use App\Http\Controllers\Api\V1\SoftwareController;
+use Illuminate\Console\Command;
 use Illuminate\Http\Request;
 
 class WarmCache extends Command
@@ -45,7 +44,7 @@ class WarmCache extends Command
         $warmSoftwares = $this->option('softwares');
 
         // If no specific option, warm all
-        if (!$warmAll && !$warmDashboard && !$warmLabs && !$warmComputers && !$warmSoftwares) {
+        if (! $warmAll && ! $warmDashboard && ! $warmLabs && ! $warmComputers && ! $warmSoftwares) {
             $warmAll = true;
         }
 
@@ -77,13 +76,13 @@ class WarmCache extends Command
     private function warmDashboard(): void
     {
         $this->info('Warming dashboard cache...');
-        
+
         try {
-            $controller = new DashboardController();
+            $controller = new DashboardController;
             $controller->stats();
             $this->line('  ✓ Dashboard cache warmed');
         } catch (\Exception $e) {
-            $this->error('  ✗ Failed to warm dashboard cache: ' . $e->getMessage());
+            $this->error('  ✗ Failed to warm dashboard cache: '.$e->getMessage());
         }
     }
 
@@ -93,20 +92,20 @@ class WarmCache extends Command
     private function warmLabs(): void
     {
         $this->info('Warming labs cache...');
-        
+
         try {
-            $controller = new LabController();
-            $request = new Request();
-            
+            $controller = new LabController;
+            $request = new Request;
+
             // Warm common pagination sizes
             foreach ([10, 20, 50] as $perPage) {
                 $request->merge(['per_page' => $perPage]);
                 $controller->index($request);
             }
-            
+
             $this->line('  ✓ Labs cache warmed');
         } catch (\Exception $e) {
-            $this->error('  ✗ Failed to warm labs cache: ' . $e->getMessage());
+            $this->error('  ✗ Failed to warm labs cache: '.$e->getMessage());
         }
     }
 
@@ -116,20 +115,20 @@ class WarmCache extends Command
     private function warmComputers(): void
     {
         $this->info('Warming computers cache...');
-        
+
         try {
-            $controller = new ComputerController();
-            $request = new Request();
-            
+            $controller = new ComputerController;
+            $request = new Request;
+
             // Warm common pagination sizes
             foreach ([10, 20, 50] as $perPage) {
                 $request->merge(['per_page' => $perPage]);
                 $controller->index($request);
             }
-            
+
             $this->line('  ✓ Computers cache warmed');
         } catch (\Exception $e) {
-            $this->error('  ✗ Failed to warm computers cache: ' . $e->getMessage());
+            $this->error('  ✗ Failed to warm computers cache: '.$e->getMessage());
         }
     }
 
@@ -139,20 +138,20 @@ class WarmCache extends Command
     private function warmSoftwares(): void
     {
         $this->info('Warming softwares cache...');
-        
+
         try {
-            $controller = new SoftwareController();
-            $request = new Request();
-            
+            $controller = new SoftwareController;
+            $request = new Request;
+
             // Warm common pagination sizes
             foreach ([10, 20, 50] as $perPage) {
                 $request->merge(['per_page' => $perPage]);
                 $controller->index($request);
             }
-            
+
             $this->line('  ✓ Softwares cache warmed');
         } catch (\Exception $e) {
-            $this->error('  ✗ Failed to warm softwares cache: ' . $e->getMessage());
+            $this->error('  ✗ Failed to warm softwares cache: '.$e->getMessage());
         }
     }
 }

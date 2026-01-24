@@ -23,7 +23,7 @@ return new class extends Migration
             $table->json('new_values')->nullable(); // Valores após a mudança
             $table->text('description')->nullable(); // Descrição da ação
             $table->timestamps();
-            
+
             // Índices para melhor performance
             $table->index(['user_id', 'created_at']);
             $table->index(['resource_type', 'resource_id']);

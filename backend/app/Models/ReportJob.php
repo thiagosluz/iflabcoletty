@@ -82,7 +82,7 @@ class ReportJob extends Model
      */
     public function getDownloadUrlAttribute(): ?string
     {
-        if (!$this->file_path || !$this->isCompleted()) {
+        if (! $this->file_path || ! $this->isCompleted()) {
             return null;
         }
 

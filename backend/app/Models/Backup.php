@@ -70,18 +70,18 @@ class Backup extends Model
      */
     public function getHumanReadableSizeAttribute(): string
     {
-        if (!$this->file_size) {
+        if (! $this->file_size) {
             return '0 B';
         }
 
         $bytes = (int) $this->file_size;
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        
+
         for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
             $bytes /= 1024;
         }
 
-        return round($bytes, 2) . ' ' . $units[$i];
+        return round($bytes, 2).' '.$units[$i];
     }
 
     /**
@@ -89,16 +89,17 @@ class Backup extends Model
      */
     public function fileExists(): bool
     {
-        if (!$this->file_path) {
+        if (! $this->file_path) {
             return false;
         }
-        
+
         // Try Storage first, then filesystem
         if (Storage::exists($this->file_path)) {
             return true;
         }
-        
-        $fullPath = storage_path('app/' . $this->file_path);
+
+        $fullPath = storage_path('app/'.$this->file_path);
+
         return file_exists($fullPath);
     }
 
@@ -107,7 +108,7 @@ class Backup extends Model
      */
     public function getDownloadUrlAttribute(): ?string
     {
-        if (!$this->isCompleted() || !$this->fileExists()) {
+        if (! $this->isCompleted() || ! $this->fileExists()) {
             return null;
         }
 

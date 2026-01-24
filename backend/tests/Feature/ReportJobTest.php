@@ -2,16 +2,16 @@
 
 namespace Tests\Feature;
 
-use Tests\TestCase;
-use App\Models\User;
-use App\Models\Lab;
-use App\Models\Computer;
-use App\Models\Software;
-use App\Models\ReportJob;
 use App\Jobs\GenerateReportJob;
+use App\Models\Computer;
+use App\Models\Lab;
+use App\Models\ReportJob;
+use App\Models\Software;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
 
 class ReportJobTest extends TestCase
 {
@@ -126,7 +126,7 @@ class ReportJobTest extends TestCase
     {
         $user1 = $this->actingAsUser();
         $user2 = User::factory()->create();
-        
+
         $job = ReportJob::factory()->create([
             'user_id' => $user2->id,
         ]);
@@ -157,7 +157,7 @@ class ReportJobTest extends TestCase
     public function test_user_can_download_completed_report(): void
     {
         Storage::fake('local');
-        
+
         $user = $this->actingAsUser();
         $filePath = 'reports/test-report.pdf';
         Storage::put($filePath, 'fake pdf content');
@@ -178,7 +178,7 @@ class ReportJobTest extends TestCase
     {
         $user1 = $this->actingAsUser();
         $user2 = User::factory()->create();
-        
+
         $job = ReportJob::factory()->create([
             'user_id' => $user2->id,
             'status' => 'completed',
@@ -193,7 +193,7 @@ class ReportJobTest extends TestCase
     public function test_generate_report_job_processes_successfully(): void
     {
         Storage::fake('local');
-        
+
         $user = $this->actingAsUser();
         Lab::factory()->count(3)->create();
 
@@ -217,7 +217,7 @@ class ReportJobTest extends TestCase
     public function test_generate_report_job_handles_failure(): void
     {
         $user = $this->actingAsUser();
-        
+
         // Create job with invalid type to trigger failure
         $job = ReportJob::factory()->create([
             'user_id' => $user->id,
@@ -227,7 +227,7 @@ class ReportJobTest extends TestCase
         ]);
 
         $reportJob = new GenerateReportJob($job->id, 'invalid_type', 'pdf', []);
-        
+
         try {
             $reportJob->handle();
         } catch (\Exception $e) {

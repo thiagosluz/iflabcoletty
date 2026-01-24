@@ -7,14 +7,15 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class SendEmailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 120; // 2 minutes
+
     public $tries = 3;
 
     /**
@@ -48,7 +49,7 @@ class SendEmailJob implements ShouldQueue
 
             Log::info("Email sent successfully to {$this->to}");
         } catch (\Exception $e) {
-            Log::error("Failed to send email to {$this->to}: " . $e->getMessage());
+            Log::error("Failed to send email to {$this->to}: ".$e->getMessage());
             throw $e; // Re-throw to trigger retry mechanism
         }
     }

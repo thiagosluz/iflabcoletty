@@ -5,39 +5,38 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Computer;
 use App\Models\Lab;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
 class DashboardController extends Controller
 {
     #[OA\Get(
-        path: "/api/v1/dashboard/stats",
-        summary: "Obter estatísticas do dashboard",
-        tags: ["Dashboard"],
-        security: [["sanctum" => []]],
+        path: '/api/v1/dashboard/stats',
+        summary: 'Obter estatísticas do dashboard',
+        tags: ['Dashboard'],
+        security: [['sanctum' => []]],
         responses: [
             new OA\Response(
                 response: 200,
-                description: "Estatísticas do dashboard",
+                description: 'Estatísticas do dashboard',
                 content: new OA\JsonContent(
                     properties: [
-                        new OA\Property(property: "total_labs", type: "integer"),
-                        new OA\Property(property: "total_computers", type: "integer"),
-                        new OA\Property(property: "online_computers", type: "integer"),
-                        new OA\Property(property: "offline_computers", type: "integer"),
-                        new OA\Property(property: "total_softwares", type: "integer"),
-                        new OA\Property(property: "hardware_averages", type: "object", nullable: true),
+                        new OA\Property(property: 'total_labs', type: 'integer'),
+                        new OA\Property(property: 'total_computers', type: 'integer'),
+                        new OA\Property(property: 'online_computers', type: 'integer'),
+                        new OA\Property(property: 'offline_computers', type: 'integer'),
+                        new OA\Property(property: 'total_softwares', type: 'integer'),
+                        new OA\Property(property: 'hardware_averages', type: 'object', nullable: true),
                         new OA\Property(
-                            property: "os_distribution",
-                            type: "array",
-                            items: new OA\Items(type: "object")
+                            property: 'os_distribution',
+                            type: 'array',
+                            items: new OA\Items(type: 'object')
                         ),
                     ]
                 )
             ),
-            new OA\Response(response: 401, description: "Não autenticado"),
+            new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
     public function stats()
@@ -52,11 +51,11 @@ class DashboardController extends Controller
         // Filter in PHP after loading to handle JSON properly
         $allComputers = Computer::get(['id', 'hardware_info']);
         $computersWithHardware = $allComputers->filter(function ($computer) {
-            return !empty($computer->hardware_info) && 
-                   is_array($computer->hardware_info) && 
-                   !empty($computer->hardware_info);
+            return ! empty($computer->hardware_info) &&
+                   is_array($computer->hardware_info) &&
+                   ! empty($computer->hardware_info);
         });
-        
+
         $hardwareAverages = $this->calculateHardwareAverages($computersWithHardware);
         $osDistribution = $this->getOSDistribution($allComputers);
         $totalSoftwares = $this->getTotalUniqueSoftwares();
@@ -78,7 +77,7 @@ class DashboardController extends Controller
     private function calculateHardwareAverages($computers)
     {
         $computersWithHardware = $computers->filter(function ($computer) {
-            return !empty($computer->hardware_info);
+            return ! empty($computer->hardware_info);
         });
 
         if ($computersWithHardware->isEmpty()) {
@@ -112,8 +111,8 @@ class DashboardController extends Controller
         });
 
         // Calculate average disk usage percentage
-        $avgDiskUsagePercent = $avgDiskTotal > 0 
-            ? round(($avgDiskUsed / $avgDiskTotal) * 100, 2) 
+        $avgDiskUsagePercent = $avgDiskTotal > 0
+            ? round(($avgDiskUsed / $avgDiskTotal) * 100, 2)
             : 0;
 
         return [
@@ -140,14 +139,14 @@ class DashboardController extends Controller
     private function getOSDistribution($computers)
     {
         $osCounts = [];
-        
+
         foreach ($computers as $computer) {
-            if (!empty($computer->hardware_info['os']['system'])) {
+            if (! empty($computer->hardware_info['os']['system'])) {
                 $osName = $computer->hardware_info['os']['system'];
                 $osRelease = $computer->hardware_info['os']['release'] ?? 'Desconhecido';
-                $osKey = $osName . ' ' . $osRelease;
-                
-                if (!isset($osCounts[$osKey])) {
+                $osKey = $osName.' '.$osRelease;
+
+                if (! isset($osCounts[$osKey])) {
                     $osCounts[$osKey] = [
                         'system' => $osName,
                         'release' => $osRelease,
@@ -170,7 +169,7 @@ class DashboardController extends Controller
         // Use distinct count from pivot table instead of loading all relationships
         // PostgreSQL uses DISTINCT ON, MySQL uses DISTINCT differently
         $driver = DB::getDriverName();
-        
+
         if ($driver === 'pgsql') {
             return DB::table('computer_software')
                 ->distinct('software_id')
