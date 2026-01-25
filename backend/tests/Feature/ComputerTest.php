@@ -143,7 +143,6 @@ class ComputerTest extends TestCase
                 'machine_id',
                 'hostname',
                 'lab',
-                'activities',
             ]);
     }
 

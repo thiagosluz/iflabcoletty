@@ -7,9 +7,9 @@ use App\Http\Controllers\Api\V1\ComputerController;
 use App\Http\Controllers\Api\V1\LabController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PublicController;
+use App\Http\Controllers\Api\V1\RemoteControlController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
-use App\Http\Controllers\Api\V1\RemoteControlController;
 use App\Http\Controllers\Api\V1\SoftwareController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Http\Request;
@@ -106,7 +106,7 @@ Route::prefix('v1')->group(function () {
 
     // Protected Routes - Rate limit of 300 requests per minute
     Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
-        
+
         // Global Search
         Route::get('/search', [\App\Http\Controllers\Api\V1\SearchController::class, 'globalSearch']);
 
@@ -128,7 +128,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/computers/export-qrcodes', [ComputerController::class, 'exportQrCodes']);
         Route::get('/computers/{computer}/softwares', [ComputerController::class, 'getSoftwares']);
         Route::get('/computers/{computer}/activities', [ComputerController::class, 'getActivities']);
-        
+
         // Remote Control
         Route::get('/computers/{computer}/commands', [RemoteControlController::class, 'index']);
         Route::post('/computers/{computer}/commands', [RemoteControlController::class, 'store']);

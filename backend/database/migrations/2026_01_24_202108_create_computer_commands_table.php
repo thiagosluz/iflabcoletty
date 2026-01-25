@@ -21,7 +21,7 @@ return new class extends Migration
             $table->text('output')->nullable();
             $table->timestamp('executed_at')->nullable();
             $table->timestamps();
-            
+
             $table->index(['computer_id', 'status']);
         });
     }

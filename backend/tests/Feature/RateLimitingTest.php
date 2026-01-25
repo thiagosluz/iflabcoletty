@@ -41,13 +41,13 @@ class RateLimitingTest extends TestCase
     {
         $user = $this->actingAsUser();
 
-        // Make 60 requests (limit is 60 per minute)
-        for ($i = 0; $i < 60; $i++) {
+        // Make 300 requests (limit is 300 per minute)
+        for ($i = 0; $i < 300; $i++) {
             $response = $this->getJson('/api/v1/dashboard/stats', $this->getAuthHeaders($user));
             $this->assertEquals(200, $response->status());
         }
 
-        // 61st request should be rate limited
+        // 301st request should be rate limited
         $response = $this->getJson('/api/v1/dashboard/stats', $this->getAuthHeaders($user));
         $this->assertEquals(429, $response->status());
     }
@@ -97,8 +97,8 @@ class RateLimitingTest extends TestCase
     {
         $user = $this->actingAsUser();
 
-        // Make 60 requests to hit the limit
-        for ($i = 0; $i < 60; $i++) {
+        // Make 300 requests to hit the limit
+        for ($i = 0; $i < 300; $i++) {
             $this->getJson('/api/v1/dashboard/stats', $this->getAuthHeaders($user));
         }
 
