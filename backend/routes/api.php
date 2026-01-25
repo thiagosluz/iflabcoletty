@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PublicController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
+use App\Http\Controllers\Api\V1\RemoteControlController;
 use App\Http\Controllers\Api\V1\SoftwareController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Http\Request;
@@ -103,8 +104,11 @@ Route::prefix('v1')->group(function () {
         }
     })->middleware('throttle:60,1');
 
-    // Protected Routes - Rate limit of 60 requests per minute
-    Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+    // Protected Routes - Rate limit of 300 requests per minute
+    Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
+        
+        // Global Search
+        Route::get('/search', [\App\Http\Controllers\Api\V1\SearchController::class, 'globalSearch']);
 
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
@@ -118,15 +122,27 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('computers', ComputerController::class);
         Route::get('/computers/by-machine-id/{machineId}', [ComputerController::class, 'findByMachineId']);
         Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
+        Route::post('/computers/{computer}/metrics', [ComputerController::class, 'storeMetrics']);
+        Route::get('/computers/{computer}/metrics', [ComputerController::class, 'getMetrics']);
         Route::get('/computers/{computer}/qrcode', [ComputerController::class, 'generateQrCode']);
         Route::post('/computers/export-qrcodes', [ComputerController::class, 'exportQrCodes']);
         Route::get('/computers/{computer}/softwares', [ComputerController::class, 'getSoftwares']);
+        Route::get('/computers/{computer}/activities', [ComputerController::class, 'getActivities']);
+        
+        // Remote Control
+        Route::get('/computers/{computer}/commands', [RemoteControlController::class, 'index']);
+        Route::post('/computers/{computer}/commands', [RemoteControlController::class, 'store']);
+        Route::post('/computers/bulk-commands', [RemoteControlController::class, 'storeBulk']);
+        Route::post('/labs/{lab}/commands', [RemoteControlController::class, 'storeLab']);
+        Route::get('/computers/{computer}/commands/pending', [RemoteControlController::class, 'pending']);
+        Route::put('/commands/{command}/status', [RemoteControlController::class, 'updateStatus']);
 
         // Software
         Route::apiResource('softwares', SoftwareController::class)->only(['index', 'show']);
 
         // Dashboard
         Route::get('/dashboard/stats', [\App\Http\Controllers\Api\V1\DashboardController::class, 'stats']);
+        Route::get('/dashboard/history', [\App\Http\Controllers\Api\V1\DashboardController::class, 'history']);
 
         // Reports
         Route::post('/reports/labs', [ReportController::class, 'exportLabs']);

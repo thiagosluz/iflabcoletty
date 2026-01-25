@@ -75,6 +75,28 @@ class Agent:
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage('/')
             
+            # Network interfaces
+            network_interfaces = []
+            try:
+                if_addrs = psutil.net_if_addrs()
+                for interface_name, addresses in if_addrs.items():
+                    interface_info = {'name': interface_name, 'ipv4': [], 'ipv6': [], 'mac': None}
+                    for addr in addresses:
+                        if addr.family == socket.AF_INET:
+                            interface_info['ipv4'].append(addr.address)
+                        elif addr.family == socket.AF_INET6:
+                            # Filter out link-local ipv6 to reduce noise
+                            if '%' not in addr.address:
+                                interface_info['ipv6'].append(addr.address)
+                        elif addr.family == psutil.AF_LINK:
+                            interface_info['mac'] = addr.address
+                    
+                    # Only add if it has some address and skip loopback if desired
+                    if interface_info['ipv4'] or interface_info['mac']:
+                        network_interfaces.append(interface_info)
+            except Exception as e:
+                logger.warning(f"Could not collect network interfaces: {e}")
+
             return {
                 'cpu': {
                     'physical_cores': cpu_count,
@@ -90,6 +112,7 @@ class Agent:
                     'used_gb': round(disk.used / (1024**3), 2),
                     'free_gb': round(disk.free / (1024**3), 2),
                 },
+                'network': network_interfaces,
                 'os': {
                     'system': platform.system(),
                     'release': platform.release(),
@@ -261,6 +284,76 @@ class Agent:
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Response: {e.response.text}")
 
+    def get_metrics(self):
+        """Collect dynamic system metrics."""
+        try:
+            # CPU
+            cpu_percent = psutil.cpu_percent(interval=None) # Non-blocking
+            
+            # Memory
+            memory = psutil.virtual_memory()
+            
+            # Disk (Iterate partitions)
+            disk_usage = []
+            for part in psutil.disk_partitions(all=False):
+                try:
+                    usage = psutil.disk_usage(part.mountpoint)
+                    disk_usage.append({
+                        'mount': part.mountpoint,
+                        'total_gb': round(usage.total / (1024**3), 2),
+                        'free_gb': round(usage.free / (1024**3), 2),
+                        'percent': usage.percent
+                    })
+                except Exception:
+                    continue
+            
+            # Network
+            net_io = psutil.net_io_counters()
+            network_stats = {
+                'bytes_sent': net_io.bytes_sent,
+                'bytes_recv': net_io.bytes_recv,
+                'packets_sent': net_io.packets_sent,
+                'packets_recv': net_io.packets_recv
+            }
+            
+            # Uptime
+            uptime_seconds = int(time.time() - psutil.boot_time())
+            
+            # Processes
+            processes_count = len(psutil.pids())
+            
+            return {
+                'cpu_usage_percent': cpu_percent,
+                'memory_usage_percent': memory.percent,
+                'memory_total_gb': round(memory.total / (1024**3), 2),
+                'memory_free_gb': round(memory.available / (1024**3), 2),
+                'disk_usage': disk_usage,
+                'network_stats': network_stats,
+                'uptime_seconds': uptime_seconds,
+                'processes_count': processes_count
+            }
+        except Exception as e:
+            logger.error(f"Error collecting metrics: {e}")
+            return {}
+
+    def send_metrics_report(self):
+        """Send lightweight metrics report to backend."""
+        if not self.computer_db_id:
+            return
+        
+        try:
+            metrics = self.get_metrics()
+            if not metrics:
+                return
+
+            metrics_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/metrics"
+            response = self.session.post(metrics_url, json=metrics)
+            response.raise_for_status()
+            
+            logger.debug("Metrics sent successfully.")
+        except Exception as e:
+            logger.error(f"Failed to send metrics: {e}")
+
     def send_detailed_report(self):
         """Send detailed hardware and software report to backend."""
         if not self.computer_db_id:
@@ -287,24 +380,164 @@ class Agent:
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Response: {e.response.text}")
 
+    def check_commands(self):
+        """Check for pending remote commands."""
+        if not self.computer_db_id: return
+        
+        try:
+            url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/commands/pending"
+            response = self.session.get(url)
+            # 404 means no route or computer not found, ignore to avoid log spam if feature not ready
+            if response.status_code == 404: return
+            response.raise_for_status()
+            
+            commands = response.json()
+            for cmd in commands:
+                self.execute_command(cmd)
+        except Exception as e:
+            logger.error(f"Error checking commands: {e}")
+
+    def send_wol(self, mac_address):
+        """Send Wake-on-LAN magic packet."""
+        try:
+            # Clean MAC address
+            mac_address = mac_address.replace(':', '').replace('-', '')
+            
+            if len(mac_address) != 12:
+                raise ValueError(f"Invalid MAC address length: {len(mac_address)}")
+                
+            data = bytes.fromhex('FF' * 6 + mac_address * 16)
+            
+            # Broadcast to LAN
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                sock.sendto(data, ("255.255.255.255", 9))
+                
+            return True
+        except Exception as e:
+            logger.error(f"Error sending WoL: {e}")
+            raise e
+
+    def execute_command(self, cmd):
+        """Execute a remote command."""
+        command_id = cmd['id']
+        command_type = cmd['command']
+        params = cmd.get('parameters', {}) or {}
+        
+        logger.info(f"Executing command {command_type} (ID: {command_id})")
+        
+        # Mark as processing
+        self.update_command_status(command_id, 'processing')
+        
+        output = ""
+        success = False
+        
+        try:
+            if command_type == 'shutdown':
+                if platform.system() == 'Windows':
+                    os.system("shutdown /s /t 5") # 5s delay
+                else:
+                    # Requires root or sudo NOPASSWD
+                    os.system("shutdown -h +1") # 1 min delay to allow status update
+                success = True
+                output = "Shutdown command issued."
+                
+            elif command_type == 'restart':
+                if platform.system() == 'Windows':
+                    os.system("shutdown /r /t 5")
+                else:
+                    os.system("shutdown -r +1")
+                success = True
+                output = "Restart command issued."
+            
+            elif command_type == 'lock':
+                if platform.system() == 'Windows':
+                    os.system("rundll32.exe user32.dll,LockWorkStation")
+                    success = True
+                    output = "Lock command issued."
+                else:
+                    # Try common linux lock commands
+                    os.system("xdg-screensaver lock || gnome-screensaver-command -l")
+                    success = True
+                    output = "Lock command issued (Linux best effort)."
+
+            elif command_type == 'message':
+                msg = params.get('message', 'Alert from Admin')
+                if platform.system() == 'Linux':
+                    # Try notify-send (requires libnotify-bin)
+                     os.system(f"notify-send 'Admin Alert' '{msg}'")
+                elif platform.system() == 'Windows':
+                     os.system(f"msg * \"{msg}\"")
+                success = True
+                output = f"Message displayed: {msg}"
+            
+            elif command_type == 'wol':
+                target_mac = params.get('target_mac')
+                if target_mac:
+                    self.send_wol(target_mac)
+                    success = True
+                    output = f"WoL packet sent to {target_mac}"
+                else:
+                    success = False
+                    output = "Missing target_mac for WoL"
+            
+            else:
+                output = f"Unknown command: {command_type}"
+                success = False
+
+        except Exception as e:
+            output = str(e)
+            success = False
+            
+        self.update_command_status(command_id, 'completed' if success else 'failed', output)
+
+    def update_command_status(self, command_id, status, output=None):
+        try:
+            url = f"{config.API_BASE_URL}/commands/{command_id}/status"
+            payload = {'status': status}
+            if output: payload['output'] = output
+            self.session.put(url, json=payload)
+        except Exception as e:
+            logger.error(f"Failed to update command status: {e}")
+
     def run(self):
         logger.info(f"Starting Agent for Machine ID: {self.machine_id}")
         
-        iteration = 0
+        # Initialize CPU counter
+        psutil.cpu_percent(interval=None)
+        
+        last_metrics_time = 0
+        last_report_time = 0
+        
         while True:
             if not self.token:
                 if not self.login():
                     time.sleep(10) # Wait before retry
                     continue
             
+            # Always ensure registered
             self.register_or_update()
             
-            # Send detailed report every 10 iterations (5 minutes with 30s interval)
-            if iteration % 10 == 0 and self.computer_db_id:
-                self.send_detailed_report()
+            # Check for commands frequently (every loop)
+            if self.computer_db_id:
+                self.check_commands()
             
-            iteration += 1
-            time.sleep(config.POLL_INTERVAL)
+            current_time = time.time()
+            
+            # Send metrics every 30s
+            if current_time - last_metrics_time >= 30:
+                if self.computer_db_id:
+                    self.send_metrics_report()
+                last_metrics_time = current_time
+            
+            # Send detailed report every 5 minutes (300s)
+            if current_time - last_report_time >= 300:
+                if self.computer_db_id:
+                    self.send_detailed_report()
+                last_report_time = current_time
+            
+            # Short sleep for responsive command handling
+            time.sleep(5)
 
 if __name__ == "__main__":
     agent = Agent()

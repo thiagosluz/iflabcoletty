@@ -57,7 +57,23 @@ if (typeof window !== 'undefined') {
         connector.pusher.connection.bind('error', (error: any) => {
             console.error('Echo connection error:', error);
         });
+
+        connector.pusher.connection.bind('unavailable', () => {
+            console.warn('Echo connection unavailable');
+        });
+
+        connector.pusher.connection.bind('failed', () => {
+            console.error('Echo connection failed');
+        });
     }
 }
+
+// Helper function to check if Echo is connected
+export const isEchoConnected = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const connector = (echo as any).connector;
+    const state = connector?.pusher?.connection?.state;
+    return state === 'connected' || state === 'connecting';
+};
 
 export default echo;

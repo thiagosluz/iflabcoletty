@@ -5,8 +5,29 @@ import QRCodeDisplay from '@/components/QRCodeDisplay';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon } from 'lucide-react';
+import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Progress } from '@/components/ui/progress';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 interface HardwareInfo {
     cpu?: {
@@ -23,6 +44,12 @@ interface HardwareInfo {
         used_gb?: number;
         free_gb?: number;
     };
+    network?: {
+        name: string;
+        ipv4: string[];
+        ipv6: string[];
+        mac: string | null;
+    }[];
     os?: {
         system?: string;
         release?: string;
@@ -40,12 +67,25 @@ interface Software {
     };
 }
 
-interface Activity {
+interface ActivityLog {
     id: number;
     type: string;
     description: string;
     payload: any;
     created_at: string;
+}
+
+interface ComputerMetric {
+    id: number;
+    cpu_usage_percent: number;
+    memory_usage_percent: number;
+    memory_total_gb: number;
+    memory_free_gb: number;
+    disk_usage: any[];
+    network_stats: any;
+    uptime_seconds: number;
+    processes_count: number;
+    recorded_at: string;
 }
 
 interface PaginationMeta {
@@ -67,7 +107,6 @@ interface Computer {
         id: number;
         name: string;
     };
-    activities: Activity[];
     created_at: string;
     updated_at: string;
 }
@@ -83,10 +122,22 @@ export default function ComputerDetails() {
     const [softwarePerPage, setSoftwarePerPage] = useState(20);
     const [softwarePagination, setSoftwarePagination] = useState<PaginationMeta | null>(null);
     const [loadingSoftwares, setLoadingSoftwares] = useState(false);
+    const [activities, setActivities] = useState<ActivityLog[]>([]);
+    const [activityCurrentPage, setActivityCurrentPage] = useState(1);
+    const [activityPerPage, setActivityPerPage] = useState(20);
+    const [activityPagination, setActivityPagination] = useState<PaginationMeta | null>(null);
+    const [loadingActivities, setLoadingActivities] = useState(false);
+    const [metrics, setMetrics] = useState<ComputerMetric[]>([]);
+    const [messageText, setMessageText] = useState('');
+    const [isMessageOpen, setIsMessageOpen] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
         fetchComputer();
+        fetchMetrics();
+        // Refresh metrics every 30s
+        const interval = setInterval(fetchMetrics, 30000);
+        return () => clearInterval(interval);
     }, [id]);
 
     useEffect(() => {
@@ -94,6 +145,12 @@ export default function ComputerDetails() {
             fetchSoftwares();
         }
     }, [computer, softwareCurrentPage, softwarePerPage, softwareSearch]);
+
+    useEffect(() => {
+        if (computer) {
+            fetchActivities();
+        }
+    }, [computer, activityCurrentPage, activityPerPage]);
 
     const fetchComputer = async () => {
         try {
@@ -103,6 +160,16 @@ export default function ComputerDetails() {
             console.error('Falha ao buscar computador:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchMetrics = async () => {
+        if (!id) return;
+        try {
+            const response = await apiClient.get(`/computers/${id}/metrics?limit=1`);
+            setMetrics(response.data || []);
+        } catch (error) {
+            console.error('Falha ao buscar métricas:', error);
         }
     };
 
@@ -137,12 +204,84 @@ export default function ComputerDetails() {
 
     const handleSoftwareSearchChange = (value: string) => {
         setSoftwareSearch(value);
-        setSoftwareCurrentPage(1); // Reset to first page on search
+        setSoftwareCurrentPage(1);
     };
 
     const handleSoftwarePerPageChange = (value: string) => {
         setSoftwarePerPage(parseInt(value));
-        setSoftwareCurrentPage(1); // Reset to first page when changing per page
+        setSoftwareCurrentPage(1);
+    };
+
+    const fetchActivities = async () => {
+        if (!id) return;
+        
+        try {
+            setLoadingActivities(true);
+            const params = new URLSearchParams();
+            params.append('page', activityCurrentPage.toString());
+            params.append('per_page', activityPerPage.toString());
+
+            const response = await apiClient.get(`/computers/${id}/activities?${params.toString()}`);
+            setActivities(response.data.data || []);
+            setActivityPagination({
+                current_page: response.data.current_page || 1,
+                last_page: response.data.last_page || 1,
+                per_page: response.data.per_page || activityPerPage,
+                total: response.data.total || 0,
+                from: response.data.from || 0,
+                to: response.data.to || 0,
+            });
+        } catch (error) {
+            console.error('Falha ao buscar atividades:', error);
+        } finally {
+            setLoadingActivities(false);
+        }
+    };
+
+    const handleActivityPerPageChange = (value: string) => {
+        setActivityPerPage(parseInt(value));
+        setActivityCurrentPage(1);
+    };
+
+    const formatUptime = (seconds: number) => {
+        const days = Math.floor(seconds / (3600 * 24));
+        const hours = Math.floor((seconds % (3600 * 24)) / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        
+        const parts = [];
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+        parts.push(`${minutes}m`);
+        
+        return parts.join(' ');
+    };
+
+    const formatBytes = (bytes: number) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const handleCommand = async (command: string, params?: any) => {
+        if (!id) return;
+        try {
+            await apiClient.post(`/computers/${id}/commands`, { command, parameters: params });
+            toast({
+                title: 'Comando enviado',
+                description: `O comando foi enviado com sucesso para a fila.`,
+            });
+            setIsMessageOpen(false);
+            setMessageText('');
+        } catch (error: any) {
+            console.error(error);
+            toast({
+                title: 'Erro',
+                description: error.response?.data?.message || 'Falha ao enviar comando.',
+                variant: 'destructive',
+            });
+        }
     };
 
     if (loading) {
@@ -162,11 +301,12 @@ export default function ComputerDetails() {
     }
 
     const isOnline = new Date().getTime() - new Date(computer.updated_at).getTime() < 5 * 60 * 1000;
+    const latestMetric = metrics.length > 0 ? metrics[0] : null;
 
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div>
                     <button
                         onClick={() => navigate('/admin/computers')}
@@ -190,7 +330,192 @@ export default function ComputerDetails() {
                         </span>
                     </div>
                 </div>
+
+                {/* Remote Actions */}
+                <div className="flex flex-wrap gap-2">
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50">
+                                <Power className="h-4 w-4 mr-2" />
+                                Desligar
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Isso enviará um comando para desligar o computador imediatamente.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleCommand('shutdown')} className="bg-red-600 hover:bg-red-700">
+                                    Desligar
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="outline">
+                                <RotateCw className="h-4 w-4 mr-2" />
+                                Reiniciar
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Reiniciar computador?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    O computador será reiniciado. Certifique-se que não há trabalho não salvo.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleCommand('restart')}>
+                                    Reiniciar
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    
+                    <Button variant="outline" onClick={() => handleCommand('lock')}>
+                        <Lock className="h-4 w-4 mr-2" />
+                        Bloquear
+                    </Button>
+
+                    <Dialog open={isMessageOpen} onOpenChange={setIsMessageOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <MessageSquare className="h-4 w-4 mr-2" />
+                                Mensagem
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Enviar Mensagem para o Usuário</DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4">
+                                <Label htmlFor="message" className="mb-2 block">Mensagem</Label>
+                                <Input
+                                    id="message"
+                                    value={messageText}
+                                    onChange={(e) => setMessageText(e.target.value)}
+                                    placeholder="Ex: O laboratório será fechado em 10 minutos."
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsMessageOpen(false)}>Cancelar</Button>
+                                <Button onClick={() => handleCommand('message', { message: messageText })}>Enviar</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    {!isOnline && (
+                        <Button variant="outline" onClick={() => handleCommand('wol')} className="text-blue-600 border-blue-200 hover:bg-blue-50">
+                            <Zap className="h-4 w-4 mr-2" />
+                            Acordar (WoL)
+                        </Button>
+                    )}
+                </div>
             </div>
+
+            {/* Live Metrics */}
+            {latestMetric && (
+                <div className="bg-white shadow rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <Activity className="h-5 w-5 text-blue-600" />
+                            <h2 className="text-lg font-semibold">Monitoramento em Tempo Real</h2>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                            Atualizado: {new Date(latestMetric.recorded_at).toLocaleTimeString()}
+                        </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {/* CPU */}
+                        <div className="bg-gray-50 rounded-md p-4 border border-gray-100">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium text-gray-700">CPU</span>
+                                <span className="text-sm font-bold text-gray-900">{latestMetric.cpu_usage_percent.toFixed(1)}%</span>
+                            </div>
+                            <Progress value={latestMetric.cpu_usage_percent} className="h-2" />
+                        </div>
+
+                        {/* Memory */}
+                        <div className="bg-gray-50 rounded-md p-4 border border-gray-100">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium text-gray-700">Memória</span>
+                                <span className="text-sm font-bold text-gray-900">{latestMetric.memory_usage_percent.toFixed(1)}%</span>
+                            </div>
+                            <Progress value={latestMetric.memory_usage_percent} className="h-2" />
+                            <div className="flex justify-between mt-2 text-xs text-gray-500">
+                                <span>Livre: {latestMetric.memory_free_gb.toFixed(1)} GB</span>
+                                <span>Total: {latestMetric.memory_total_gb.toFixed(1)} GB</span>
+                            </div>
+                        </div>
+
+                        {/* Uptime & Processes */}
+                        <div className="bg-gray-50 rounded-md p-4 border border-gray-100">
+                            <div className="flex items-center gap-3 mb-3">
+                                <Clock className="h-4 w-4 text-gray-500" />
+                                <div>
+                                    <p className="text-xs text-gray-500">Uptime</p>
+                                    <p className="text-sm font-bold text-gray-900">{formatUptime(latestMetric.uptime_seconds)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Activity className="h-4 w-4 text-gray-500" />
+                                <div>
+                                    <p className="text-xs text-gray-500">Processos</p>
+                                    <p className="text-sm font-bold text-gray-900">{latestMetric.processes_count}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Network */}
+                        <div className="bg-gray-50 rounded-md p-4 border border-gray-100">
+                            <h3 className="text-xs font-medium text-gray-500 mb-2">Rede (Total)</h3>
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-green-600">↓ Download</span>
+                                    <span className="font-mono">{formatBytes(latestMetric.network_stats?.bytes_recv || 0)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-blue-600">↑ Upload</span>
+                                    <span className="font-mono">{formatBytes(latestMetric.network_stats?.bytes_sent || 0)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Disks */}
+                    {latestMetric.disk_usage && latestMetric.disk_usage.length > 0 && (
+                        <div className="mt-6">
+                            <h3 className="text-sm font-medium text-gray-700 mb-3">Armazenamento</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {latestMetric.disk_usage.map((disk: any, idx: number) => (
+                                    <div key={idx} className="bg-gray-50 rounded-md p-3 border border-gray-100 flex items-center gap-4">
+                                        <HardDrive className="h-8 w-8 text-gray-400" />
+                                        <div className="flex-1">
+                                            <div className="flex justify-between mb-1">
+                                                <span className="font-medium text-sm">{disk.mount}</span>
+                                                <span className="text-xs text-gray-500">{disk.percent}%</span>
+                                            </div>
+                                            <Progress value={disk.percent} className="h-1.5" />
+                                            <div className="flex justify-between mt-1 text-xs text-gray-500">
+                                                <span>Livre: {disk.free_gb} GB</span>
+                                                <span>Total: {disk.total_gb} GB</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Basic Info */}
             <div className="bg-white shadow rounded-lg p-6">
@@ -306,9 +631,6 @@ export default function ComputerDetails() {
                                     Baixar QR Code (PNG)
                                 </Button>
                             </div>
-                            <div className="text-sm text-gray-500">
-                                <p>O QR code permite acesso público às informações básicas deste computador sem necessidade de autenticação.</p>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -384,6 +706,41 @@ export default function ComputerDetails() {
                                         <dd className="text-sm text-gray-900">{computer.hardware_info.disk.free_gb || 'N/A'} GB</dd>
                                     </div>
                                 </dl>
+                            </div>
+                        )}
+
+                        {/* Network Interfaces */}
+                        {computer.hardware_info.network && computer.hardware_info.network.length > 0 && (
+                            <div className="border-l-4 border-cyan-500 pl-4 col-span-1 md:col-span-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Network className="h-5 w-5 text-cyan-500" />
+                                    <h3 className="text-sm font-medium text-gray-700">Interfaces de Rede</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {computer.hardware_info.network.map((iface, idx) => (
+                                        <div key={idx} className="bg-gray-50 p-2 rounded text-xs border border-gray-100">
+                                            <p className="font-semibold text-gray-700 mb-1">{iface.name}</p>
+                                            {iface.mac && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">MAC:</span>
+                                                    <span className="font-mono">{iface.mac}</span>
+                                                </div>
+                                            )}
+                                            {iface.ipv4.length > 0 && (
+                                                <div className="flex justify-between mt-1">
+                                                    <span className="text-gray-500">IPv4:</span>
+                                                    <span className="font-mono text-right">{iface.ipv4.join(', ')}</span>
+                                                </div>
+                                            )}
+                                            {iface.ipv6.length > 0 && (
+                                                <div className="mt-1">
+                                                    <span className="text-gray-500 block">IPv6:</span>
+                                                    <span className="font-mono text-[10px] break-all">{iface.ipv6[0]}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
@@ -567,25 +924,109 @@ export default function ComputerDetails() {
 
             {/* Activity History */}
             <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-lg font-semibold mb-4">
-                    Histórico de Atividades ({computer.activities.length})
-                </h2>
-                {computer.activities.length > 0 ? (
-                    <div className="space-y-3">
-                        {computer.activities.map((activity) => (
-                            <div key={activity.id} className="border-l-4 border-blue-500 pl-4 py-2">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900">{activity.description}</p>
-                                        <p className="text-xs text-gray-500 mt-1">Tipo: {activity.type}</p>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold">
+                        Histórico de Atividades {activityPagination && `(${activityPagination.total})`}
+                    </h2>
+                    <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-2">
+                        <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
+                        <Select value={activityPerPage.toString()} onValueChange={handleActivityPerPageChange}>
+                            <SelectTrigger className="w-[100px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                {loadingActivities ? (
+                    <div className="flex justify-center items-center h-32">
+                        <div className="text-gray-500">Carregando atividades...</div>
+                    </div>
+                ) : activities.length > 0 ? (
+                    <>
+                        <div className="space-y-3">
+                            {activities.map((activity) => (
+                                <div key={activity.id} className="border-l-4 border-blue-500 pl-4 py-2">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-900">{activity.description}</p>
+                                            <p className="text-xs text-gray-500 mt-1">Tipo: {activity.type}</p>
+                                        </div>
+                                        <span className="text-xs text-gray-500">
+                                            {new Date(activity.created_at).toLocaleString('pt-BR')}
+                                        </span>
                                     </div>
-                                    <span className="text-xs text-gray-500">
-                                        {new Date(activity.created_at).toLocaleString('pt-BR')}
-                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Pagination */}
+                        {activityPagination && activityPagination.last_page > 1 && (
+                            <div className="mt-4 flex items-center justify-between">
+                                <div className="text-sm text-gray-700">
+                                    Mostrando {activityPagination.from} a {activityPagination.to} de {activityPagination.total} atividades
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setActivityCurrentPage(prev => Math.max(1, prev - 1))}
+                                        disabled={activityCurrentPage === 1}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        Anterior
+                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                        {Array.from({ length: Math.min(5, activityPagination.last_page) }, (_, i) => {
+                                            let pageNum;
+                                            if (activityPagination.last_page <= 5) {
+                                                pageNum = i + 1;
+                                            } else if (activityCurrentPage <= 3) {
+                                                pageNum = i + 1;
+                                            } else if (activityCurrentPage >= activityPagination.last_page - 2) {
+                                                pageNum = activityPagination.last_page - 4 + i;
+                                            } else {
+                                                pageNum = activityCurrentPage - 2 + i;
+                                            }
+                                            return (
+                                                <Button
+                                                    key={pageNum}
+                                                    variant={activityCurrentPage === pageNum ? "default" : "outline"}
+                                                    size="sm"
+                                                    onClick={() => setActivityCurrentPage(pageNum)}
+                                                    className="min-w-[40px]"
+                                                >
+                                                    {pageNum}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setActivityCurrentPage(prev => Math.min(activityPagination.last_page, prev + 1))}
+                                        disabled={activityCurrentPage === activityPagination.last_page}
+                                    >
+                                        Próxima
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                        )}
+
+                        {/* Info when no pagination needed */}
+                        {activityPagination && activityPagination.last_page === 1 && (
+                            <div className="mt-4 text-sm text-gray-500">
+                                Mostrando {activityPagination.total} {activityPagination.total === 1 ? 'atividade' : 'atividades'}
+                            </div>
+                        )}
+                    </>
                 ) : (
                     <p className="text-gray-500 text-sm">Nenhum histórico de atividades disponível</p>
                 )}

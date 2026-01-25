@@ -71,6 +71,48 @@ class DashboardController extends Controller
         ];
     }
 
+    public function history()
+    {
+        $this->authorize('dashboard.view');
+
+        $driver = DB::getDriverName();
+
+        if ($driver === 'sqlite') {
+            $metrics = \App\Models\ComputerMetric::selectRaw('
+                strftime(\'%Y-%m-%d %H:00:00\', recorded_at) as hour,
+                AVG(cpu_usage_percent) as avg_cpu,
+                AVG(memory_usage_percent) as avg_memory
+            ')
+                ->where('recorded_at', '>=', now()->subHours(24))
+                ->groupBy('hour')
+                ->orderBy('hour')
+                ->get();
+        } elseif ($driver === 'pgsql') {
+            $metrics = \App\Models\ComputerMetric::selectRaw('
+                DATE_TRUNC(\'hour\', recorded_at) as hour,
+                AVG(cpu_usage_percent) as avg_cpu,
+                AVG(memory_usage_percent) as avg_memory
+            ')
+                ->where('recorded_at', '>=', now()->subHours(24))
+                ->groupBy('hour')
+                ->orderBy('hour')
+                ->get();
+        } else {
+            // MySQL
+            $metrics = \App\Models\ComputerMetric::selectRaw('
+                DATE_FORMAT(recorded_at, \'%Y-%m-%d %H:00:00\') as hour,
+                AVG(cpu_usage_percent) as avg_cpu,
+                AVG(memory_usage_percent) as avg_memory
+            ')
+                ->where('recorded_at', '>=', now()->subHours(24))
+                ->groupBy('hour')
+                ->orderBy('hour')
+                ->get();
+        }
+
+        return response()->json($metrics);
+    }
+
     /**
      * Calculate average hardware specifications across all computers
      */

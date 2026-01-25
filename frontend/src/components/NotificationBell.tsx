@@ -11,7 +11,7 @@ import apiClient from '@/lib/axios';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import echo from '@/lib/echo';
+import echo, { isEchoConnected } from '@/lib/echo';
 
 interface Notification {
     id: number;
@@ -36,108 +36,172 @@ export default function NotificationBell() {
     useEffect(() => {
         // Listen for new notifications via WebSocket
         const token = localStorage.getItem('token');
-        if (!token) return;
+        if (!token) {
+            console.log('NotificationBell: No token found, skipping WebSocket setup');
+            return;
+        }
 
         let userChannel: any = null;
         let notificationsChannel: any = null;
         let userId: number | null = null;
+
+        // Helper function to handle notification received
+        const handleNotificationReceived = (eventData: any, source: string) => {
+            console.log(`Notification received on ${source}:`, eventData);
+            
+            // Filter notifications by user_id if available
+            if (eventData.user_id && userId && eventData.user_id !== userId) {
+                console.log(`Notification filtered out: user_id mismatch (${eventData.user_id} !== ${userId})`);
+                return;
+            }
+
+            // The event data is the notification object directly (from broadcastWith)
+            const notification: Notification = {
+                id: eventData.id,
+                type: eventData.type,
+                title: eventData.title,
+                message: eventData.message,
+                read: eventData.read || false,
+                created_at: eventData.created_at,
+                data: eventData.data,
+            };
+
+            setNotifications(prev => {
+                // Check if notification already exists to avoid duplicates
+                if (prev.some(n => n.id === notification.id)) {
+                    console.log(`Notification ${notification.id} already exists, skipping`);
+                    return prev;
+                }
+                console.log(`Adding new notification ${notification.id} to list`);
+                return [notification, ...prev];
+            });
+
+            // Only increment unread count if notification is not read
+            if (!notification.read) {
+                setUnreadCount(prev => {
+                    const newCount = prev + 1;
+                    console.log(`Unread count updated: ${prev} -> ${newCount}`);
+                    return newCount;
+                });
+            }
+        };
 
         // Fetch user info to get ID and set up listeners
         apiClient.get('/me')
             .then(({ data }) => {
                 userId = data.id;
                 if (!userId) {
-                    console.error('No user ID found');
+                    console.error('NotificationBell: No user ID found');
                     return;
                 }
 
-                console.log('Setting up WebSocket listeners for user:', userId);
+                console.log('NotificationBell: Setting up WebSocket listeners for user:', userId);
 
-                // Listen to user-specific channel
-                userChannel = echo.private(`user.${userId}`);
-                
-                userChannel.subscribed(() => {
-                    console.log('Subscribed to user channel:', `user.${userId}`);
-                });
+                // Wait a bit to ensure Echo is connected
+                const setupChannels = () => {
+                    // Check if Echo is connected
+                    if (!isEchoConnected()) {
+                        console.warn('NotificationBell: Echo not connected yet, retrying in 500ms...');
+                        setTimeout(setupChannels, 500);
+                        return;
+                    }
 
-                userChannel.error((error: any) => {
-                    console.error('Error subscribing to user channel:', error);
-                    console.error('Error details:', JSON.stringify(error, null, 2));
-                });
+                    try {
+                        console.log('NotificationBell: Echo is connected, setting up channels');
+                        // Listen to user-specific channel
+                        userChannel = echo.private(`user.${userId}`);
+                        
+                        userChannel.subscribed(() => {
+                            console.log('NotificationBell: Subscribed to user channel:', `user.${userId}`);
+                        });
 
-                userChannel.listen('.notification.created', (eventData: any) => {
-                    console.log('Notification received on user channel:', eventData);
-                    // The event data is the notification object directly (from broadcastWith)
-                    const notification: Notification = {
-                        id: eventData.id,
-                        type: eventData.type,
-                        title: eventData.title,
-                        message: eventData.message,
-                        read: eventData.read || false,
-                        created_at: eventData.created_at,
-                        data: eventData.data,
-                    };
-                    setUnreadCount(prev => prev + 1);
-                    setNotifications(prev => {
-                        // Check if notification already exists to avoid duplicates
-                        if (prev.some(n => n.id === notification.id)) {
-                            return prev;
-                        }
-                        return [notification, ...prev];
-                    });
-                });
+                        userChannel.error((error: any) => {
+                            console.error('NotificationBell: Error subscribing to user channel:', error);
+                            console.error('NotificationBell: Error details:', JSON.stringify(error, null, 2));
+                        });
 
-                // Listen to general notifications channel
-                notificationsChannel = echo.private('notifications');
-                
-                notificationsChannel.subscribed(() => {
-                    console.log('Subscribed to notifications channel');
-                });
+                        // Try both event name formats
+                        // Format 1: with dot prefix (Laravel Echo namespace)
+                        userChannel.listen('.notification.created', (eventData: any) => {
+                            handleNotificationReceived(eventData, 'user channel (dot format)');
+                        });
 
-                notificationsChannel.error((error: any) => {
-                    console.error('Error subscribing to notifications channel:', error);
-                    console.error('Error details:', JSON.stringify(error, null, 2));
-                });
+                        // Format 2: without dot prefix (direct event name)
+                        userChannel.listen('notification.created', (eventData: any) => {
+                            handleNotificationReceived(eventData, 'user channel (direct format)');
+                        });
 
-                notificationsChannel.listen('.notification.created', (eventData: any) => {
-                    console.log('Notification received on notifications channel:', eventData);
-                    // The event data is the notification object directly (from broadcastWith)
-                    const notification: Notification = {
-                        id: eventData.id,
-                        type: eventData.type,
-                        title: eventData.title,
-                        message: eventData.message,
-                        read: eventData.read || false,
-                        created_at: eventData.created_at,
-                        data: eventData.data,
-                    };
-                    // Only add if it's for the current user or if it's a general notification
-                    // Note: user_id is not in the broadcast data, so we'll accept all from this channel
-                    setUnreadCount(prev => prev + 1);
-                    setNotifications(prev => {
-                        // Check if notification already exists to avoid duplicates
-                        if (prev.some(n => n.id === notification.id)) {
-                            return prev;
-                        }
-                        return [notification, ...prev];
-                    });
-                });
+                        // Also listen to App.Models.User channel format
+                        const appUserChannel = echo.private(`App.Models.User.${userId}`);
+                        appUserChannel.subscribed(() => {
+                            console.log('NotificationBell: Subscribed to App.Models.User channel:', `App.Models.User.${userId}`);
+                        });
+                        appUserChannel.listen('.notification.created', (eventData: any) => {
+                            handleNotificationReceived(eventData, 'App.Models.User channel');
+                        });
+                        appUserChannel.listen('notification.created', (eventData: any) => {
+                            handleNotificationReceived(eventData, 'App.Models.User channel (direct)');
+                        });
+
+                        // Listen to general notifications channel
+                        notificationsChannel = echo.private('notifications');
+                        
+                        notificationsChannel.subscribed(() => {
+                            console.log('NotificationBell: Subscribed to notifications channel');
+                        });
+
+                        notificationsChannel.error((error: any) => {
+                            console.error('NotificationBell: Error subscribing to notifications channel:', error);
+                            console.error('NotificationBell: Error details:', JSON.stringify(error, null, 2));
+                        });
+
+                        notificationsChannel.listen('.notification.created', (eventData: any) => {
+                            handleNotificationReceived(eventData, 'notifications channel (dot format)');
+                        });
+
+                        notificationsChannel.listen('notification.created', (eventData: any) => {
+                            handleNotificationReceived(eventData, 'notifications channel (direct format)');
+                        });
+                    } catch (error) {
+                        console.error('NotificationBell: Error setting up channels:', error);
+                    }
+                };
+
+                // Try to setup immediately, but also retry after a short delay
+                setupChannels();
+                setTimeout(setupChannels, 1000);
             })
             .catch((error) => {
-                console.error('Error fetching user info for WebSocket:', error);
+                console.error('NotificationBell: Error fetching user info for WebSocket:', error);
             });
 
         return () => {
             // Clean up listeners
+            console.log('NotificationBell: Cleaning up WebSocket listeners');
             if (userChannel) {
-                userChannel.stopListening('.notification.created');
+                try {
+                    userChannel.stopListening('.notification.created');
+                    userChannel.stopListening('notification.created');
+                } catch (e) {
+                    console.warn('NotificationBell: Error stopping user channel listeners:', e);
+                }
                 if (userId) {
-                    echo.leave(`user.${userId}`);
+                    try {
+                        echo.leave(`user.${userId}`);
+                        echo.leave(`App.Models.User.${userId}`);
+                    } catch (e) {
+                        console.warn('NotificationBell: Error leaving user channels:', e);
+                    }
                 }
             }
             if (notificationsChannel) {
-                notificationsChannel.stopListening('.notification.created');
-                echo.leave('notifications');
+                try {
+                    notificationsChannel.stopListening('.notification.created');
+                    notificationsChannel.stopListening('notification.created');
+                    echo.leave('notifications');
+                } catch (e) {
+                    console.warn('NotificationBell: Error cleaning up notifications channel:', e);
+                }
             }
         };
     }, []); // Empty dependency array - only run once on mount

@@ -94,11 +94,9 @@ class ComputerController extends Controller
         $this->authorize('computers.view');
 
         // Optimized: Eager load relationships to avoid N+1 queries
+        // Note: Activities are now loaded separately via getActivities endpoint
         return $computer->load([
             'lab:id,name,description',
-            'activities' => function ($query) {
-                $query->latest()->limit(20);
-            },
         ]);
     }
 
@@ -127,6 +125,38 @@ class ComputerController extends Controller
         $softwares = $query->orderBy('name')->paginate($perPage);
 
         return $softwares;
+    }
+
+    /**
+     * Get paginated activities for a computer
+     */
+    public function getActivities(Request $request, Computer $computer)
+    {
+        $this->authorize('computers.view');
+
+        $query = $computer->activities();
+
+        // Search
+        if ($search = $request->query('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('description', 'like', "%{$search}%")
+                    ->orWhere('type', 'like', "%{$search}%");
+            });
+        }
+
+        // Filter by type
+        if ($type = $request->query('type')) {
+            $query->where('type', $type);
+        }
+
+        // Pagination
+        $perPage = $request->query('per_page', 20);
+        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
+
+        // Get paginated results ordered by latest first
+        $activities = $query->orderBy('created_at', 'desc')->paginate($perPage);
+
+        return $activities;
     }
 
     public function update(Request $request, Computer $computer)
@@ -162,6 +192,60 @@ class ComputerController extends Controller
         $computer->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Store metrics from agent
+     */
+    public function storeMetrics(Request $request, Computer $computer, \App\Services\AlertService $alertService)
+    {
+        $validated = $request->validate([
+            'cpu_usage_percent' => 'required|numeric',
+            'memory_usage_percent' => 'required|numeric',
+            'memory_total_gb' => 'nullable|numeric',
+            'memory_free_gb' => 'nullable|numeric',
+            'disk_usage' => 'nullable|array',
+            'network_stats' => 'nullable|array',
+            'uptime_seconds' => 'nullable|integer',
+            'processes_count' => 'nullable|integer',
+        ]);
+
+        $validated['recorded_at'] = now();
+
+        // Store metric
+        $computer->metrics()->create($validated);
+
+        // Update computer last seen
+        $computer->touch();
+
+        // Create activity for heartbeat (lighter than full report)
+        // Optionally, we can skip creating an activity for every metric push to save DB space
+        // Or just create one every X minutes.
+        // For now, let's assume metrics are sent every minute, so activity log might be too noisy.
+        // We will rely on metrics table for history.
+
+        // However, AlertService expects an activity with payload for "metrics" type currently.
+        // Let's create a transient activity object or update AlertService to look at metrics table.
+        // Updating AlertService is better. But for now, let's create a lightweight activity.
+
+        $computer->activities()->create([
+            'type' => 'metrics',
+            'description' => 'Métricas de sistema recebidas',
+            'payload' => $validated,
+        ]);
+
+        // Process alerts
+        $alertService->processComputer($computer);
+
+        return response()->json(['message' => 'Metrics stored']);
+    }
+
+    public function getMetrics(Request $request, Computer $computer)
+    {
+        $limit = $request->query('limit', 20);
+        $metrics = $computer->metrics()->orderBy('recorded_at', 'desc')->limit($limit)->get();
+
+        return response()->json($metrics);
     }
 
     /**

@@ -53,4 +53,14 @@ class Computer extends Model
     {
         return $this->hasMany(ComputerActivity::class);
     }
+
+    public function metrics()
+    {
+        return $this->hasMany(ComputerMetric::class);
+    }
+
+    public function commands()
+    {
+        return $this->hasMany(ComputerCommand::class);
+    }
 }

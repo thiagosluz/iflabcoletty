@@ -3,6 +3,7 @@ import apiClient from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Monitor, Activity, Server, Cpu, MemoryStick, HardDrive, Package } from 'lucide-react';
 import echo from '@/lib/echo';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 interface HardwareAverages {
     cpu?: {
@@ -37,40 +38,50 @@ interface Stats {
     os_distribution?: OSDistribution[];
 }
 
+interface HistoryPoint {
+    hour: string;
+    avg_cpu: number;
+    avg_memory: number;
+}
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+
 export default function Dashboard() {
     const [stats, setStats] = useState<Stats | null>(null);
+    const [history, setHistory] = useState<HistoryPoint[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchData = async () => {
+        try {
+            const [statsRes, historyRes] = await Promise.all([
+                apiClient.get('/dashboard/stats'),
+                apiClient.get('/dashboard/history')
+            ]);
+            setStats(statsRes.data);
+            setHistory(historyRes.data.map((h: any) => ({
+                ...h,
+                avg_cpu: parseFloat(h.avg_cpu),
+                avg_memory: parseFloat(h.avg_memory),
+                hour: new Date(h.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            })));
+        } catch (error) {
+            console.error("Falha ao buscar dados do dashboard", error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const { data } = await apiClient.get('/dashboard/stats');
-                setStats(data);
-            } catch (error) {
-                console.error("Falha ao buscar estatísticas do dashboard", error);
-            }
-        };
-
-        fetchStats();
+        fetchData();
 
         // Listen for real-time updates via WebSocket
         const token = localStorage.getItem('token');
         if (token) {
             const dashboardChannel = echo.private('dashboard');
             
-            // Listen for computer status changes
-            dashboardChannel.listen('.computer.status.changed', (data: any) => {
-                fetchStats(); // Refresh stats when computer status changes
-            });
-
-            // Listen for software installation/removal
-            dashboardChannel.listen('.software.installed', (data: any) => {
-                fetchStats(); // Refresh stats when software changes
-            });
-
-            // Listen for hardware alerts
-            dashboardChannel.listen('.hardware.alert', (data: any) => {
-                fetchStats(); // Refresh stats when hardware alert occurs
-            });
+            dashboardChannel.listen('.computer.status.changed', () => fetchData());
+            dashboardChannel.listen('.software.installed', () => fetchData());
+            dashboardChannel.listen('.hardware.alert', () => fetchData());
 
             return () => {
                 echo.leave('dashboard');
@@ -78,12 +89,25 @@ export default function Dashboard() {
         }
     }, []);
 
-    if (!stats) return <div>Carregando dashboard...</div>;
+    if (loading || !stats) {
+        return (
+            <div className="flex justify-center items-center h-screen">
+                <div className="text-gray-500">Carregando dashboard...</div>
+            </div>
+        );
+    }
+
+    // Prepare data for Pie Chart (OS Distribution)
+    const pieData = stats.os_distribution?.map(os => ({
+        name: `${os.system} ${os.release}`,
+        value: os.count
+    })) || [];
 
     return (
         <div className="space-y-6">
             <h2 className="text-3xl font-bold tracking-tight">Visão Geral do Dashboard</h2>
 
+            {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -130,116 +154,141 @@ export default function Dashboard() {
                 </Card>
             </div>
 
-            {/* Hardware Averages */}
+            {/* Charts Row */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+                {/* Usage History Chart */}
+                <Card className="col-span-4">
+                    <CardHeader>
+                        <CardTitle>Histórico de Uso (Média 24h)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pl-2">
+                        <div className="h-[300px] w-full min-h-[300px]">
+                            {history.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={history}
+                                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
+                                                <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                                            </linearGradient>
+                                            <linearGradient id="colorMem" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
+                                                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <XAxis dataKey="hour" />
+                                        <YAxis />
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <Tooltip />
+                                        <Area type="monotone" dataKey="avg_cpu" stroke="#8884d8" fillOpacity={1} fill="url(#colorCpu)" name="CPU (%)" />
+                                        <Area type="monotone" dataKey="avg_memory" stroke="#82ca9d" fillOpacity={1} fill="url(#colorMem)" name="Memória (%)" />
+                                        <Legend />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-gray-500">
+                                    Sem dados históricos suficientes
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* OS Distribution Pie Chart */}
+                <Card className="col-span-3">
+                    <CardHeader>
+                        <CardTitle>Distribuição de SO</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="h-[300px] w-full min-h-[300px]">
+                            {pieData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={pieData}
+                                            cx="50%"
+                                            cy="50%"
+                                            labelLine={false}
+                                            outerRadius={80}
+                                            fill="#8884d8"
+                                            dataKey="value"
+                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        >
+                                            {pieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-gray-500">
+                                    Sem dados de SO
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Hardware Stats */}
             {stats.hardware_averages && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold">Médias de Configuração (Todos os Laboratórios)</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* CPU */}
-                            {stats.hardware_averages.cpu && (
-                                <div className="border-l-4 border-blue-500 pl-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Cpu className="h-5 w-5 text-blue-500" />
-                                        <h3 className="text-sm font-medium text-gray-700">CPU</h3>
-                                    </div>
-                                    <dl className="space-y-1">
-                                        <div className="flex justify-between">
-                                            <dt className="text-sm text-gray-500">Núcleos Físicos (média):</dt>
-                                            <dd className="text-sm text-gray-900 font-medium">
-                                                {stats.hardware_averages.cpu.avg_physical_cores?.toFixed(2) || 'N/A'}
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <dt className="text-sm text-gray-500">Núcleos Lógicos (média):</dt>
-                                            <dd className="text-sm text-gray-900 font-medium">
-                                                {stats.hardware_averages.cpu.avg_logical_cores?.toFixed(2) || 'N/A'}
-                                            </dd>
-                                        </div>
-                                    </dl>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">Média CPU (Cores)</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Físicos</span>
+                                    <span className="font-bold">{stats.hardware_averages.cpu?.avg_physical_cores?.toFixed(1)}</span>
                                 </div>
-                            )}
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Lógicos</span>
+                                    <span className="font-bold">{stats.hardware_averages.cpu?.avg_logical_cores?.toFixed(1)}</span>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">Média RAM</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-between items-center">
+                                <span className="text-2xl font-bold">{stats.hardware_averages.memory?.avg_total_gb?.toFixed(1)} GB</span>
+                                <MemoryStick className="h-4 w-4 text-green-500" />
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                            {/* Memory */}
-                            {stats.hardware_averages.memory && (
-                                <div className="border-l-4 border-green-500 pl-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <MemoryStick className="h-5 w-5 text-green-500" />
-                                        <h3 className="text-sm font-medium text-gray-700">Memória</h3>
-                                    </div>
-                                    <dl className="space-y-1">
-                                        <div className="flex justify-between">
-                                            <dt className="text-sm text-gray-500">Total (média):</dt>
-                                            <dd className="text-sm text-gray-900 font-medium">
-                                                {stats.hardware_averages.memory.avg_total_gb?.toFixed(2) || 'N/A'} GB
-                                            </dd>
-                                        </div>
-                                    </dl>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">Média Disco</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Total</span>
+                                    <span className="font-bold">{stats.hardware_averages.disk?.avg_total_gb?.toFixed(0)} GB</span>
                                 </div>
-                            )}
-
-                            {/* Disk */}
-                            {stats.hardware_averages.disk && (
-                                <div className="border-l-4 border-purple-500 pl-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <HardDrive className="h-5 w-5 text-purple-500" />
-                                        <h3 className="text-sm font-medium text-gray-700">Armazenamento</h3>
-                                    </div>
-                                    <dl className="space-y-1">
-                                        <div className="flex justify-between">
-                                            <dt className="text-sm text-gray-500">Total (média):</dt>
-                                            <dd className="text-sm text-gray-900 font-medium">
-                                                {stats.hardware_averages.disk.avg_total_gb?.toFixed(2) || 'N/A'} GB
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <dt className="text-sm text-gray-500">Usado (média):</dt>
-                                            <dd className="text-sm text-gray-900">
-                                                {stats.hardware_averages.disk.avg_used_gb?.toFixed(2) || 'N/A'} GB
-                                            </dd>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <dt className="text-sm text-gray-500">Uso médio:</dt>
-                                            <dd className="text-sm text-gray-900 font-medium">
-                                                {stats.hardware_averages.disk.avg_usage_percent?.toFixed(1) || 'N/A'}%
-                                            </dd>
-                                        </div>
-                                    </dl>
+                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                    <div 
+                                        className="bg-purple-600 h-2.5 rounded-full" 
+                                        style={{ width: `${stats.hardware_averages.disk?.avg_usage_percent || 0}%` }}
+                                    ></div>
                                 </div>
-                            )}
-                        </div>
-                        {stats.hardware_averages.computers_with_hardware_info && (
-                            <p className="text-xs text-gray-500 mt-4">
-                                Baseado em {stats.hardware_averages.computers_with_hardware_info} computador(es) com informações de hardware
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* OS Distribution */}
-            {stats.os_distribution && stats.os_distribution.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg font-semibold">Distribuição de Sistemas Operacionais</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {stats.os_distribution.map((os, index) => (
-                                <div key={index} className="border border-gray-200 rounded-lg p-4">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h3 className="text-sm font-semibold text-gray-900">{os.system}</h3>
-                                        <Server className="h-4 w-4 text-gray-500" />
-                                    </div>
-                                    <p className="text-xs text-gray-500 mb-2">Versão: {os.release}</p>
-                                    <p className="text-sm font-medium text-blue-600">{os.count} computador(es)</p>
+                                <div className="text-xs text-right text-gray-500">
+                                    {stats.hardware_averages.disk?.avg_usage_percent?.toFixed(1)}% Usado
                                 </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             )}
         </div>
     );

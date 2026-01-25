@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/auth';
 import { Button } from '@/components/ui/button';
 import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database, Users, Shield, AlertTriangle, Settings } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
+import { GlobalSearch } from '@/components/GlobalSearch';
 
 export default function DashboardLayout() {
     const { isAuthenticated, logout, checkAuth } = useAuthStore();
@@ -87,7 +88,10 @@ export default function DashboardLayout() {
 
             {/* Main Content */}
             <main className="flex-1 p-8">
-                <div className="mb-4 flex justify-end">
+                <div className="mb-4 flex justify-between items-center gap-4">
+                    <div className="flex-1 max-w-xl">
+                        <GlobalSearch />
+                    </div>
                     <NotificationBell />
                 </div>
                 <Outlet />

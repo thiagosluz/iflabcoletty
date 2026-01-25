@@ -4,6 +4,7 @@ import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/use-toast';
 import { 
     ChevronLeft, 
     ChevronRight, 
@@ -14,8 +15,39 @@ import {
     HardDrive, 
     MemoryStick,
     Activity,
-    Server
+    Server,
+    MoreVertical,
+    Power,
+    RotateCw,
+    MessageSquare,
+    Zap
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 interface HardwareAverages {
     cpu?: {
@@ -108,6 +140,12 @@ export default function LabDetails() {
     const [softwarePerPage, setSoftwarePerPage] = useState(20);
     const [softwarePagination, setSoftwarePagination] = useState<PaginationMeta | null>(null);
     const [loadingSoftwares, setLoadingSoftwares] = useState(false);
+    
+    // Actions state
+    const [isLabMessageOpen, setIsLabMessageOpen] = useState(false);
+    const [labMessageText, setLabMessageText] = useState('');
+    const [confirmAction, setConfirmAction] = useState<{ command: string, title: string, description: string } | null>(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         if (id) {
@@ -201,6 +239,26 @@ export default function LabDetails() {
         }
     };
 
+    const handleLabCommand = async (command: string, params: any = {}) => {
+        if (!id) return;
+        try {
+            await apiClient.post(`/labs/${id}/commands`, { command, parameters: params });
+            toast({
+                title: 'Comando enviado',
+                description: `Comando enviado para todos os computadores do laboratório.`,
+            });
+            setIsLabMessageOpen(false);
+            setLabMessageText('');
+            setConfirmAction(null);
+        } catch (error: any) {
+            toast({
+                title: 'Erro',
+                description: error.response?.data?.message || 'Falha ao enviar comando.',
+                variant: 'destructive',
+            });
+        }
+    };
+
     const handleComputerSearchChange = (value: string) => {
         setComputerSearch(value);
         setComputerCurrentPage(1);
@@ -262,6 +320,73 @@ export default function LabDetails() {
                     <p className="text-sm text-gray-500 mt-1">
                         Criado em: {new Date(lab.created_at).toLocaleString('pt-BR')}
                     </p>
+                </div>
+                
+                <div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                Ações em Massa <MoreVertical className="ml-2 h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setConfirmAction({ command: 'shutdown', title: 'Desligar Laboratório', description: 'Isso enviará um comando para desligar TODOS os computadores deste laboratório imediatamente.' })} className="text-red-600 focus:text-red-600">
+                                <Power className="mr-2 h-4 w-4" /> Desligar Todos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setConfirmAction({ command: 'restart', title: 'Reiniciar Laboratório', description: 'Isso enviará um comando para reiniciar TODOS os computadores deste laboratório.' })}>
+                                <RotateCw className="mr-2 h-4 w-4" /> Reiniciar Todos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleLabCommand('wol')}>
+                                <Zap className="mr-2 h-4 w-4" /> Acordar Todos (WoL)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setIsLabMessageOpen(true)}>
+                                <MessageSquare className="mr-2 h-4 w-4" /> Enviar Mensagem
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Confirmation Dialog */}
+                    <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>{confirmAction?.title}</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    {confirmAction?.description}
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction 
+                                    onClick={() => confirmAction && handleLabCommand(confirmAction.command)}
+                                    className={confirmAction?.command === 'shutdown' ? 'bg-red-600 hover:bg-red-700' : ''}
+                                >
+                                    Confirmar
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+
+                    {/* Message Dialog */}
+                    <Dialog open={isLabMessageOpen} onOpenChange={setIsLabMessageOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Enviar Mensagem para o Laboratório</DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4">
+                                <Label htmlFor="lab-message" className="mb-2 block">Mensagem</Label>
+                                <Input
+                                    id="lab-message"
+                                    value={labMessageText}
+                                    onChange={(e) => setLabMessageText(e.target.value)}
+                                    placeholder="Ex: O laboratório será fechado em 10 minutos."
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsLabMessageOpen(false)}>Cancelar</Button>
+                                <Button onClick={() => handleLabCommand('message', { message: labMessageText })}>Enviar</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </div>
 
