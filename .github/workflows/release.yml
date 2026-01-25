@@ -14,12 +14,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necessário para gerar release notes completos
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ github.ref_name }}  # Usa o nome da tag
+          name: Release ${{ github.ref_name }}  # Título da release
           generate_release_notes: true
           draft: false
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # O GITHUB_TOKEN é automático, não precisa do env
