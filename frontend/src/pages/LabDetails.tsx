@@ -5,14 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
-import { 
-    ChevronLeft, 
-    ChevronRight, 
-    Search, 
-    Package, 
-    Monitor, 
-    Cpu, 
-    HardDrive, 
+import {
+    ChevronLeft,
+    ChevronRight,
+    Search,
+    Package,
+    Monitor,
+    Cpu,
+    HardDrive,
     MemoryStick,
     Activity,
     Server,
@@ -20,32 +20,33 @@ import {
     Power,
     RotateCw,
     MessageSquare,
-    Zap
+    Zap,
+    Terminal
 } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogFooter,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 
@@ -123,7 +124,7 @@ export default function LabDetails() {
     const [lab, setLab] = useState<Lab | null>(null);
     const [stats, setStats] = useState<LabStats | null>(null);
     const [loading, setLoading] = useState(true);
-    
+
     // Computers state
     const [computers, setComputers] = useState<Computer[]>([]);
     const [computerSearch, setComputerSearch] = useState('');
@@ -132,7 +133,7 @@ export default function LabDetails() {
     const [computerPagination, setComputerPagination] = useState<PaginationMeta | null>(null);
     const [computerStatusFilter, setComputerStatusFilter] = useState<string>('all');
     const [loadingComputers, setLoadingComputers] = useState(false);
-    
+
     // Softwares state
     const [softwares, setSoftwares] = useState<Software[]>([]);
     const [softwareSearch, setSoftwareSearch] = useState('');
@@ -140,10 +141,12 @@ export default function LabDetails() {
     const [softwarePerPage, setSoftwarePerPage] = useState(20);
     const [softwarePagination, setSoftwarePagination] = useState<PaginationMeta | null>(null);
     const [loadingSoftwares, setLoadingSoftwares] = useState(false);
-    
+
     // Actions state
     const [isLabMessageOpen, setIsLabMessageOpen] = useState(false);
     const [labMessageText, setLabMessageText] = useState('');
+    const [isTerminalDialogOpen, setIsTerminalDialogOpen] = useState(false);
+    const [terminalCommand, setTerminalCommand] = useState('');
     const [confirmAction, setConfirmAction] = useState<{ command: string, title: string, description: string } | null>(null);
     const { toast } = useToast();
 
@@ -180,7 +183,7 @@ export default function LabDetails() {
 
     const fetchComputers = async () => {
         if (!id) return;
-        
+
         try {
             setLoadingComputers(true);
             const params = new URLSearchParams();
@@ -212,7 +215,7 @@ export default function LabDetails() {
 
     const fetchSoftwares = async () => {
         if (!id) return;
-        
+
         try {
             setLoadingSoftwares(true);
             const params = new URLSearchParams();
@@ -321,7 +324,7 @@ export default function LabDetails() {
                         Criado em: {new Date(lab.created_at).toLocaleString('pt-BR')}
                     </p>
                 </div>
-                
+
                 <div>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -342,6 +345,9 @@ export default function LabDetails() {
                             <DropdownMenuItem onClick={() => setIsLabMessageOpen(true)}>
                                 <MessageSquare className="mr-2 h-4 w-4" /> Enviar Mensagem
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setIsTerminalDialogOpen(true)} className="text-yellow-600 focus:text-yellow-700">
+                                <Terminal className="mr-2 h-4 w-4" /> Terminal em Massa
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
 
@@ -356,7 +362,7 @@ export default function LabDetails() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction 
+                                <AlertDialogAction
                                     onClick={() => confirmAction && handleLabCommand(confirmAction.command)}
                                     className={confirmAction?.command === 'shutdown' ? 'bg-red-600 hover:bg-red-700' : ''}
                                 >
@@ -384,6 +390,55 @@ export default function LabDetails() {
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setIsLabMessageOpen(false)}>Cancelar</Button>
                                 <Button onClick={() => handleLabCommand('message', { message: labMessageText })}>Enviar</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* Terminal Dialog */}
+                    <Dialog open={isTerminalDialogOpen} onOpenChange={setIsTerminalDialogOpen}>
+                        <DialogContent className="sm:max-w-2xl">
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <Terminal className="h-5 w-5 text-yellow-600" />
+                                    Terminal em Massa - {lab.name}
+                                </DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4 space-y-4">
+                                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-3 rounded-md text-sm">
+                                    <strong>Atenção:</strong> Este comando será executado em <strong>TODOS</strong> os computadores online deste laboratório com privilégios de sistema. Use com extremo cuidado.
+                                </div>
+                                <div>
+                                    <Label htmlFor="terminal-cmd" className="mb-2 block">Comando (Shell)</Label>
+                                    <div className="flex items-center bg-black rounded-md p-2 border border-gray-700">
+                                        <span className="text-green-500 mr-2 font-mono select-none">$</span>
+                                        <input
+                                            id="terminal-cmd"
+                                            value={terminalCommand}
+                                            onChange={(e) => setTerminalCommand(e.target.value)}
+                                            placeholder="Ex: ipconfig /flushdns"
+                                            className="flex-1 bg-transparent text-gray-200 focus:outline-none font-mono text-sm"
+                                            autoComplete="off"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Digite o comando compatível com o sistema operacional dos computadores alvo.
+                                    </p>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsTerminalDialogOpen(false)}>Cancelar</Button>
+                                <Button
+                                    onClick={() => {
+                                        handleLabCommand('terminal', { cmd_line: terminalCommand });
+                                        setIsTerminalDialogOpen(false);
+                                        setTerminalCommand('');
+                                    }}
+                                    className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                                    disabled={!terminalCommand.trim()}
+                                >
+                                    Executar em Massa
+                                </Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
@@ -707,8 +762,8 @@ export default function LabDetails() {
                     </>
                 ) : (
                     <p className="text-gray-500 text-sm text-center py-8">
-                        {computerSearch || computerStatusFilter !== 'all' 
-                            ? 'Nenhum computador encontrado com os filtros selecionados' 
+                        {computerSearch || computerStatusFilter !== 'all'
+                            ? 'Nenhum computador encontrado com os filtros selecionados'
                             : 'Nenhum computador registrado neste laboratório'}
                     </p>
                 )}
@@ -768,7 +823,7 @@ export default function LabDetails() {
                                         </h3>
                                         <Package className="h-5 w-5 text-blue-500 flex-shrink-0 ml-2" />
                                     </div>
-                                    
+
                                     {software.version && (
                                         <div className="mb-2">
                                             <span className="text-xs text-gray-500">Versão:</span>
@@ -777,7 +832,7 @@ export default function LabDetails() {
                                             </span>
                                         </div>
                                     )}
-                                    
+
                                     {software.vendor && (
                                         <div className="mb-2">
                                             <span className="text-xs text-gray-500">Fabricante:</span>

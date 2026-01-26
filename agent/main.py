@@ -8,6 +8,12 @@ import requests
 import socket
 import psutil
 import config
+import mss
+import mss.tools
+from PIL import Image
+import io
+import base64
+import subprocess
 
 # Setup Logging
 logging.basicConfig(
@@ -129,7 +135,7 @@ class Agent:
         try:
             # For Linux, try dpkg
             if platform.system() == 'Linux':
-                import subprocess
+                # Use subprocess run directly instead of import inside function
                 result = subprocess.run(['dpkg', '-l'], capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
@@ -418,6 +424,49 @@ class Agent:
             logger.error(f"Error sending WoL: {e}")
             raise e
 
+    def get_screenshot(self):
+        """Capture screen, compress and return base64 string."""
+        try:
+            with mss.mss() as sct:
+                # Capture all monitors
+                monitor = sct.monitors[0] # 0 = All monitors combined
+                sct_img = sct.grab(monitor)
+                
+                # Convert to PIL Image
+                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                
+                # Resize if too large (max 1920 width to save bandwidth)
+                if img.width > 1920:
+                    ratio = 1920 / img.width
+                    new_height = int(img.height * ratio)
+                    img = img.resize((1920, new_height), Image.Resampling.LANCZOS)
+                
+                # Compress to JPEG
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=60)
+                img_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
+                
+                return img_str
+        except Exception as e:
+            logger.error(f"Error taking screenshot: {e}")
+            raise e
+
+    def get_processes(self):
+        """Get list of running processes."""
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
+            try:
+                pinfo = proc.info
+                # Add create_time
+                pinfo['create_time'] = proc.create_time()
+                processes.append(pinfo)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        # Sort by CPU usage and limit to top 100 to avoid huge payload
+        processes.sort(key=lambda p: p['cpu_percent'] or 0, reverse=True)
+        return processes[:100]
+
     def execute_command(self, cmd):
         """Execute a remote command."""
         command_id = cmd['id']
@@ -457,7 +506,9 @@ class Agent:
                     output = "Lock command issued."
                 else:
                     # Try common linux lock commands
-                    os.system("xdg-screensaver lock || gnome-screensaver-command -l")
+                    # Use loginctl if available (systemd)
+                    if os.system("loginctl lock-session") != 0:
+                        os.system("xdg-screensaver lock || gnome-screensaver-command -l")
                     success = True
                     output = "Lock command issued (Linux best effort)."
 
@@ -481,6 +532,58 @@ class Agent:
                     success = False
                     output = "Missing target_mac for WoL"
             
+            elif command_type == 'screenshot':
+                img_data = self.get_screenshot()
+                success = True
+                output = img_data # Returns base64 string
+                
+            elif command_type == 'ps_list':
+                procs = self.get_processes()
+                success = True
+                output = json.dumps(procs) # Returns JSON string
+            
+            elif command_type == 'ps_kill':
+                pid = params.get('pid')
+                if pid:
+                    p = psutil.Process(int(pid))
+                    p.terminate() # Try terminate first
+                    try:
+                        p.wait(timeout=3)
+                    except psutil.TimeoutExpired:
+                        p.kill() # Force kill if needed
+                    success = True
+                    output = f"Process {pid} killed."
+                else:
+                    success = False
+                    output = "Missing PID parameter"
+            
+            elif command_type == 'terminal':
+                cmd_line = params.get('cmd_line')
+                if cmd_line:
+                    try:
+                        # Execute command with shell=True for flexibility
+                        result = subprocess.run(cmd_line, shell=True, capture_output=True, text=True, timeout=30)
+                        
+                        # Combine stdout and stderr
+                        output = result.stdout
+                        if result.stderr:
+                            output += f"\n[STDERR]\n{result.stderr}"
+                            
+                        # If output is empty but command succeeded
+                        if not output and result.returncode == 0:
+                            output = "[Command executed successfully with no output]"
+                            
+                        success = True # Even if stderr exists, execution itself was successful in running
+                    except subprocess.TimeoutExpired:
+                        output = "Command timed out after 30 seconds."
+                        success = False
+                    except Exception as e:
+                        output = str(e)
+                        success = False
+                else:
+                    output = "Missing cmd_line parameter"
+                    success = False
+
             else:
                 output = f"Unknown command: {command_type}"
                 success = False
