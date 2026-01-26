@@ -35,6 +35,7 @@ class ClearQueue extends Command
 
         if ($connection !== 'redis') {
             $this->error("Este comando só funciona com Redis. Conexão atual: {$connection}");
+
             return Command::FAILURE;
         }
 
@@ -44,7 +45,7 @@ class ClearQueue extends Command
         $force = $this->option('force');
 
         // Se nenhuma opção específica foi fornecida, limpar tudo
-        if (!$clearFailed && !$clearPending) {
+        if (! $clearFailed && ! $clearPending) {
             $clearFailed = true;
             $clearPending = true;
         }
@@ -59,7 +60,7 @@ class ClearQueue extends Command
             }
 
             // Verificar status atual
-            $this->info("=== Status Atual da Fila ===");
+            $this->info('=== Status Atual da Fila ===');
 
             if ($clearPending) {
                 $pendingCount = $redis->llen("queues:{$queue}");
@@ -72,19 +73,20 @@ class ClearQueue extends Command
             }
 
             // Confirmar antes de limpar
-            if (!$force) {
-                $confirmMessage = "Tem certeza que deseja limpar ";
+            if (! $force) {
+                $confirmMessage = 'Tem certeza que deseja limpar ';
                 if ($clearPending && $clearFailed) {
-                    $confirmMessage .= "todos os jobs pendentes e falhados";
+                    $confirmMessage .= 'todos os jobs pendentes e falhados';
                 } elseif ($clearPending) {
-                    $confirmMessage .= "todos os jobs pendentes";
+                    $confirmMessage .= 'todos os jobs pendentes';
                 } else {
-                    $confirmMessage .= "todos os jobs falhados";
+                    $confirmMessage .= 'todos os jobs falhados';
                 }
-                $confirmMessage .= "? (yes/no)";
+                $confirmMessage .= '? (yes/no)';
 
-                if (!$this->confirm($confirmMessage, false)) {
+                if (! $this->confirm($confirmMessage, false)) {
                     $this->info('Operação cancelada.');
+
                     return Command::SUCCESS;
                 }
             }
@@ -96,7 +98,7 @@ class ClearQueue extends Command
                 // Limpar fila específica (múltiplos formatos)
                 $queueKeys = [
                     "queues:{$queue}",
-                    "queues:{$queue}:notify"
+                    "queues:{$queue}:notify",
                 ];
 
                 foreach ($queueKeys as $queueKey) {
@@ -113,17 +115,17 @@ class ClearQueue extends Command
                             $this->comment("  Fila '{$queueKey}' já está vazia");
                         }
                     } catch (\Exception $e) {
-                        $this->error("  Erro ao limpar fila '{$queueKey}': " . $e->getMessage());
+                        $this->error("  Erro ao limpar fila '{$queueKey}': ".$e->getMessage());
                     }
                 }
 
                 // Limpar outras filas comuns se não foi especificada
-                if (!$this->option('queue')) {
+                if (! $this->option('queue')) {
                     $otherQueues = ['high', 'low'];
                     foreach ($otherQueues as $otherQueue) {
                         $otherQueueKeys = [
                             "queues:{$otherQueue}",
-                            "queues:{$otherQueue}:notify"
+                            "queues:{$otherQueue}:notify",
                         ];
 
                         foreach ($otherQueueKeys as $queueKey) {
@@ -138,12 +140,12 @@ class ClearQueue extends Command
 
                 // Limpar jobs reservados (que podem estar travados)
                 $reservedPatterns = [
-                    "queues:{$queue}:reserved"
+                    "queues:{$queue}:reserved",
                 ];
 
                 foreach ($reservedPatterns as $pattern) {
                     $reservedKeys = $redis->keys($pattern);
-                    if (!empty($reservedKeys)) {
+                    if (! empty($reservedKeys)) {
                         foreach ($reservedKeys as $key) {
                             $redis->del($key);
                         }
@@ -161,7 +163,7 @@ class ClearQueue extends Command
                     DB::table('failed_jobs')->truncate();
                     $this->info("✓ {$failedCount} jobs falhados removidos do banco de dados");
                 } else {
-                    $this->info("✓ Nenhum job falhado encontrado");
+                    $this->info('✓ Nenhum job falhado encontrado');
                 }
             }
 
@@ -180,7 +182,8 @@ class ClearQueue extends Command
 
             return Command::SUCCESS;
         } catch (\Exception $e) {
-            $this->error("Erro ao limpar fila: " . $e->getMessage());
+            $this->error('Erro ao limpar fila: '.$e->getMessage());
+
             return Command::FAILURE;
         }
     }
