@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schedule;
 
 // Log when console routes are loaded (for debugging scheduler)
 Log::info('Console routes loaded', ['timestamp' => now()->toIso8601String()]);

@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Lab;
 use App\Models\Software;
 use App\Traits\LogsActivity;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
 class LabController extends Controller
@@ -97,12 +99,9 @@ class LabController extends Controller
     {
         $this->authorize('labs.view');
 
-        // Optimized: Load only necessary fields and relationships
-        $lab->load([
-            'computers' => function ($query) {
-                $query->select('id', 'lab_id', 'hostname', 'machine_id', 'hardware_info', 'updated_at', 'created_at');
-            }
-        ]);
+        // Load all computers for stats calculation
+        // Don't use select() to ensure Carbon casts are applied correctly
+        $lab->load('computers');
 
         $computers = $lab->computers;
         $stats = $this->calculateLabStats($computers);
@@ -194,10 +193,10 @@ class LabController extends Controller
         $query = Software::whereHas('computers', function ($q) use ($lab) {
             $q->where('lab_id', $lab->id);
         })->withCount([
-                    'computers' => function ($q) use ($lab) {
-                        $q->where('lab_id', $lab->id);
-                    }
-                ]);
+            'computers' => function ($q) use ($lab) {
+                $q->where('lab_id', $lab->id);
+            },
+        ]);
 
         // Search
         if ($search = $request->query('search')) {
@@ -234,8 +233,25 @@ class LabController extends Controller
         }
 
         // Count online/offline
-        $onlineCount = $computers->filter(function ($computer) {
-            return now()->diffInMinutes($computer->updated_at) < 5;
+        // Use threshold approach for consistency with DashboardController
+        // Always use Brazil/Brasilia timezone
+        $timezone = 'America/Sao_Paulo';
+        $threshold = Carbon::now($timezone)->subMinutes(5);
+
+        $onlineCount = $computers->filter(function ($computer) use ($threshold, $timezone) {
+            // Check if updated_at exists
+            if (! $computer->updated_at) {
+                return false;
+            }
+
+            // Ensure updated_at is treated as Carbon instance with correct timezone
+            // When using select(), Laravel may not apply casts automatically
+            $updatedAt = $computer->updated_at instanceof Carbon
+                ? $computer->updated_at->setTimezone($timezone)
+                : Carbon::parse($computer->updated_at, $timezone);
+
+            // Computer is online if updated_at is greater than or equal to threshold (last 5 minutes)
+            return $updatedAt->gte($threshold);
         })->count();
         $offlineCount = $totalComputers - $onlineCount;
 
@@ -266,7 +282,7 @@ class LabController extends Controller
     private function calculateHardwareAverages($computers)
     {
         $computersWithHardware = $computers->filter(function ($computer) {
-            return !empty($computer->hardware_info);
+            return ! empty($computer->hardware_info);
         });
 
         if ($computersWithHardware->isEmpty()) {
@@ -330,12 +346,12 @@ class LabController extends Controller
         $osCounts = [];
 
         foreach ($computers as $computer) {
-            if (!empty($computer->hardware_info['os']['system'])) {
+            if (! empty($computer->hardware_info['os']['system'])) {
                 $osName = $computer->hardware_info['os']['system'];
                 $osRelease = $computer->hardware_info['os']['release'] ?? 'Desconhecido';
-                $osKey = $osName . ' ' . $osRelease;
+                $osKey = $osName.' '.$osRelease;
 
-                if (!isset($osCounts[$osKey])) {
+                if (! isset($osCounts[$osKey])) {
                     $osCounts[$osKey] = [
                         'system' => $osName,
                         'release' => $osRelease,
@@ -356,7 +372,7 @@ class LabController extends Controller
         $oldValues = $lab->toArray();
 
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255|unique:labs,name,' . $lab->id,
+            'name' => 'sometimes|required|string|max:255|unique:labs,name,'.$lab->id,
             'description' => 'nullable|string',
         ]);
 
@@ -394,7 +410,7 @@ class LabController extends Controller
             content: new OA\JsonContent(
                 required: ['positions'],
                 properties: [
-                    new OA\Property(property: 'positions', type: 'object', example: ['1' => ['x' => 10, 'y' => 20], '2' => ['x' => 50, 'y' => 50]])
+                    new OA\Property(property: 'positions', type: 'object', example: ['1' => ['x' => 10, 'y' => 20], '2' => ['x' => 50, 'y' => 50]]),
                 ]
             )
         ),
@@ -413,13 +429,31 @@ class LabController extends Controller
             'positions.*.y' => 'required|integer|min:0|max:100',
         ]);
 
+        // Get valid computer IDs for this lab to prevent updating computers from other labs
+        $validComputerIds = $lab->computers()->pluck('id')->toArray();
+
+        $updatedCount = 0;
         foreach ($validated['positions'] as $computerId => $pos) {
-            $lab->computers()->where('id', $computerId)->update([
-                'position_x' => $pos['x'],
-                'position_y' => $pos['y'],
-            ]);
+            // Validate that the computer belongs to this lab
+            if (! in_array($computerId, $validComputerIds)) {
+                continue; // Skip invalid computer IDs
+            }
+
+            // Use DB::table() to update without touching updated_at timestamp
+            DB::table('computers')
+                ->where('id', $computerId)
+                ->where('lab_id', $lab->id)
+                ->update([
+                    'position_x' => $pos['x'],
+                    'position_y' => $pos['y'],
+                ]);
+
+            $updatedCount++;
         }
 
-        return response()->json(['message' => 'Posições atualizadas com sucesso']);
+        return response()->json([
+            'message' => "Posições atualizadas com sucesso para {$updatedCount} computador(es)",
+            'updated_count' => $updatedCount,
+        ]);
     }
 }

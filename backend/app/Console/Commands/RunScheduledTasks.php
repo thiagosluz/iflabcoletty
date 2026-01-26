@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class RunScheduledTasks extends Command
 {
@@ -30,7 +30,7 @@ class RunScheduledTasks extends Command
         // Force timezone to America/Sao_Paulo to ensure correct time comparison
         $timezone = config('app.timezone', 'America/Sao_Paulo');
         date_default_timezone_set($timezone);
-        
+
         // Log entry point to verify scheduler is calling this command
         $logNow = Carbon::now($timezone);
         Log::info('RunScheduledTasks command executed', [
@@ -45,12 +45,13 @@ class RunScheduledTasks extends Command
         $currentDay = $now->dayOfWeek; // 0=Sunday, 6=Saturday
         $currentDate = $now->toDateString();
 
-        $this->info("=== Checking scheduled tasks at {$currentTime} (Day: {$currentDay}, Date: {$currentDate}, Timezone: " . config('app.timezone') . ") ===");
+        $this->info("=== Checking scheduled tasks at {$currentTime} (Day: {$currentDay}, Date: {$currentDate}, Timezone: ".config('app.timezone').') ===');
 
         $tasks = \App\Models\ScheduledTask::where('is_active', true)->get();
 
         if ($tasks->isEmpty()) {
-            $this->info("No active tasks found.");
+            $this->info('No active tasks found.');
+
             return;
         }
 
@@ -58,8 +59,8 @@ class RunScheduledTasks extends Command
 
         foreach ($tasks as $task) {
             $this->info("--- Checking task: {$task->name} (ID: {$task->id}) ---");
-            $this->info("  Frequency: {$task->frequency}, Time: {$task->time}, Active: " . ($task->is_active ? 'Yes' : 'No'));
-            $this->info("  App Timezone: " . config('app.timezone') . ", Current DateTime: " . $now->toIso8601String());
+            $this->info("  Frequency: {$task->frequency}, Time: {$task->time}, Active: ".($task->is_active ? 'Yes' : 'No'));
+            $this->info('  App Timezone: '.config('app.timezone').', Current DateTime: '.$now->toIso8601String());
 
             // Normalize scheduled time first (needed for comparisons)
             $scheduledTime = $this->normalizeTime($task->time);
@@ -68,23 +69,25 @@ class RunScheduledTasks extends Command
             if ($task->last_run_at) {
                 $lastRunDate = $task->last_run_at->format('Y-m-d');
                 $lastRunTime = $task->last_run_at->format('H:i');
-                
+
                 // If it ran today at the same scheduled time, skip
                 if ($lastRunDate === $currentDate && $lastRunTime === $scheduledTime) {
                     $this->warn("  ⏭ Skipping: Already ran today at {$lastRunTime}");
+
                     continue;
                 }
-                
+
                 $lastRunDiff = $now->diffInMinutes($task->last_run_at);
                 $this->info("  Last run: {$task->last_run_at->format('Y-m-d H:i:s')} ({$lastRunDiff} minutes ago)");
             }
 
             // Check Time - compare normalized times
-            
+
             $this->info("  Scheduled time: {$scheduledTime}, Current time: {$currentTime}");
 
             if ($scheduledTime !== $currentTime) {
                 $this->warn("  ⏭ Skipping: Time mismatch (scheduled: {$scheduledTime}, current: {$currentTime})");
+
                 continue;
             }
 
@@ -94,13 +97,13 @@ class RunScheduledTasks extends Command
 
             if ($task->frequency === 'daily') {
                 $shouldRun = true;
-                $this->info("  ✓ Daily task - should run");
+                $this->info('  ✓ Daily task - should run');
             } elseif ($task->frequency === 'weekly') {
                 $daysOfWeek = $task->days_of_week ?? [];
-                $this->info("  Weekly task - Days: " . json_encode($daysOfWeek) . ", Current day: {$currentDay}");
+                $this->info('  Weekly task - Days: '.json_encode($daysOfWeek).", Current day: {$currentDay}");
                 if (in_array($currentDay, $daysOfWeek)) {
                     $shouldRun = true;
-                    $this->info("  ✓ Current day matches - should run");
+                    $this->info('  ✓ Current day matches - should run');
                 } else {
                     $skipReason = "Current day ({$currentDay}) not in days_of_week";
                 }
@@ -109,7 +112,7 @@ class RunScheduledTasks extends Command
                 $this->info("  Monthly task - Created on day {$createdDay}, Current day: {$now->day}");
                 if ($now->day === $createdDay) {
                     $shouldRun = true;
-                    $this->info("  ✓ Current day matches created day - should run");
+                    $this->info('  ✓ Current day matches created day - should run');
                 } else {
                     $skipReason = "Current day ({$now->day}) doesn't match created day ({$createdDay})";
                 }
@@ -121,26 +124,27 @@ class RunScheduledTasks extends Command
                     $this->info("  Once task - Run date: {$runDateStr}, Current date: {$currentDate}");
                     if ($runDateStr === $currentDate) {
                         $shouldRun = true;
-                        $this->info("  ✓ Current date matches run date - should run");
+                        $this->info('  ✓ Current date matches run date - should run');
                         // Deactivate after run
                         $task->is_active = false;
                     } else {
                         $skipReason = "Current date ({$currentDate}) doesn't match run date ({$runDateStr})";
                     }
                 } else {
-                    $skipReason = "run_at_date is not set";
+                    $skipReason = 'run_at_date is not set';
                 }
             }
 
-            if (!$shouldRun) {
+            if (! $shouldRun) {
                 $this->warn("  ⏭ Skipping: {$skipReason}");
+
                 continue;
             }
 
             // All checks passed - execute the task
-            $this->info("  ▶ Executing task...");
+            $this->info('  ▶ Executing task...');
             $result = $this->executeTask($task, $timezone);
-            
+
             $task->last_run_at = Carbon::now($timezone);
             $task->last_run_status = $result['success'] ? 'success' : 'failed';
             $task->last_run_output = $result['output'];
@@ -153,7 +157,7 @@ class RunScheduledTasks extends Command
             }
         }
 
-        $this->info("=== Finished checking tasks ===");
+        $this->info('=== Finished checking tasks ===');
     }
 
     /**
@@ -166,7 +170,7 @@ class RunScheduledTasks extends Command
             // Handle "22:00:00" or "22:00" format
             return substr($time, 0, 5);
         }
-        
+
         if ($time instanceof \Carbon\Carbon || $time instanceof \DateTime) {
             return $time->format('H:i');
         }
@@ -187,7 +191,7 @@ class RunScheduledTasks extends Command
             } else {
                 return [
                     'success' => false,
-                    'output' => "Laboratório #{$task->target_id} não encontrado"
+                    'output' => "Laboratório #{$task->target_id} não encontrado",
                 ];
             }
         } elseif ($task->target_type === 'App\Models\Computer') {
@@ -197,20 +201,20 @@ class RunScheduledTasks extends Command
             } else {
                 return [
                     'success' => false,
-                    'output' => "Computador #{$task->target_id} não encontrado"
+                    'output' => "Computador #{$task->target_id} não encontrado",
                 ];
             }
         } else {
             return [
                 'success' => false,
-                'output' => "Tipo de alvo inválido: {$task->target_type}"
+                'output' => "Tipo de alvo inválido: {$task->target_type}",
             ];
         }
 
         if ($computers->isEmpty()) {
             return [
                 'success' => false,
-                'output' => "Nenhum computador encontrado para executar a tarefa"
+                'output' => 'Nenhum computador encontrado para executar a tarefa',
             ];
         }
 
@@ -223,30 +227,30 @@ class RunScheduledTasks extends Command
                 // Logic based on RemoteControlController
                 if ($task->command === 'wol') {
                     // WOL Logic is complex, requires proxy. For now, we'll try to use the same logic
-                    $this->warn("WoL via Schedule - usando lógica simplificada");
-                    
+                    $this->warn('WoL via Schedule - usando lógica simplificada');
+
                     // Try to find a proxy computer in the same lab
                     $proxy = \App\Models\Computer::where('lab_id', $computer->lab_id)
                         ->where('id', '!=', $computer->id)
                         ->where('updated_at', '>=', Carbon::now($timezone)->subMinutes(5))
                         ->first();
 
-                    if (!$proxy) {
+                    if (! $proxy) {
                         throw new \Exception('Nenhum computador online no laboratório para servir de proxy WoL');
                     }
 
                     // Get MAC from hardware_info
                     $mac = null;
-                    if (!empty($computer->hardware_info['network'])) {
+                    if (! empty($computer->hardware_info['network'])) {
                         foreach ($computer->hardware_info['network'] as $iface) {
-                            if (!empty($iface['mac'])) {
+                            if (! empty($iface['mac'])) {
                                 $mac = $iface['mac'];
                                 break;
                             }
                         }
                     }
 
-                    if (!$mac) {
+                    if (! $mac) {
                         throw new \Exception('Computador alvo não possui endereço MAC registrado');
                     }
 
@@ -272,7 +276,7 @@ class RunScheduledTasks extends Command
                 }
             } catch (\Exception $e) {
                 $errorCount++;
-                $errorMsg = "Falha em {$computer->hostname}: " . $e->getMessage();
+                $errorMsg = "Falha em {$computer->hostname}: ".$e->getMessage();
                 $errors[] = $errorMsg;
                 $this->error($errorMsg);
             }
@@ -280,14 +284,14 @@ class RunScheduledTasks extends Command
 
         $total = $computers->count();
         $output = "Executado em {$successCount}/{$total} computador(es)";
-        
+
         if ($errorCount > 0) {
-            $output .= ". Erros: " . implode('; ', $errors);
+            $output .= '. Erros: '.implode('; ', $errors);
         }
 
         return [
             'success' => $successCount > 0,
-            'output' => $output
+            'output' => $output,
         ];
     }
 }

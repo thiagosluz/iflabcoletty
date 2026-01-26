@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '@/lib/axios';
+import { isComputerOnline } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -50,12 +51,8 @@ interface PaginationMeta {
     to: number;
 }
 
-const isOnline = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = (now.getTime() - date.getTime()) / 1000 / 60; // minutes
-    return diff < 5;
-};
+// Use shared utility function for consistency
+const isOnline = (dateString: string) => isComputerOnline(dateString, 5);
 
 const computerSchema = z.object({
     lab_id: z.string().min(1, "Laboratório é obrigatório"),

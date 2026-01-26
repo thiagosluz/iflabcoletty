@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Monitor, Save, Edit3, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import apiClient from '@/lib/axios';
+import { isComputerOnline } from '@/lib/utils';
 
 interface Computer {
     id: number;
@@ -26,7 +27,7 @@ interface Computer {
 interface LabMapProps {
     labId: string;
     computers: Computer[];
-    onUpdate: () => void;
+    onUpdate: () => Promise<Computer[]> | void;
 }
 
 function DraggableComputer({ computer, isEditing, style }: { computer: Computer, isEditing: boolean, style: any }) {
@@ -36,11 +37,8 @@ function DraggableComputer({ computer, isEditing, style }: { computer: Computer,
         disabled: !isEditing,
     });
 
-    const isOnline = (dateStr: string) => {
-        const date = new Date(dateStr);
-        const now = new Date();
-        return (now.getTime() - date.getTime()) / 1000 / 60 < 5;
-    };
+    // Use shared utility function for consistency
+    const isOnline = (dateStr: string) => isComputerOnline(dateStr, 5);
 
     const finalStyle = {
         ...style,
@@ -139,7 +137,12 @@ export default function LabMap({ labId, computers: initialComputers, onUpdate }:
             });
             setIsEditing(false);
             setHasChanges(false);
-            onUpdate(); // Refetch parent data
+            
+            // Refetch parent data and update local state with fresh data
+            const updatedComputers = await onUpdate();
+            if (updatedComputers && Array.isArray(updatedComputers)) {
+                setComputers(updatedComputers);
+            }
         } catch (error) {
             toast({
                 title: "Erro ao salvar",

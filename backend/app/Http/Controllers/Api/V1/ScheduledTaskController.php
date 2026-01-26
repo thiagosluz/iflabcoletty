@@ -151,12 +151,12 @@ class ScheduledTaskController extends Controller
         $scheduledTask->update([
             'last_run_at' => now(),
             'last_run_status' => $result['success'] ? 'success' : 'failed',
-            'last_run_output' => $result['output']
+            'last_run_output' => $result['output'],
         ]);
 
         return response()->json([
             'message' => $result['success'] ? 'Tarefa executada com sucesso' : 'Falha ao executar tarefa',
-            'task' => $scheduledTask->fresh()
+            'task' => $scheduledTask->fresh(),
         ]);
     }
 
@@ -173,7 +173,7 @@ class ScheduledTaskController extends Controller
             } else {
                 return [
                     'success' => false,
-                    'output' => "Laboratório #{$task->target_id} não encontrado"
+                    'output' => "Laboratório #{$task->target_id} não encontrado",
                 ];
             }
         } elseif ($task->target_type === 'App\Models\Computer') {
@@ -183,20 +183,20 @@ class ScheduledTaskController extends Controller
             } else {
                 return [
                     'success' => false,
-                    'output' => "Computador #{$task->target_id} não encontrado"
+                    'output' => "Computador #{$task->target_id} não encontrado",
                 ];
             }
         } else {
             return [
                 'success' => false,
-                'output' => "Tipo de alvo inválido: {$task->target_type}"
+                'output' => "Tipo de alvo inválido: {$task->target_type}",
             ];
         }
 
         if ($computers->isEmpty()) {
             return [
                 'success' => false,
-                'output' => "Nenhum computador encontrado para executar a tarefa"
+                'output' => 'Nenhum computador encontrado para executar a tarefa',
             ];
         }
 
@@ -213,22 +213,22 @@ class ScheduledTaskController extends Controller
                         ->where('updated_at', '>=', now()->subMinutes(5))
                         ->first();
 
-                    if (!$proxy) {
+                    if (! $proxy) {
                         throw new \Exception('Nenhum computador online no laboratório para servir de proxy WoL');
                     }
 
                     // Get MAC from hardware_info
                     $mac = null;
-                    if (!empty($computer->hardware_info['network'])) {
+                    if (! empty($computer->hardware_info['network'])) {
                         foreach ($computer->hardware_info['network'] as $iface) {
-                            if (!empty($iface['mac'])) {
+                            if (! empty($iface['mac'])) {
                                 $mac = $iface['mac'];
                                 break;
                             }
                         }
                     }
 
-                    if (!$mac) {
+                    if (! $mac) {
                         throw new \Exception('Computador alvo não possui endereço MAC registrado');
                     }
 
@@ -254,21 +254,21 @@ class ScheduledTaskController extends Controller
                 }
             } catch (\Exception $e) {
                 $errorCount++;
-                $errorMsg = "Falha em {$computer->hostname}: " . $e->getMessage();
+                $errorMsg = "Falha em {$computer->hostname}: ".$e->getMessage();
                 $errors[] = $errorMsg;
             }
         }
 
         $total = $computers->count();
         $output = "Executado em {$successCount}/{$total} computador(es)";
-        
+
         if ($errorCount > 0) {
-            $output .= ". Erros: " . implode('; ', $errors);
+            $output .= '. Erros: '.implode('; ', $errors);
         }
 
         return [
             'success' => $successCount > 0,
-            'output' => $output
+            'output' => $output,
         ];
     }
 }

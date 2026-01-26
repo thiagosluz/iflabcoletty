@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '@/lib/axios';
+import { isComputerOnline } from '@/lib/utils';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -491,7 +492,8 @@ export default function ComputerDetails() {
         );
     }
 
-    const isOnline = new Date().getTime() - new Date(computer.updated_at).getTime() < 5 * 60 * 1000;
+    // Use shared utility function for consistency
+    const isOnline = isComputerOnline(computer.updated_at, 5);
     const latestMetric = metrics.length > 0 ? metrics[0] : null;
 
     return (

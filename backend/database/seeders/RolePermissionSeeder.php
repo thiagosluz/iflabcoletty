@@ -178,14 +178,14 @@ class RolePermissionSeeder extends Seeder
 
         // Atribuir role admin ao usuário admin existente (se existir)
         $adminUser = User::where('email', 'admin@iflab.com')->first();
-        if ($adminUser && !$adminUser->hasRole('admin')) {
+        if ($adminUser && ! $adminUser->hasRole('admin')) {
             $adminUser->assignRole('admin');
         }
 
         if ($this->command) {
             $this->command->info('Roles e permissions criados com sucesso!');
             $this->command->info('Roles: admin, technician, professor, viewer');
-            $this->command->info('Total de permissions: ' . Permission::count());
+            $this->command->info('Total de permissions: '.Permission::count());
         }
     }
 }

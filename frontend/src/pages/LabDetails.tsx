@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '@/lib/axios';
+import { isComputerOnline } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -217,6 +218,29 @@ export default function LabDetails() {
         }
     };
 
+    const handleMapUpdate = async () => {
+        // Fetch all computers for the map (without pagination/filters)
+        if (!id) return [];
+        
+        try {
+            const response = await apiClient.get(`/labs/${id}/computers?per_page=1000`);
+            const allComputers = response.data.data || [];
+            
+            // Also update the main computers state if we're on page 1 and no filters
+            if (computerCurrentPage === 1 && !computerSearch && computerStatusFilter === 'all') {
+                setComputers(allComputers);
+            }
+            
+            // Recalculate stats
+            await fetchLabDetails();
+            
+            return allComputers;
+        } catch (error) {
+            console.error('Falha ao atualizar dados do mapa:', error);
+            return [];
+        }
+    };
+
     const fetchSoftwares = async () => {
         if (!id) return;
 
@@ -286,11 +310,9 @@ export default function LabDetails() {
         setSoftwareCurrentPage(1);
     };
 
+    // Use shared utility function for consistency
     const isOnline = (updatedAt: string) => {
-        const date = new Date(updatedAt);
-        const now = new Date();
-        const diff = (now.getTime() - date.getTime()) / 1000 / 60; // minutes
-        return diff < 5;
+        return isComputerOnline(updatedAt, 5);
     };
 
     if (loading) {
@@ -938,7 +960,7 @@ export default function LabDetails() {
                         <LabMap
                             labId={lab.id.toString()}
                             computers={computers}
-                            onUpdate={fetchComputers}
+                            onUpdate={handleMapUpdate}
                         />
                     )}
                 </TabsContent>
