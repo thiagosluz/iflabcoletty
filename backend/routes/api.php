@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AgentController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\ComputerController;
+use App\Http\Controllers\Api\V1\HealthCheckController;
 use App\Http\Controllers\Api\V1\LabController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PublicController;
@@ -137,12 +139,20 @@ Route::prefix('v1')->group(function () {
         Route::get('/computers/{computer}/commands/pending', [RemoteControlController::class, 'pending']);
         Route::put('/commands/{command}/status', [RemoteControlController::class, 'updateStatus']);
 
+        // Agent Updates
+        Route::get('/agent/check-update', [AgentController::class, 'checkUpdate']);
+        Route::get('/agent/download/{version}', [AgentController::class, 'downloadUpdate']);
+        Route::get('/agent/version-info', [AgentController::class, 'versionInfo']);
+
         // Software
         Route::apiResource('softwares', SoftwareController::class)->only(['index', 'show']);
 
         // Dashboard
         Route::get('/dashboard/stats', [\App\Http\Controllers\Api\V1\DashboardController::class, 'stats']);
         Route::get('/dashboard/history', [\App\Http\Controllers\Api\V1\DashboardController::class, 'history']);
+
+        // System Health
+        Route::get('/system/health', [HealthCheckController::class, 'health']);
 
         // Reports
         Route::post('/reports/labs', [ReportController::class, 'exportLabs']);

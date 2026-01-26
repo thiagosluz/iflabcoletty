@@ -19,6 +19,7 @@ import Notifications from './pages/Notifications';
 import Alerts from './pages/Alerts';
 import AlertRules from './pages/AlertRules';
 import PublicComputerView from './pages/PublicComputerView';
+import SystemHealth from './pages/SystemHealth';
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="alerts" element={<Alerts />} />
           <Route path="alert-rules" element={<AlertRules />} />
+          <Route path="system-health" element={<SystemHealth />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
