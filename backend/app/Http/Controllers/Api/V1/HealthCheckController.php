@@ -92,7 +92,7 @@ class HealthCheckController extends Controller
                 $sizeResult = DB::selectOne($sizeQuery);
 
                 $sizeBytes = (int) (($sizeResult->size_mb ?? 0) * 1024 * 1024);
-                $metrics['size'] = ($sizeResult->size_gb ?? 0).' GB';
+                $metrics['size'] = ($sizeResult->size_gb ?? 0) . ' GB';
                 $metrics['size_bytes'] = $sizeBytes;
 
                 // Get table sizes
@@ -108,7 +108,7 @@ class HealthCheckController extends Controller
                 $metrics['top_tables'] = array_map(function ($table) {
                     return [
                         'name' => $table->name,
-                        'size' => $table->size_mb.' MB',
+                        'size' => $table->size_mb . ' MB',
                         'size_bytes' => (int) $table->size_bytes,
                     ];
                 }, $tables);
@@ -201,7 +201,7 @@ class HealthCheckController extends Controller
                 $logSize = $this->getDirectorySize($logPath);
 
                 // Get recent log files
-                $files = glob($logPath.'/*.log');
+                $files = glob($logPath . '/*.log');
                 usort($files, function ($a, $b) {
                     return filemtime($b) - filemtime($a);
                 });
@@ -278,20 +278,26 @@ class HealthCheckController extends Controller
                     $metrics['connected'] = true;
 
                     // Get queue sizes (if using Redis)
+                    // Check both standard Laravel queue keys and database queue keys
                     $queues = ['default', 'high', 'low'];
                     $queueSizes = [];
+                    $totalPending = 0;
 
                     foreach ($queues as $queue) {
                         try {
                             $size = $redis->llen("queues:{$queue}");
-                            $queueSizes[$queue] = $size;
+                            $notifySize = $redis->llen("queues:{$queue}:notify");
+
+                            $totalQueueSize = $size + $notifySize;
+                            $queueSizes[$queue] = $totalQueueSize;
+                            $totalPending += $totalQueueSize;
                         } catch (\Exception $e) {
                             $queueSizes[$queue] = 0;
                         }
                     }
 
                     $metrics['queue_sizes'] = $queueSizes;
-                    $metrics['total_pending'] = array_sum($queueSizes);
+                    $metrics['total_pending'] = $totalPending;
                 } catch (\Exception $e) {
                     $metrics['error'] = $e->getMessage();
                 }
@@ -353,7 +359,7 @@ class HealthCheckController extends Controller
 
             // Test cache
             try {
-                $testKey = 'health_check_'.time();
+                $testKey = 'health_check_' . time();
                 Cache::put($testKey, 'test', 60);
                 $metrics['working'] = Cache::get($testKey) === 'test';
                 Cache::forget($testKey);
@@ -444,7 +450,7 @@ class HealthCheckController extends Controller
 
         // Check queue connection
         $queueMetrics = $this->getQueueMetrics();
-        if (! $queueMetrics['connected']) {
+        if (!$queueMetrics['connected']) {
             $alerts[] = [
                 'level' => 'warning',
                 'type' => 'queue',
@@ -501,7 +507,7 @@ class HealthCheckController extends Controller
     {
         $size = 0;
 
-        if (! is_dir($directory)) {
+        if (!is_dir($directory)) {
             return 0;
         }
 
@@ -534,6 +540,6 @@ class HealthCheckController extends Controller
             $bytes /= 1024;
         }
 
-        return round($bytes, $precision).' '.$units[$i];
+        return round($bytes, $precision) . ' ' . $units[$i];
     }
 }
