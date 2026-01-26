@@ -51,7 +51,7 @@ Route::prefix('v1')->group(function () {
             Log::warning('Broadcasting auth no bearer token found');
         }
 
-        if (! $user) {
+        if (!$user) {
             Log::warning('Broadcasting auth failed: User not found or unauthenticated');
 
             return response()->json(['message' => 'Unauthenticated.'], 401);
@@ -74,7 +74,7 @@ Route::prefix('v1')->group(function () {
         ]);
 
         // Ensure channel_name and socket_id are present
-        if (! $request->has('channel_name') || ! $request->has('socket_id')) {
+        if (!$request->has('channel_name') || !$request->has('socket_id')) {
             Log::error('Broadcasting auth missing required parameters', [
                 'has_channel_name' => $request->has('channel_name'),
                 'has_socket_id' => $request->has('socket_id'),
@@ -136,6 +136,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/computers/{computer}/commands', [RemoteControlController::class, 'store']);
         Route::post('/computers/bulk-commands', [RemoteControlController::class, 'storeBulk']);
         Route::post('/labs/{lab}/commands', [RemoteControlController::class, 'storeLab']);
+        Route::post('/labs/{lab}/positions', [LabController::class, 'updatePositions']);
         Route::get('/computers/{computer}/commands/pending', [RemoteControlController::class, 'pending']);
         Route::put('/commands/{command}/status', [RemoteControlController::class, 'updateStatus']);
 
@@ -209,6 +210,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/alert-rules', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesStore']);
         Route::put('/alert-rules/{rule}', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesUpdate']);
         Route::delete('/alert-rules/{rule}', [\App\Http\Controllers\Api\V1\AlertController::class, 'rulesDestroy']);
+
+        // Scheduled Tasks
+        Route::post('/scheduled-tasks/{scheduledTask}/execute', [\App\Http\Controllers\Api\V1\ScheduledTaskController::class, 'execute']);
+        Route::apiResource('scheduled-tasks', \App\Http\Controllers\Api\V1\ScheduledTaskController::class);
     });
 });
 

@@ -14,7 +14,10 @@ class Computer extends Model
         'machine_id',
         'public_hash',
         'hostname',
+        'hostname',
         'hardware_info',
+        'position_x',
+        'position_y',
     ];
 
     protected $casts = [

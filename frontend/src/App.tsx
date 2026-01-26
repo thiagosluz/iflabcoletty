@@ -10,6 +10,7 @@ import LabDetails from './pages/LabDetails';
 import Computers from './pages/Computers';
 import ComputerDetails from './pages/ComputerDetails';
 import Softwares from './pages/Softwares';
+import Schedules from '@/pages/Schedules';
 import AuditLogs from './pages/AuditLogs';
 import ReportJobs from './pages/ReportJobs';
 import Backups from './pages/Backups';
@@ -37,6 +38,7 @@ function App() {
           <Route path="computers" element={<Computers />} />
           <Route path="computers/:id" element={<ComputerDetails />} />
           <Route path="softwares" element={<Softwares />} />
+          <Route path="schedules" element={<Schedules />} />
           <Route path="audit-logs" element={<AuditLogs />} />
           <Route path="report-jobs" element={<ReportJobs />} />
           <Route path="backups" element={<Backups />} />

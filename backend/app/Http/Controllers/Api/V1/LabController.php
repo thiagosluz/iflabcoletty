@@ -98,9 +98,11 @@ class LabController extends Controller
         $this->authorize('labs.view');
 
         // Optimized: Load only necessary fields and relationships
-        $lab->load(['computers' => function ($query) {
-            $query->select('id', 'lab_id', 'hostname', 'machine_id', 'hardware_info', 'updated_at', 'created_at');
-        }]);
+        $lab->load([
+            'computers' => function ($query) {
+                $query->select('id', 'lab_id', 'hostname', 'machine_id', 'hardware_info', 'updated_at', 'created_at');
+            }
+        ]);
 
         $computers = $lab->computers;
         $stats = $this->calculateLabStats($computers);
@@ -191,9 +193,11 @@ class LabController extends Controller
         // Get unique softwares from all computers in the lab
         $query = Software::whereHas('computers', function ($q) use ($lab) {
             $q->where('lab_id', $lab->id);
-        })->withCount(['computers' => function ($q) use ($lab) {
-            $q->where('lab_id', $lab->id);
-        }]);
+        })->withCount([
+                    'computers' => function ($q) use ($lab) {
+                        $q->where('lab_id', $lab->id);
+                    }
+                ]);
 
         // Search
         if ($search = $request->query('search')) {
@@ -262,7 +266,7 @@ class LabController extends Controller
     private function calculateHardwareAverages($computers)
     {
         $computersWithHardware = $computers->filter(function ($computer) {
-            return ! empty($computer->hardware_info);
+            return !empty($computer->hardware_info);
         });
 
         if ($computersWithHardware->isEmpty()) {
@@ -326,12 +330,12 @@ class LabController extends Controller
         $osCounts = [];
 
         foreach ($computers as $computer) {
-            if (! empty($computer->hardware_info['os']['system'])) {
+            if (!empty($computer->hardware_info['os']['system'])) {
                 $osName = $computer->hardware_info['os']['system'];
                 $osRelease = $computer->hardware_info['os']['release'] ?? 'Desconhecido';
-                $osKey = $osName.' '.$osRelease;
+                $osKey = $osName . ' ' . $osRelease;
 
-                if (! isset($osCounts[$osKey])) {
+                if (!isset($osCounts[$osKey])) {
                     $osCounts[$osKey] = [
                         'system' => $osName,
                         'release' => $osRelease,
@@ -352,7 +356,7 @@ class LabController extends Controller
         $oldValues = $lab->toArray();
 
         $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255|unique:labs,name,'.$lab->id,
+            'name' => 'sometimes|required|string|max:255|unique:labs,name,' . $lab->id,
             'description' => 'nullable|string',
         ]);
 
@@ -378,5 +382,44 @@ class LabController extends Controller
         $lab->delete();
 
         return response()->noContent();
+    }
+
+    #[OA\Post(
+        path: '/api/v1/labs/{id}/positions',
+        summary: 'Atualizar posições dos computadores no mapa',
+        tags: ['Laboratórios'],
+        security: [['sanctum' => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['positions'],
+                properties: [
+                    new OA\Property(property: 'positions', type: 'object', example: ['1' => ['x' => 10, 'y' => 20], '2' => ['x' => 50, 'y' => 50]])
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Posições atualizadas'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+        ]
+    )]
+    public function updatePositions(Request $request, Lab $lab)
+    {
+        $this->authorize('labs.update');
+
+        $validated = $request->validate([
+            'positions' => 'required|array',
+            'positions.*.x' => 'required|integer|min:0|max:100',
+            'positions.*.y' => 'required|integer|min:0|max:100',
+        ]);
+
+        foreach ($validated['positions'] as $computerId => $pos) {
+            $lab->computers()->where('id', $computerId)->update([
+                'position_x' => $pos['x'],
+                'position_y' => $pos['y'],
+            ]);
+        }
+
+        return response()->json(['message' => 'Posições atualizadas com sucesso']);
     }
 }

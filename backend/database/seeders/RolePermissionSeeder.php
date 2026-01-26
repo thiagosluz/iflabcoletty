@@ -85,6 +85,12 @@ class RolePermissionSeeder extends Seeder
             // Remote Control
             'remote-control.view',
             'remote-control.execute',
+
+            // Scheduled Tasks (Automation)
+            'scheduled-tasks.view',
+            'scheduled-tasks.create',
+            'scheduled-tasks.update',
+            'scheduled-tasks.delete',
         ];
 
         // Criar permissões com guard_name explícito
@@ -105,17 +111,42 @@ class RolePermissionSeeder extends Seeder
 
         // Permissões para técnico (pode gerenciar tudo exceto usuários e roles)
         $technicianRole->givePermissionTo([
-            'labs.view', 'labs.create', 'labs.update', 'labs.delete',
-            'computers.view', 'computers.create', 'computers.update', 'computers.delete',
-            'softwares.view', 'softwares.create', 'softwares.update', 'softwares.delete',
-            'dashboard.view', 'system-health.view',
-            'reports.view', 'reports.create', 'reports.download',
+            'labs.view',
+            'labs.create',
+            'labs.update',
+            'labs.delete',
+            'computers.view',
+            'computers.create',
+            'computers.update',
+            'computers.delete',
+            'softwares.view',
+            'softwares.create',
+            'softwares.update',
+            'softwares.delete',
+            'dashboard.view',
+            'system-health.view',
+            'reports.view',
+            'reports.create',
+            'reports.download',
             'audit-logs.view',
-            'backups.view', 'backups.create', 'backups.delete', 'backups.restore',
-            'notifications.view', 'notifications.update',
-            'alerts.view', 'alerts.resolve',
-            'alert-rules.view', 'alert-rules.create', 'alert-rules.update', 'alert-rules.delete',
-            'remote-control.view', 'remote-control.execute',
+            'backups.view',
+            'backups.create',
+            'backups.delete',
+            'backups.restore',
+            'notifications.view',
+            'notifications.update',
+            'alerts.view',
+            'alerts.resolve',
+            'alert-rules.view',
+            'alert-rules.create',
+            'alert-rules.update',
+            'alert-rules.delete',
+            'remote-control.view',
+            'remote-control.execute',
+            'scheduled-tasks.view',
+            'scheduled-tasks.create',
+            'scheduled-tasks.update',
+            'scheduled-tasks.delete',
         ]);
 
         // Permissões para professor (pode visualizar e criar relatórios)
@@ -124,8 +155,12 @@ class RolePermissionSeeder extends Seeder
             'computers.view',
             'softwares.view',
             'dashboard.view',
-            'reports.view', 'reports.create', 'reports.download',
-            'notifications.view', 'notifications.update', 'notifications.delete',
+            'reports.view',
+            'reports.create',
+            'reports.download',
+            'notifications.view',
+            'notifications.update',
+            'notifications.delete',
             'alerts.view', // Apenas visualizar alertas
         ]);
 
@@ -136,19 +171,21 @@ class RolePermissionSeeder extends Seeder
             'softwares.view',
             'dashboard.view',
             'reports.view',
-            'notifications.view', 'notifications.update', 'notifications.delete',
+            'notifications.view',
+            'notifications.update',
+            'notifications.delete',
         ]);
 
         // Atribuir role admin ao usuário admin existente (se existir)
         $adminUser = User::where('email', 'admin@iflab.com')->first();
-        if ($adminUser && ! $adminUser->hasRole('admin')) {
+        if ($adminUser && !$adminUser->hasRole('admin')) {
             $adminUser->assignRole('admin');
         }
 
         if ($this->command) {
             $this->command->info('Roles e permissions criados com sucesso!');
             $this->command->info('Roles: admin, technician, professor, viewer');
-            $this->command->info('Total de permissions: '.Permission::count());
+            $this->command->info('Total de permissions: ' . Permission::count());
         }
     }
 }
