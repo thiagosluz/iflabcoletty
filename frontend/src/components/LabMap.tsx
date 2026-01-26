@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
     DndContext,
     useDraggable,
-    useDroppable,
     MouseSensor,
     TouchSensor,
     useSensor,
@@ -30,7 +29,7 @@ interface LabMapProps {
     onUpdate: () => Promise<Computer[]> | void;
 }
 
-function DraggableComputer({ computer, isEditing, style }: { computer: Computer, isEditing: boolean, style: any }) {
+function DraggableComputer({ computer, isEditing, style }: { computer: Computer, isEditing: boolean, style: React.CSSProperties }) {
     const { attributes, listeners, setNodeRef, transform } = useDraggable({
         id: computer.id,
         data: computer,
@@ -45,7 +44,7 @@ function DraggableComputer({ computer, isEditing, style }: { computer: Computer,
         left: `${computer.position_x || 0}%`,
         top: `${computer.position_y || 0}%`,
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-        position: 'absolute' as 'absolute',
+        position: 'absolute' as const,
     };
 
     return (
@@ -143,7 +142,7 @@ export default function LabMap({ labId, computers: initialComputers, onUpdate }:
             if (updatedComputers && Array.isArray(updatedComputers)) {
                 setComputers(updatedComputers);
             }
-        } catch (error) {
+        } catch {
             toast({
                 title: "Erro ao salvar",
                 description: "Não foi possível salvar o layout.",

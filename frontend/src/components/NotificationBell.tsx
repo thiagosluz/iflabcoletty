@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Bell, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,9 +29,29 @@ export default function NotificationBell() {
     const [isOpen, setIsOpen] = useState(false);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        fetchUnreadCount();
+    // Define functions using useCallback to avoid dependency issues
+    const fetchUnreadCount = useCallback(async () => {
+        try {
+            const { data } = await apiClient.get('/notifications/unread-count');
+            setUnreadCount(data.count || 0);
+        } catch (error) {
+            console.error('Erro ao buscar contagem de notificações:', error);
+        }
     }, []);
+
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const { data } = await apiClient.get('/notifications?per_page=10');
+            setNotifications(data.data || []);
+        } catch (error) {
+            console.error('Erro ao buscar notificações:', error);
+        }
+    }, []);
+
+    // Fetch unread count on mount
+    useEffect(() => {
+        void fetchUnreadCount();
+    }, [fetchUnreadCount]);
 
     useEffect(() => {
         // Listen for new notifications via WebSocket
@@ -208,27 +228,9 @@ export default function NotificationBell() {
 
     useEffect(() => {
         if (isOpen) {
-            fetchNotifications();
+            void fetchNotifications();
         }
-    }, [isOpen]);
-
-    const fetchUnreadCount = async () => {
-        try {
-            const { data } = await apiClient.get('/notifications/unread-count');
-            setUnreadCount(data.count || 0);
-        } catch (error) {
-            console.error('Erro ao buscar contagem de notificações:', error);
-        }
-    };
-
-    const fetchNotifications = async () => {
-        try {
-            const { data } = await apiClient.get('/notifications?per_page=10');
-            setNotifications(data.data || []);
-        } catch (error) {
-            console.error('Erro ao buscar notificações:', error);
-        }
-    };
+    }, [isOpen, fetchNotifications]);
 
     const handleMarkAsRead = async (notification: Notification) => {
         if (notification.read) return;
