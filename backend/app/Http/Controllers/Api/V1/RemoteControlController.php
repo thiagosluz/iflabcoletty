@@ -77,7 +77,7 @@ class RemoteControlController extends Controller
                 }
                 $count++;
             } catch (\Exception $e) {
-                $errors[] = "Falha em {$computer->hostname}: " . $e->getMessage();
+                $errors[] = "Falha em {$computer->hostname}: ".$e->getMessage();
             }
         }
 
@@ -133,22 +133,22 @@ class RemoteControlController extends Controller
             ->where('updated_at', '>=', Carbon::now()->subMinutes(5))
             ->first();
 
-        if (!$proxy) {
+        if (! $proxy) {
             throw new \Exception('Nenhum computador online no laboratório para servir de proxy WoL.');
         }
 
         // Get Target MAC from hardware_info
         $mac = null;
-        if (!empty($target->hardware_info['network'])) {
+        if (! empty($target->hardware_info['network'])) {
             foreach ($target->hardware_info['network'] as $iface) {
-                if (!empty($iface['mac'])) {
+                if (! empty($iface['mac'])) {
                     $mac = $iface['mac'];
                     break; // Use the first MAC found
                 }
             }
         }
 
-        if (!$mac) {
+        if (! $mac) {
             throw new \Exception('Computador alvo não possui endereço MAC registrado.');
         }
 
@@ -180,7 +180,7 @@ class RemoteControlController extends Controller
         // Este método é chamado pelo agente para atualizar o status do comando
         // Não requer permissão específica, mas requer autenticação
         // O agente usa o token de autenticação do computador
-        if (!auth()->check()) {
+        if (! auth()->check()) {
             return response()->json(['message' => 'Não autenticado'], 401);
         }
 
