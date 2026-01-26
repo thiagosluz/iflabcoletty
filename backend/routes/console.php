@@ -1,6 +1,10 @@
 <?php
 
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Facades\Log;
+
+// Log when console routes are loaded (for debugging scheduler)
+Log::info('Console routes loaded', ['timestamp' => now()->toIso8601String()]);
 
 // Schedule daily database backup at 2 AM
 Schedule::command('backup:database --clean')
@@ -27,3 +31,20 @@ Schedule::command('alerts:check')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Run scheduled tasks every minute
+// Note: Removed withoutOverlapping temporarily to avoid lock issues
+Schedule::command('app:run-scheduled-tasks')
+    ->everyMinute()
+    ->timezone('America/Sao_Paulo')
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/scheduled-tasks.log'))
+    ->before(function () {
+        Log::info('About to run app:run-scheduled-tasks', ['time' => now()->toIso8601String()]);
+    })
+    ->onSuccess(function () {
+        Log::info('Scheduled task command executed successfully');
+    })
+    ->onFailure(function () {
+        Log::error('Scheduled task command failed');
+    });

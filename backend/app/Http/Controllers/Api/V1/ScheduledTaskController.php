@@ -145,32 +145,130 @@ class ScheduledTaskController extends Controller
     {
         $this->authorize('scheduled-tasks.update');
 
-        // Logic to execute the task immediately
-        // In a real scenario, this would likely dispatch a job or run the command directly
-        // For now, we simulate execution and update status
-
-        try {
-            // Mock execution success
-            $success = true;
-            $output = "Command '{$scheduledTask->command}' sent successfully to {$scheduledTask->target_type} #{$scheduledTask->target_id}";
-
-            // You might want to actually hook into your existing command handling service here
-            // e.g., CommandService::dispatch($scheduledTask->command, $scheduledTask->target);
-
-        } catch (\Exception $e) {
-            $success = false;
-            $output = $e->getMessage();
-        }
+        // Execute the task immediately using the same logic as the scheduled command
+        $result = $this->executeTask($scheduledTask);
 
         $scheduledTask->update([
             'last_run_at' => now(),
-            'last_run_status' => $success ? 'success' : 'failed',
-            'last_run_output' => $output
+            'last_run_status' => $result['success'] ? 'success' : 'failed',
+            'last_run_output' => $result['output']
         ]);
 
         return response()->json([
-            'message' => $success ? 'Tarefa executada com sucesso' : 'Falha ao executar tarefa',
-            'task' => $scheduledTask
+            'message' => $result['success'] ? 'Tarefa executada com sucesso' : 'Falha ao executar tarefa',
+            'task' => $scheduledTask->fresh()
         ]);
+    }
+
+    /**
+     * Execute a scheduled task (shared logic between command and controller)
+     */
+    private function executeTask(ScheduledTask $task): array
+    {
+        $computers = collect();
+        if ($task->target_type === 'App\Models\Lab') {
+            $lab = \App\Models\Lab::find($task->target_id);
+            if ($lab) {
+                $computers = $lab->computers;
+            } else {
+                return [
+                    'success' => false,
+                    'output' => "Laboratório #{$task->target_id} não encontrado"
+                ];
+            }
+        } elseif ($task->target_type === 'App\Models\Computer') {
+            $computer = \App\Models\Computer::find($task->target_id);
+            if ($computer) {
+                $computers = collect([$computer]);
+            } else {
+                return [
+                    'success' => false,
+                    'output' => "Computador #{$task->target_id} não encontrado"
+                ];
+            }
+        } else {
+            return [
+                'success' => false,
+                'output' => "Tipo de alvo inválido: {$task->target_type}"
+            ];
+        }
+
+        if ($computers->isEmpty()) {
+            return [
+                'success' => false,
+                'output' => "Nenhum computador encontrado para executar a tarefa"
+            ];
+        }
+
+        $successCount = 0;
+        $errorCount = 0;
+        $errors = [];
+
+        foreach ($computers as $computer) {
+            try {
+                if ($task->command === 'wol') {
+                    // WOL Logic - find proxy computer
+                    $proxy = \App\Models\Computer::where('lab_id', $computer->lab_id)
+                        ->where('id', '!=', $computer->id)
+                        ->where('updated_at', '>=', now()->subMinutes(5))
+                        ->first();
+
+                    if (!$proxy) {
+                        throw new \Exception('Nenhum computador online no laboratório para servir de proxy WoL');
+                    }
+
+                    // Get MAC from hardware_info
+                    $mac = null;
+                    if (!empty($computer->hardware_info['network'])) {
+                        foreach ($computer->hardware_info['network'] as $iface) {
+                            if (!empty($iface['mac'])) {
+                                $mac = $iface['mac'];
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!$mac) {
+                        throw new \Exception('Computador alvo não possui endereço MAC registrado');
+                    }
+
+                    // Create command for the PROXY
+                    $proxy->commands()->create([
+                        'user_id' => $task->user_id,
+                        'command' => 'wol',
+                        'parameters' => [
+                            'target_mac' => $mac,
+                            'target_hostname' => $computer->hostname,
+                        ],
+                        'status' => 'pending',
+                    ]);
+                    $successCount++;
+                } else {
+                    $computer->commands()->create([
+                        'user_id' => $task->user_id,
+                        'command' => $task->command,
+                        'parameters' => $task->command === 'message' ? ['message' => 'Tarefa agendada executada'] : [],
+                        'status' => 'pending',
+                    ]);
+                    $successCount++;
+                }
+            } catch (\Exception $e) {
+                $errorCount++;
+                $errorMsg = "Falha em {$computer->hostname}: " . $e->getMessage();
+                $errors[] = $errorMsg;
+            }
+        }
+
+        $total = $computers->count();
+        $output = "Executado em {$successCount}/{$total} computador(es)";
+        
+        if ($errorCount > 0) {
+            $output .= ". Erros: " . implode('; ', $errors);
+        }
+
+        return [
+            'success' => $successCount > 0,
+            'output' => $output
+        ];
     }
 }
