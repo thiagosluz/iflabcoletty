@@ -322,11 +322,12 @@ export default function ComputerDetails() {
 
             setIsMessageOpen(false);
             setMessageText('');
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
+            const err = error as any;
             toast({
                 title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao enviar comando.',
+                description: err.response?.data?.message || 'Falha ao enviar comando.',
                 variant: 'destructive',
             });
         }
@@ -395,10 +396,7 @@ export default function ComputerDetails() {
         handleCommand('ps_list');
     };
 
-    const killProcess = (pid: number) => {
-        // Confirmation is now handled by UI AlertDialog, but for direct calls:
-        handleCommand('ps_kill', { pid });
-    };
+
 
     const handleTerminalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -450,6 +448,26 @@ export default function ComputerDetails() {
         } catch (error: any) {
             setIsTerminalLoading(false);
             setTerminalHistory(prev => [...prev, { type: 'error', content: error.message || 'Failed to send command', timestamp: new Date() }]);
+        }
+    };
+
+    const handleRotateHash = async () => {
+        if (!id) return;
+        try {
+            const response = await apiClient.post(`/computers/${id}/rotate-hash`);
+            setComputer(prev => prev ? { ...prev, public_hash: response.data.public_hash } : null);
+            toast({
+                title: 'Sucesso',
+                description: 'Link público rotacionado com sucesso. O link anterior foi invalidado.',
+            });
+        } catch (error: unknown) {
+            console.error(error);
+            const err = error as any; // Temporary cast for accessing response
+            toast({
+                title: 'Erro',
+                description: err.response?.data?.message || 'Falha ao rotacionar link público.',
+                variant: 'destructive',
+            });
         }
     };
 
@@ -792,6 +810,29 @@ export default function ComputerDetails() {
                                                 <Copy className="h-4 w-4 mr-2" />
                                                 Copiar
                                             </Button>
+
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="outline" size="sm" className="text-orange-600 border-orange-200 hover:bg-orange-50">
+                                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                                        Rotacionar
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Rotacionar Hash Público?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Isso irá invalidar o link público atual imediatamente. Qualquer pessoa usando o link antigo perderá o acesso.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={handleRotateHash}>
+                                                            Confirmar Rotação
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
                                         </div>
                                     </div>
                                     <div>

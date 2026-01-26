@@ -64,7 +64,7 @@ class ComputerController extends Controller
             ->with('lab:id,name')
             ->first();
 
-        if (! $computer) {
+        if (!$computer) {
             return response()->json([
                 'message' => 'Computador não encontrado',
             ], 404);
@@ -170,7 +170,7 @@ class ComputerController extends Controller
         $validated = $request->validate([
             'lab_id' => 'sometimes|exists:labs,id',
             'hostname' => 'nullable|string',
-            'machine_id' => 'sometimes|string|unique:computers,machine_id,'.$computer->id,
+            'machine_id' => 'sometimes|string|unique:computers,machine_id,' . $computer->id,
             'hardware_info' => 'sometimes|array',
         ]);
 
@@ -355,7 +355,7 @@ class ComputerController extends Controller
             ], 500);
         }
 
-        $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
+        $publicUrl = $frontendUrl . '/public/pc/' . $computer->public_hash;
 
         $builder = new \Endroid\QrCode\Builder\Builder;
         $result = $builder->build(
@@ -407,7 +407,7 @@ class ComputerController extends Controller
 
             // Filter computers that have public_hash
             $computersWithHash = $computers->filter(function ($computer) {
-                return ! empty($computer->public_hash);
+                return !empty($computer->public_hash);
             });
 
             if ($computersWithHash->isEmpty()) {
@@ -422,13 +422,13 @@ class ComputerController extends Controller
                 return $this->exportAsZip($computersWithHash);
             }
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes: '.$e->getMessage(), [
+            \Log::error('Erro ao exportar QR codes: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'request' => $request->all(),
             ]);
 
             return response()->json([
-                'message' => 'Erro ao exportar QR codes: '.$e->getMessage(),
+                'message' => 'Erro ao exportar QR codes: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -443,7 +443,7 @@ class ComputerController extends Controller
             $frontendUrl = config('app.frontend_url');
 
             foreach ($computers as $computer) {
-                $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
+                $publicUrl = $frontendUrl . '/public/pc/' . $computer->public_hash;
 
                 $builder = new \Endroid\QrCode\Builder\Builder;
                 $result = $builder->build(
@@ -474,16 +474,16 @@ class ComputerController extends Controller
                 'totalComputers' => count($qrCodes),
             ]);
 
-            $downloadName = 'qrcodes-'.now()->format('Y-m-d_His').'.pdf';
+            $downloadName = 'qrcodes-' . now()->format('Y-m-d_His') . '.pdf';
 
             return $pdf->download($downloadName);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes como PDF: '.$e->getMessage(), [
+            \Log::error('Erro ao exportar QR codes como PDF: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
-                'message' => 'Erro ao gerar PDF: '.$e->getMessage(),
+                'message' => 'Erro ao gerar PDF: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -496,12 +496,12 @@ class ComputerController extends Controller
         try {
             $zip = new \ZipArchive;
             $timestamp = now()->format('Y-m-d_His');
-            $zipFileName = storage_path('app/temp/qrcodes-'.$timestamp.'.zip');
+            $zipFileName = storage_path('app/temp/qrcodes-' . $timestamp . '.zip');
 
             // Create temp directory if it doesn't exist
             $tempDir = storage_path('app/temp');
-            if (! file_exists($tempDir)) {
-                if (! mkdir($tempDir, 0755, true)) {
+            if (!file_exists($tempDir)) {
+                if (!mkdir($tempDir, 0755, true)) {
                     return response()->json([
                         'message' => 'Não foi possível criar o diretório temporário.',
                     ], 500);
@@ -518,7 +518,7 @@ class ComputerController extends Controller
             $usedFilenames = [];
 
             foreach ($computers as $computer) {
-                $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
+                $publicUrl = $frontendUrl . '/public/pc/' . $computer->public_hash;
 
                 $builder = new \Endroid\QrCode\Builder\Builder;
                 $result = $builder->build(
@@ -531,11 +531,11 @@ class ComputerController extends Controller
                 $baseFilename = ($computer->hostname ?: $computer->machine_id);
                 // Sanitize filename
                 $baseFilename = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseFilename);
-                $filename = $baseFilename.'.png';
+                $filename = $baseFilename . '.png';
                 $counter = 1;
 
                 while (in_array($filename, $usedFilenames)) {
-                    $filename = $baseFilename.'_'.$counter.'.png';
+                    $filename = $baseFilename . '_' . $counter . '.png';
                     $counter++;
                 }
 
@@ -545,23 +545,44 @@ class ComputerController extends Controller
 
             $zip->close();
 
-            if (! file_exists($zipFileName)) {
+            if (!file_exists($zipFileName)) {
                 return response()->json([
                     'message' => 'O arquivo ZIP não foi criado corretamente.',
                 ], 500);
             }
 
-            $downloadName = 'qrcodes-'.$timestamp.'.zip';
+            $downloadName = 'qrcodes-' . $timestamp . '.zip';
 
             return response()->download($zipFileName, $downloadName)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes como ZIP: '.$e->getMessage(), [
+            \Log::error('Erro ao exportar QR codes como ZIP: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
-                'message' => 'Erro ao gerar ZIP: '.$e->getMessage(),
+                'message' => 'Erro ao gerar ZIP: ' . $e->getMessage(),
             ], 500);
         }
+    }
+    /**
+     * Rotate the public hash for a computer
+     */
+    public function rotatePublicHash(Request $request, Computer $computer)
+    {
+        $this->authorize('computers.update');
+
+        $oldValues = $computer->toArray();
+
+        $computer->update([
+            'public_hash' => \Illuminate\Support\Str::uuid(),
+        ]);
+
+        // Log activity
+        $this->logActivity('update', $computer, $oldValues, $computer->toArray());
+
+        return response()->json([
+            'message' => 'Link público atualizado com sucesso',
+            'public_hash' => $computer->public_hash,
+        ]);
     }
 }

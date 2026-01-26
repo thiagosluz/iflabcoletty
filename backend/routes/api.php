@@ -51,7 +51,7 @@ Route::prefix('v1')->group(function () {
             Log::warning('Broadcasting auth no bearer token found');
         }
 
-        if (! $user) {
+        if (!$user) {
             Log::warning('Broadcasting auth failed: User not found or unauthenticated');
 
             return response()->json(['message' => 'Unauthenticated.'], 401);
@@ -74,7 +74,7 @@ Route::prefix('v1')->group(function () {
         ]);
 
         // Ensure channel_name and socket_id are present
-        if (! $request->has('channel_name') || ! $request->has('socket_id')) {
+        if (!$request->has('channel_name') || !$request->has('socket_id')) {
             Log::error('Broadcasting auth missing required parameters', [
                 'has_channel_name' => $request->has('channel_name'),
                 'has_socket_id' => $request->has('socket_id'),
@@ -130,6 +130,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/computers/export-qrcodes', [ComputerController::class, 'exportQrCodes']);
         Route::get('/computers/{computer}/softwares', [ComputerController::class, 'getSoftwares']);
         Route::get('/computers/{computer}/activities', [ComputerController::class, 'getActivities']);
+        Route::post('/computers/{computer}/rotate-hash', [ComputerController::class, 'rotatePublicHash']);
 
         // Remote Control
         Route::get('/computers/{computer}/commands', [RemoteControlController::class, 'index']);
