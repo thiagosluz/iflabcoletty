@@ -105,6 +105,8 @@ class ComputerController extends Controller
      */
     public function getSoftwares(Request $request, Computer $computer)
     {
+        $this->authorize('computers.view');
+
         $query = $computer->softwares();
 
         // Search
@@ -242,6 +244,8 @@ class ComputerController extends Controller
 
     public function getMetrics(Request $request, Computer $computer)
     {
+        $this->authorize('computers.view');
+
         $limit = $request->query('limit', 20);
         $metrics = $computer->metrics()->orderBy('recorded_at', 'desc')->limit($limit)->get();
 
@@ -334,6 +338,8 @@ class ComputerController extends Controller
      */
     public function generateQrCode(Computer $computer)
     {
+        $this->authorize('computers.view');
+
         // Verify computer has public_hash
         if (empty($computer->public_hash)) {
             return response()->json([
@@ -367,6 +373,8 @@ class ComputerController extends Controller
      */
     public function exportQrCodes(Request $request)
     {
+        $this->authorize('computers.view');
+
         $validated = $request->validate([
             'lab_id' => 'nullable|exists:labs,id',
             'format' => 'required|in:pdf,zip',

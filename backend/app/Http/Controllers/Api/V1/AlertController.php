@@ -14,6 +14,8 @@ class AlertController extends Controller
 
     public function index(Request $request)
     {
+        $this->authorize('alerts.view');
+
         $query = Alert::with(['computer', 'rule']);
 
         if ($request->has('status')) {
@@ -33,11 +35,15 @@ class AlertController extends Controller
 
     public function show(Alert $alert)
     {
+        $this->authorize('alerts.view');
+
         return response()->json($alert->load(['computer', 'rule']));
     }
 
     public function resolve(Alert $alert)
     {
+        $this->authorize('alerts.resolve');
+
         $alert->update([
             'status' => 'resolved',
             'resolved_at' => now(),
@@ -48,6 +54,8 @@ class AlertController extends Controller
 
     public function stats()
     {
+        $this->authorize('alerts.view');
+
         return response()->json([
             'total_active' => Alert::active()->count(),
             'by_severity' => Alert::active()->selectRaw('severity, count(*) as count')
@@ -60,11 +68,15 @@ class AlertController extends Controller
 
     public function rulesIndex(Request $request)
     {
+        $this->authorize('alert-rules.view');
+
         return response()->json(AlertRule::with('lab')->paginate(20));
     }
 
     public function rulesStore(Request $request)
     {
+        $this->authorize('alert-rules.create');
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'type' => 'required|string|in:metric,status,software',
@@ -88,6 +100,8 @@ class AlertController extends Controller
 
     public function rulesUpdate(Request $request, AlertRule $rule)
     {
+        $this->authorize('alert-rules.update');
+
         $validator = Validator::make($request->all(), [
             'name' => 'string|max:255',
             'type' => 'string|in:metric,status,software',
@@ -106,6 +120,8 @@ class AlertController extends Controller
 
     public function rulesDestroy(AlertRule $rule)
     {
+        $this->authorize('alert-rules.delete');
+
         $rule->delete();
 
         return response()->json(null, 204);

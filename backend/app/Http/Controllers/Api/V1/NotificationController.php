@@ -32,12 +32,9 @@ class NotificationController extends Controller
     )]
     public function index(Request $request)
     {
+        $this->authorize('notifications.view');
+
         $user = auth()->user();
-
-        if (! $user || ! $user->can('notifications.view')) {
-            return response()->json(['message' => 'Sem permissão para visualizar notificações'], 403);
-        }
-
         $query = $user->notifications();
 
         // Filter by read status
@@ -69,17 +66,9 @@ class NotificationController extends Controller
     )]
     public function unreadCount()
     {
+        $this->authorize('notifications.view');
+
         $user = auth()->user();
-
-        if (! $user) {
-            return response()->json(['message' => 'Não autenticado'], 401);
-        }
-
-        // Check permission using Spatie Permission directly
-        if (! $user->can('notifications.view')) {
-            return response()->json(['message' => 'Sem permissão para visualizar notificações'], 403);
-        }
-
         $count = $user->unreadNotificationsCount();
 
         return response()->json(['count' => $count]);
@@ -102,11 +91,9 @@ class NotificationController extends Controller
     )]
     public function show(Notification $notification)
     {
-        $user = auth()->user();
+        $this->authorize('notifications.view');
 
-        if (! $user || ! $user->can('notifications.view')) {
-            return response()->json(['message' => 'Sem permissão para visualizar notificações'], 403);
-        }
+        $user = auth()->user();
 
         // Ensure user can only access their own notifications
         if ($notification->user_id !== $user->id) {
@@ -133,11 +120,9 @@ class NotificationController extends Controller
     )]
     public function markAsRead(Notification $notification)
     {
-        $user = auth()->user();
+        $this->authorize('notifications.update');
 
-        if (! $user || ! $user->can('notifications.update')) {
-            return response()->json(['message' => 'Sem permissão para atualizar notificações'], 403);
-        }
+        $user = auth()->user();
 
         // Ensure user can only access their own notifications
         if ($notification->user_id !== $user->id) {
@@ -166,11 +151,9 @@ class NotificationController extends Controller
     )]
     public function markAsUnread(Notification $notification)
     {
-        $user = auth()->user();
+        $this->authorize('notifications.update');
 
-        if (! $user || ! $user->can('notifications.update')) {
-            return response()->json(['message' => 'Sem permissão para atualizar notificações'], 403);
-        }
+        $user = auth()->user();
 
         // Ensure user can only access their own notifications
         if ($notification->user_id !== $user->id) {
@@ -231,11 +214,9 @@ class NotificationController extends Controller
     )]
     public function destroy(Notification $notification)
     {
-        $user = auth()->user();
+        $this->authorize('notifications.delete');
 
-        if (! $user || ! $user->can('notifications.delete')) {
-            return response()->json(['message' => 'Sem permissão para excluir notificações'], 403);
-        }
+        $user = auth()->user();
 
         // Ensure user can only delete their own notifications
         if ($notification->user_id !== $user->id) {
@@ -269,12 +250,9 @@ class NotificationController extends Controller
     )]
     public function deleteMultiple(Request $request)
     {
+        $this->authorize('notifications.delete');
+
         $user = auth()->user();
-
-        if (! $user || ! $user->can('notifications.delete')) {
-            return response()->json(['message' => 'Sem permissão para excluir notificações'], 403);
-        }
-
         $validated = $request->validate([
             'ids' => 'required|array',
             'ids.*' => 'required|integer|exists:notifications,id',
@@ -304,12 +282,9 @@ class NotificationController extends Controller
     )]
     public function deleteAll()
     {
+        $this->authorize('notifications.delete');
+
         $user = auth()->user();
-
-        if (! $user || ! $user->can('notifications.delete')) {
-            return response()->json(['message' => 'Sem permissão para excluir notificações'], 403);
-        }
-
         $count = $user->notifications()->count();
         $user->notifications()->delete();
 

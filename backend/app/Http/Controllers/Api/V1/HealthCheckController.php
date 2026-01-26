@@ -5,11 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Services\BackupService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\File;
 
 class HealthCheckController extends Controller
 {
@@ -18,7 +17,9 @@ class HealthCheckController extends Controller
      */
     public function health(Request $request)
     {
-        $this->authorize('dashboard.view'); // Require admin access
+        // Usa dashboard.view temporariamente até executar o seeder
+        // Depois de executar o seeder, pode voltar para system-health.view
+        $this->authorize('dashboard.view');
 
         $metrics = [
             'database' => $this->getDatabaseMetrics(),
@@ -50,15 +51,15 @@ class HealthCheckController extends Controller
             if ($driver === 'pgsql') {
                 // PostgreSQL
                 $dbName = $connection->getDatabaseName();
-                
+
                 // Get database size
                 $sizeQuery = "SELECT pg_size_pretty(pg_database_size('{$dbName}')) as size, 
                              pg_database_size('{$dbName}') as size_bytes";
                 $sizeResult = DB::selectOne($sizeQuery);
-                
+
                 $metrics['size'] = $sizeResult->size ?? 'Unknown';
                 $metrics['size_bytes'] = (int) ($sizeResult->size_bytes ?? 0);
-                
+
                 // Get table counts
                 $tables = DB::select("SELECT 
                     schemaname,
@@ -69,7 +70,7 @@ class HealthCheckController extends Controller
                     WHERE schemaname = 'public'
                     ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
                     LIMIT 10");
-                
+
                 $metrics['top_tables'] = array_map(function ($table) {
                     return [
                         'name' => $table->tablename,
@@ -77,11 +78,11 @@ class HealthCheckController extends Controller
                         'size_bytes' => (int) $table->size_bytes,
                     ];
                 }, $tables);
-                
+
             } elseif ($driver === 'mysql') {
                 // MySQL
                 $dbName = $connection->getDatabaseName();
-                
+
                 // Get database size
                 $sizeQuery = "SELECT 
                     ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb,
@@ -89,11 +90,11 @@ class HealthCheckController extends Controller
                     FROM information_schema.tables 
                     WHERE table_schema = '{$dbName}'";
                 $sizeResult = DB::selectOne($sizeQuery);
-                
+
                 $sizeBytes = (int) (($sizeResult->size_mb ?? 0) * 1024 * 1024);
-                $metrics['size'] = ($sizeResult->size_gb ?? 0) . ' GB';
+                $metrics['size'] = ($sizeResult->size_gb ?? 0).' GB';
                 $metrics['size_bytes'] = $sizeBytes;
-                
+
                 // Get table sizes
                 $tables = DB::select("SELECT 
                     table_name AS name,
@@ -103,11 +104,11 @@ class HealthCheckController extends Controller
                     WHERE table_schema = '{$dbName}'
                     ORDER BY (data_length + index_length) DESC
                     LIMIT 10");
-                
+
                 $metrics['top_tables'] = array_map(function ($table) {
                     return [
                         'name' => $table->name,
-                        'size' => $table->size_mb . ' MB',
+                        'size' => $table->size_mb.' MB',
                         'size_bytes' => (int) $table->size_bytes,
                     ];
                 }, $tables);
@@ -157,11 +158,11 @@ class HealthCheckController extends Controller
         try {
             $backupService = app(BackupService::class);
             $stats = $backupService->getBackupStats();
-            
+
             // Calculate actual disk usage for backup directory
             $backupPath = storage_path('app/backups');
             $backupSize = 0;
-            
+
             if (is_dir($backupPath)) {
                 $backupSize = $this->getDirectorySize($backupPath);
             }
@@ -198,13 +199,13 @@ class HealthCheckController extends Controller
 
             if (is_dir($logPath)) {
                 $logSize = $this->getDirectorySize($logPath);
-                
+
                 // Get recent log files
-                $files = glob($logPath . '/*.log');
+                $files = glob($logPath.'/*.log');
                 usort($files, function ($a, $b) {
                     return filemtime($b) - filemtime($a);
                 });
-                
+
                 $logFiles = array_slice($files, 0, 10);
                 $logFiles = array_map(function ($file) {
                     return [
@@ -279,7 +280,7 @@ class HealthCheckController extends Controller
                     // Get queue sizes (if using Redis)
                     $queues = ['default', 'high', 'low'];
                     $queueSizes = [];
-                    
+
                     foreach ($queues as $queue) {
                         try {
                             $size = $redis->llen("queues:{$queue}");
@@ -288,7 +289,7 @@ class HealthCheckController extends Controller
                             $queueSizes[$queue] = 0;
                         }
                     }
-                    
+
                     $metrics['queue_sizes'] = $queueSizes;
                     $metrics['total_pending'] = array_sum($queueSizes);
                 } catch (\Exception $e) {
@@ -337,7 +338,7 @@ class HealthCheckController extends Controller
                     $redis = app('redis');
                     $redis->ping();
                     $metrics['connected'] = true;
-                    
+
                     // Get Redis info
                     $info = $redis->info('memory');
                     $metrics['memory_used'] = $info['used_memory_human'] ?? 'Unknown';
@@ -352,7 +353,7 @@ class HealthCheckController extends Controller
 
             // Test cache
             try {
-                $testKey = 'health_check_' . time();
+                $testKey = 'health_check_'.time();
                 Cache::put($testKey, 'test', 60);
                 $metrics['working'] = Cache::get($testKey) === 'test';
                 Cache::forget($testKey);
@@ -396,7 +397,7 @@ class HealthCheckController extends Controller
                 $meminfo = file_get_contents('/proc/meminfo');
                 preg_match('/MemTotal:\s+(\d+)\s+kB/', $meminfo, $total);
                 preg_match('/MemAvailable:\s+(\d+)\s+kB/', $meminfo, $available);
-                
+
                 if (isset($total[1]) && isset($available[1])) {
                     $totalBytes = (int) $total[1] * 1024;
                     $availableBytes = (int) $available[1] * 1024;
@@ -443,7 +444,7 @@ class HealthCheckController extends Controller
 
         // Check queue connection
         $queueMetrics = $this->getQueueMetrics();
-        if (!$queueMetrics['connected']) {
+        if (! $queueMetrics['connected']) {
             $alerts[] = [
                 'level' => 'warning',
                 'type' => 'queue',
@@ -499,8 +500,8 @@ class HealthCheckController extends Controller
     private function getDirectorySize(string $directory): int
     {
         $size = 0;
-        
-        if (!is_dir($directory)) {
+
+        if (! is_dir($directory)) {
             return 0;
         }
 
@@ -528,11 +529,11 @@ class HealthCheckController extends Controller
     private function formatBytes(int $bytes, int $precision = 2): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        
+
         for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
             $bytes /= 1024;
         }
-        
-        return round($bytes, $precision) . ' ' . $units[$i];
+
+        return round($bytes, $precision).' '.$units[$i];
     }
 }

@@ -39,6 +39,7 @@ class RolePermissionSeeder extends Seeder
 
             // Dashboard
             'dashboard.view',
+            'system-health.view',
 
             // Reports
             'reports.view',
@@ -70,17 +71,34 @@ class RolePermissionSeeder extends Seeder
             'notifications.view',
             'notifications.update',
             'notifications.delete',
+
+            // Alerts
+            'alerts.view',
+            'alerts.resolve',
+
+            // Alert Rules
+            'alert-rules.view',
+            'alert-rules.create',
+            'alert-rules.update',
+            'alert-rules.delete',
+
+            // Remote Control
+            'remote-control.view',
+            'remote-control.execute',
         ];
 
+        // Criar permissões com guard_name explícito
         foreach ($permissions as $permission) {
-            Permission::firstOrCreate(['name' => $permission]);
+            Permission::firstOrCreate(
+                ['name' => $permission, 'guard_name' => 'web']
+            );
         }
 
-        // Criar roles
-        $adminRole = Role::firstOrCreate(['name' => 'admin']);
-        $technicianRole = Role::firstOrCreate(['name' => 'technician']);
-        $professorRole = Role::firstOrCreate(['name' => 'professor']);
-        $viewerRole = Role::firstOrCreate(['name' => 'viewer']);
+        // Criar roles com guard_name explícito
+        $adminRole = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $technicianRole = Role::firstOrCreate(['name' => 'technician', 'guard_name' => 'web']);
+        $professorRole = Role::firstOrCreate(['name' => 'professor', 'guard_name' => 'web']);
+        $viewerRole = Role::firstOrCreate(['name' => 'viewer', 'guard_name' => 'web']);
 
         // Atribuir todas as permissões ao admin
         $adminRole->givePermissionTo(Permission::all());
@@ -90,11 +108,14 @@ class RolePermissionSeeder extends Seeder
             'labs.view', 'labs.create', 'labs.update', 'labs.delete',
             'computers.view', 'computers.create', 'computers.update', 'computers.delete',
             'softwares.view', 'softwares.create', 'softwares.update', 'softwares.delete',
-            'dashboard.view',
+            'dashboard.view', 'system-health.view',
             'reports.view', 'reports.create', 'reports.download',
             'audit-logs.view',
             'backups.view', 'backups.create', 'backups.delete', 'backups.restore',
             'notifications.view', 'notifications.update',
+            'alerts.view', 'alerts.resolve',
+            'alert-rules.view', 'alert-rules.create', 'alert-rules.update', 'alert-rules.delete',
+            'remote-control.view', 'remote-control.execute',
         ]);
 
         // Permissões para professor (pode visualizar e criar relatórios)
@@ -105,6 +126,7 @@ class RolePermissionSeeder extends Seeder
             'dashboard.view',
             'reports.view', 'reports.create', 'reports.download',
             'notifications.view', 'notifications.update', 'notifications.delete',
+            'alerts.view', // Apenas visualizar alertas
         ]);
 
         // Permissões para visualizador (apenas visualização)

@@ -13,6 +13,8 @@ class RemoteControlController extends Controller
 {
     public function index(Computer $computer)
     {
+        $this->authorize('remote-control.view');
+
         return $computer->commands()
             ->with('user:id,name')
             ->latest()
@@ -48,6 +50,8 @@ class RemoteControlController extends Controller
 
     public function storeBulk(Request $request)
     {
+        $this->authorize('remote-control.execute');
+
         $validated = $request->validate([
             'computer_ids' => 'required|array',
             'computer_ids.*' => 'exists:computers,id',
@@ -85,6 +89,8 @@ class RemoteControlController extends Controller
 
     public function storeLab(Request $request, Lab $lab)
     {
+        $this->authorize('remote-control.execute');
+
         $validated = $request->validate([
             'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol',
             'parameters' => 'nullable|array',
@@ -171,6 +177,13 @@ class RemoteControlController extends Controller
 
     public function updateStatus(Request $request, ComputerCommand $command)
     {
+        // Este método é chamado pelo agente para atualizar o status do comando
+        // Não requer permissão específica, mas requer autenticação
+        // O agente usa o token de autenticação do computador
+        if (! auth()->check()) {
+            return response()->json(['message' => 'Não autenticado'], 401);
+        }
+
         $validated = $request->validate([
             'status' => 'required|in:processing,completed,failed',
             'output' => 'nullable|string',

@@ -14,6 +14,9 @@ class SearchController extends Controller
 {
     public function globalSearch(Request $request)
     {
+        // Requer permissão de dashboard para usar busca global
+        $this->authorize('dashboard.view');
+
         $query = $request->query('q');
 
         if (! $query || strlen($query) < 2) {
