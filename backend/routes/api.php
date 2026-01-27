@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\SoftwareController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -166,6 +167,7 @@ Route::prefix('v1')->group(function () {
 
         // Audit Logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
+        Route::delete('/audit-logs', [AuditLogController::class, 'destroyAll']);
         Route::get('/audit-logs/stats', [AuditLogController::class, 'stats']);
         Route::get('/audit-logs/{id}', [AuditLogController::class, 'show']);
 
@@ -215,6 +217,15 @@ Route::prefix('v1')->group(function () {
         // Scheduled Tasks
         Route::post('/scheduled-tasks/{scheduledTask}/execute', [\App\Http\Controllers\Api\V1\ScheduledTaskController::class, 'execute']);
         Route::apiResource('scheduled-tasks', \App\Http\Controllers\Api\V1\ScheduledTaskController::class);
+
+        // System Logs
+        Route::get('/system/logs', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'index']);
+        Route::get('/system/logs/{filename}', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'show']);
+
+        // Queue Management
+        Route::post('/system/queue/retry-failed', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'retryFailedJobs']);
+        Route::post('/system/queue/clear', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'clearQueue']);
+        Route::post('/system/queue/delete', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'deleteQueue']);
     });
 });
 

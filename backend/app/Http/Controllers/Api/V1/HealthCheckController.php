@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Services\BackupService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 
 class HealthCheckController extends Controller
@@ -541,5 +544,154 @@ class HealthCheckController extends Controller
         }
 
         return round($bytes, $precision).' '.$units[$i];
+    }
+
+    /**
+     * Retry all failed jobs
+     */
+    public function retryFailedJobs(Request $request)
+    {
+        $this->authorize('dashboard.view');
+
+        try {
+            $failedJobs = DB::table('failed_jobs')->get();
+            $failedCount = $failedJobs->count();
+
+            if ($failedCount === 0) {
+                return response()->json([
+                    'message' => 'Nenhum job falhado encontrado',
+                    'retried' => 0,
+                ]);
+            }
+
+            // Retry all failed jobs by UUID
+            $retried = 0;
+            foreach ($failedJobs as $job) {
+                try {
+                    Artisan::call('queue:retry', ['id' => $job->uuid]);
+                    $retried++;
+                } catch (\Exception $e) {
+                    // Continue with other jobs even if one fails
+                    Log::warning("Failed to retry job {$job->uuid}: ".$e->getMessage());
+                }
+            }
+
+            return response()->json([
+                'message' => "{$retried} de {$failedCount} jobs falhados foram reenviados para a fila",
+                'retried' => $retried,
+                'total' => $failedCount,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erro ao tentar novamente os jobs falhados: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Clear queue (pending jobs)
+     */
+    public function clearQueue(Request $request)
+    {
+        $this->authorize('dashboard.view');
+
+        try {
+            $queue = $request->input('queue', 'default');
+            $connection = config('queue.default', 'sync');
+
+            if ($connection !== 'redis') {
+                return response()->json([
+                    'message' => 'Limpeza de fila só funciona com Redis. Conexão atual: '.$connection,
+                ], 400);
+            }
+
+            $redis = app('redis');
+            $cleared = 0;
+
+            // Clear queue keys
+            $queueKeys = [
+                "queues:{$queue}",
+                "queues:{$queue}:notify",
+            ];
+
+            foreach ($queueKeys as $queueKey) {
+                try {
+                    $size = $redis->llen($queueKey);
+                    if ($size > 0) {
+                        $redis->del($queueKey);
+                        $cleared += $size;
+                    }
+                } catch (\Exception $e) {
+                    // Ignore errors for non-existent keys
+                }
+            }
+
+            return response()->json([
+                'message' => "Fila '{$queue}' limpa com sucesso",
+                'cleared' => $cleared,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erro ao limpar fila: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete queue (clear all including failed jobs)
+     */
+    public function deleteQueue(Request $request)
+    {
+        $this->authorize('dashboard.view');
+
+        try {
+            $queue = $request->input('queue', 'default');
+            $connection = config('queue.default', 'sync');
+
+            if ($connection !== 'redis') {
+                return response()->json([
+                    'message' => 'Deleção de fila só funciona com Redis. Conexão atual: '.$connection,
+                ], 400);
+            }
+
+            $redis = app('redis');
+            $clearedPending = 0;
+            $clearedFailed = 0;
+
+            // Clear pending jobs
+            $queueKeys = [
+                "queues:{$queue}",
+                "queues:{$queue}:notify",
+            ];
+
+            foreach ($queueKeys as $queueKey) {
+                try {
+                    $size = $redis->llen($queueKey);
+                    if ($size > 0) {
+                        $redis->del($queueKey);
+                        $clearedPending += $size;
+                    }
+                } catch (\Exception $e) {
+                    // Ignore errors
+                }
+            }
+
+            // Clear failed jobs from database
+            $failedCount = DB::table('failed_jobs')->count();
+            if ($failedCount > 0) {
+                DB::table('failed_jobs')->truncate();
+                $clearedFailed = $failedCount;
+            }
+
+            return response()->json([
+                'message' => "Fila '{$queue}' deletada com sucesso",
+                'cleared_pending' => $clearedPending,
+                'cleared_failed' => $clearedFailed,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erro ao deletar fila: '.$e->getMessage(),
+            ], 500);
+        }
     }
 }

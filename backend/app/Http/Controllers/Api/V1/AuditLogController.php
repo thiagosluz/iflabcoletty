@@ -154,4 +154,24 @@ class AuditLogController extends Controller
 
         return response()->json($stats);
     }
+
+    #[OA\Delete(
+        path: '/api/v1/audit-logs',
+        summary: 'Excluir todos os logs de auditoria',
+        tags: ['Auditoria'],
+        security: [['sanctum' => []]],
+        responses: [
+            new OA\Response(response: 200, description: 'Logs excluídos com sucesso'),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Não autorizado'),
+        ]
+    )]
+    public function destroyAll()
+    {
+        $this->authorize('audit-logs.delete');
+
+        AuditLog::truncate();
+
+        return response()->json(['message' => 'All audit logs have been deleted']);
+    }
 }

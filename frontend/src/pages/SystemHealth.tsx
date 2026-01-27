@@ -3,8 +3,20 @@ import apiClient from '@/lib/axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Database, HardDrive, Activity, Server, AlertTriangle, CheckCircle2, XCircle, Loader2, TrendingUp, HardDriveIcon } from 'lucide-react';
+import { RefreshCw, Database, HardDrive, Activity, Server, AlertTriangle, CheckCircle2, XCircle, Loader2, TrendingUp, HardDriveIcon, RotateCw, Trash2, X } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/use-toast';
 // Alert component - using Card instead
 
 interface SystemHealth {
@@ -103,6 +115,8 @@ export default function SystemHealth() {
     const [health, setHealth] = useState<SystemHealth | null>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+    const [queueActionLoading, setQueueActionLoading] = useState<string | null>(null);
+    const { toast } = useToast();
 
     const fetchHealth = async () => {
         try {
@@ -147,6 +161,72 @@ export default function SystemHealth() {
                 return 'default';
             default:
                 return 'default';
+        }
+    };
+
+    const handleRetryFailedJobs = async () => {
+        try {
+            setQueueActionLoading('retry');
+            const response = await apiClient.post('/system/queue/retry-failed');
+            toast({
+                title: 'Sucesso',
+                description: response.data.message,
+            });
+            // Refresh health data
+            await fetchHealth();
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Erro',
+                description: err.response?.data?.message || 'Erro ao tentar novamente os jobs falhados',
+                variant: 'destructive',
+            });
+        } finally {
+            setQueueActionLoading(null);
+        }
+    };
+
+    const handleClearQueue = async (queue: string = 'default') => {
+        try {
+            setQueueActionLoading('clear');
+            const response = await apiClient.post('/system/queue/clear', { queue });
+            toast({
+                title: 'Sucesso',
+                description: response.data.message,
+            });
+            // Refresh health data
+            await fetchHealth();
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Erro',
+                description: err.response?.data?.message || 'Erro ao limpar fila',
+                variant: 'destructive',
+            });
+        } finally {
+            setQueueActionLoading(null);
+        }
+    };
+
+    const handleDeleteQueue = async (queue: string = 'default') => {
+        try {
+            setQueueActionLoading('delete');
+            const response = await apiClient.post('/system/queue/delete', { queue });
+            toast({
+                title: 'Sucesso',
+                description: response.data.message,
+            });
+            // Refresh health data
+            await fetchHealth();
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Erro',
+                description: err.response?.data?.message || 'Erro ao deletar fila',
+                variant: 'destructive',
+            });
+        } finally {
+            setQueueActionLoading(null);
         }
     };
 
@@ -417,6 +497,108 @@ export default function SystemHealth() {
                             {health.queue.error && (
                                 <div className="text-sm text-red-500">{health.queue.error}</div>
                             )}
+                            
+                            {/* Action Buttons */}
+                            <div className="pt-4 border-t space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground mb-2">Ações</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {health.queue.failed_jobs > 0 && (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={handleRetryFailedJobs}
+                                            disabled={queueActionLoading !== null}
+                                            className="flex items-center gap-2"
+                                        >
+                                            {queueActionLoading === 'retry' ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                            ) : (
+                                                <RotateCw className="h-3 w-3" />
+                                            )}
+                                            Tentar Novamente ({health.queue.failed_jobs})
+                                        </Button>
+                                    )}
+                                    {health.queue.total_pending !== undefined && health.queue.total_pending > 0 && (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={queueActionLoading !== null}
+                                                    className="flex items-center gap-2"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                    Limpar Fila
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Limpar Fila</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        Tem certeza que deseja limpar todos os jobs pendentes da fila?
+                                                        Esta ação não pode ser desfeita.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => handleClearQueue('default')}
+                                                        disabled={queueActionLoading === 'clear'}
+                                                    >
+                                                        {queueActionLoading === 'clear' ? (
+                                                            <>
+                                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                                Limpando...
+                                                            </>
+                                                        ) : (
+                                                            'Limpar'
+                                                        )}
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    )}
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                disabled={queueActionLoading !== null}
+                                                className="flex items-center gap-2"
+                                            >
+                                                <Trash2 className="h-3 w-3" />
+                                                Deletar Fila
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Deletar Fila</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Esta ação irá limpar TODOS os jobs pendentes E falhados da fila.
+                                                    Esta ação é irreversível. Tem certeza?
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    onClick={() => handleDeleteQueue('default')}
+                                                    disabled={queueActionLoading === 'delete'}
+                                                    className="bg-red-600 hover:bg-red-700"
+                                                >
+                                                    {queueActionLoading === 'delete' ? (
+                                                        <>
+                                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                            Deletando...
+                                                        </>
+                                                    ) : (
+                                                        'Deletar'
+                                                    )}
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </div>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

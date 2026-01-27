@@ -6,7 +6,18 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Search, Filter, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Filter, Calendar, Trash2 } from 'lucide-react';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useDebounce } from '@/lib/utils';
 
 interface AuditLog {
@@ -50,7 +61,7 @@ export default function AuditLogs() {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
-    
+
     // Filters
     const [search, setSearch] = useState('');
     const [actionFilter, setActionFilter] = useState<string>('all');
@@ -58,7 +69,7 @@ export default function AuditLogs() {
     const [userIdFilter, setUserIdFilter] = useState<string>('all');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
-    
+
     const debouncedSearch = useDebounce(search, 500);
 
     useEffect(() => {
@@ -97,6 +108,17 @@ export default function AuditLogs() {
         }
     };
 
+    const handleDeleteAll = async () => {
+        try {
+            await apiClient.delete('/audit-logs');
+            fetchLogs();
+            // Optional: Add toast notification here
+        } catch (error) {
+            console.error('Erro ao excluir logs:', error);
+            // Optional: Add error toast here
+        }
+    };
+
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleString('pt-BR');
     };
@@ -120,6 +142,28 @@ export default function AuditLogs() {
                         Registro de todas as ações realizadas no sistema
                     </p>
                 </div>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir Todos
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Esta ação não pode ser desfeita. Isso excluirá permanentemente todos os logs de auditoria do sistema.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteAll} className="bg-red-600 hover:bg-red-700">
+                                Confirmar Exclusão
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
 
             <Card>
@@ -304,7 +348,7 @@ export default function AuditLogs() {
                                             <ChevronLeft className="h-4 w-4" />
                                             Anterior
                                         </Button>
-                                        
+
                                         {/* Números de página */}
                                         <div className="flex items-center gap-1">
                                             {Array.from({ length: Math.min(5, pagination.last_page) }, (_, i) => {
@@ -318,7 +362,7 @@ export default function AuditLogs() {
                                                 } else {
                                                     pageNum = currentPage - 2 + i;
                                                 }
-                                                
+
                                                 return (
                                                     <Button
                                                         key={pageNum}
@@ -332,7 +376,7 @@ export default function AuditLogs() {
                                                 );
                                             })}
                                         </div>
-                                        
+
                                         <Button
                                             variant="outline"
                                             size="sm"

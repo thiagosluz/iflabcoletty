@@ -12,6 +12,7 @@ import ComputerDetails from './pages/ComputerDetails';
 import Softwares from './pages/Softwares';
 import Schedules from '@/pages/Schedules';
 import AuditLogs from './pages/AuditLogs';
+import LogViewer from './pages/LogViewer';
 import ReportJobs from './pages/ReportJobs';
 import Backups from './pages/Backups';
 import Users from './pages/Users';
@@ -40,6 +41,7 @@ function App() {
           <Route path="softwares" element={<Softwares />} />
           <Route path="schedules" element={<Schedules />} />
           <Route path="audit-logs" element={<AuditLogs />} />
+          <Route path="logs" element={<LogViewer />} />
           <Route path="report-jobs" element={<ReportJobs />} />
           <Route path="backups" element={<Backups />} />
           <Route path="users" element={<Users />} />
