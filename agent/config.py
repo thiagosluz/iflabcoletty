@@ -1,4 +1,10 @@
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Carrega .env na pasta do agente (onde está config.py), independente de onde o script foi executado
+load_dotenv(Path(__file__).resolve().parent / '.env')
 
 # API Configuration
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1')

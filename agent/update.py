@@ -28,12 +28,40 @@ BACKUP_DIR = AGENT_DIR / "backups"
 VERSION_FILE = AGENT_DIR / ".agent_version"
 CONFIG_FILE = AGENT_DIR / "config.py"
 
-# Try to get API URL from config
+# Try to get API URL and credentials from config (config.py carrega o .env)
 try:
     import config
     API_BASE_URL = os.getenv('API_BASE_URL', getattr(config, 'API_BASE_URL', 'http://localhost:8000/api/v1'))
+    AGENT_EMAIL = getattr(config, 'AGENT_EMAIL', os.getenv('AGENT_EMAIL', ''))
+    AGENT_PASSWORD = getattr(config, 'AGENT_PASSWORD', os.getenv('AGENT_PASSWORD', ''))
 except ImportError:
     API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1')
+    AGENT_EMAIL = os.getenv('AGENT_EMAIL', '')
+    AGENT_PASSWORD = os.getenv('AGENT_PASSWORD', '')
+
+
+def login(api_base_url):
+    """Faz login na API com as credenciais do agente e retorna o token (ou None)."""
+    if not AGENT_EMAIL or not AGENT_PASSWORD:
+        logger.warning("AGENT_EMAIL e AGENT_PASSWORD não configurados (.env ou config)")
+        return None
+    try:
+        url = f"{api_base_url.rstrip('/')}/login"
+        resp = requests.post(
+            url,
+            json={'email': AGENT_EMAIL, 'password': AGENT_PASSWORD},
+            headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
+            timeout=10
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        token = data.get('token')
+        if token:
+            logger.info("Login na API realizado com sucesso.")
+        return token
+    except Exception as e:
+        logger.warning("Falha no login na API: %s", e)
+        return None
 
 
 def get_current_version():
@@ -80,12 +108,18 @@ def check_for_updates(api_base_url, token=None):
         
         if response.status_code == 200:
             data = response.json()
+            # Normalizar chave para o mesmo formato que o código espera
+            if 'latest_version' in data and 'version' not in data:
+                data['version'] = data['latest_version']
             return data
+        elif response.status_code == 401:
+            logger.warning("Não autorizado (401). Verifique AGENT_EMAIL e AGENT_PASSWORD no .env")
+            return None
         elif response.status_code == 404:
             logger.info("Update endpoint not available (expected in older versions)")
             return None
         else:
-            logger.warning(f"Error checking for updates: {response.status_code}")
+            logger.warning("Error checking for updates: %s", response.status_code)
             return None
             
     except requests.exceptions.RequestException as e:
@@ -228,8 +262,12 @@ def main():
     """Main update function."""
     logger.info("Starting agent update check...")
     
-    # Get token if available (from environment or config)
+    # Token: variável AGENT_TOKEN ou login com email/senha do agente
     token = os.getenv('AGENT_TOKEN')
+    if not token and AGENT_EMAIL and AGENT_PASSWORD:
+        token = login(API_BASE_URL)
+    if not token:
+        logger.warning("Nenhum token disponível. Configure AGENT_EMAIL e AGENT_PASSWORD no .env (ou AGENT_TOKEN).")
     
     # Check for updates
     update_info = check_for_updates(API_BASE_URL, token)

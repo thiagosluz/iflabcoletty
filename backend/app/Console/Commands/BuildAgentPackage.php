@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 use ZipArchive;
 
 class BuildAgentPackage extends Command
@@ -50,6 +49,7 @@ class BuildAgentPackage extends Command
 
         if (! $agentDir) {
             $this->error('Agent directory not found. Tried paths: '.implode(', ', $possiblePaths));
+
             return 1;
         }
 
@@ -70,6 +70,7 @@ class BuildAgentPackage extends Command
             $this->warn("Package already exists: {$zipPath}");
             if (! $this->confirm('Overwrite existing package?', false)) {
                 $this->info('Aborted.');
+
                 return 0;
             }
         }
@@ -80,6 +81,7 @@ class BuildAgentPackage extends Command
 
         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             $this->error("Failed to create ZIP file: {$zipPath}");
+
             return 1;
         }
 
@@ -109,7 +111,7 @@ class BuildAgentPackage extends Command
         $readmePath = $agentDir.'/README.md';
         if (file_exists($readmePath)) {
             $zip->addFile($readmePath, 'README.md');
-            $this->line("  Added: README.md");
+            $this->line('  Added: README.md');
             $addedCount++;
         }
 
@@ -123,13 +125,14 @@ class BuildAgentPackage extends Command
 
         if (! file_exists($zipPath)) {
             $this->error('Failed to create package file');
+
             return 1;
         }
 
         $size = filesize($zipPath);
         $sizeHuman = $this->formatBytes($size);
 
-        $this->info("Package created successfully!");
+        $this->info('Package created successfully!');
         $this->line("  File: {$zipPath}");
         $this->line("  Size: {$sizeHuman} ({$size} bytes)");
         $this->line("  Files: {$addedCount}");
@@ -155,8 +158,10 @@ class BuildAgentPackage extends Command
             $parts = explode('.', $currentVersion);
             if (count($parts) === 3) {
                 $parts[2] = (int) $parts[2] + 1;
+
                 return implode('.', $parts);
             }
+
             return $currentVersion;
         }
 

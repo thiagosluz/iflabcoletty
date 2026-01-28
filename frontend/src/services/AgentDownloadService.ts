@@ -33,6 +33,14 @@ export interface AgentFilesResponse {
     latest_version: string;
 }
 
+export interface BuildPackageResponse {
+    message: string;
+    version: string | null;
+    path?: string | null;
+    size?: number | null;
+    output?: string;
+}
+
 const AgentDownloadService = {
     listFiles: async (): Promise<AgentFilesResponse> => {
         const response = await apiClient.get('/agent/files');
@@ -57,6 +65,11 @@ const AgentDownloadService = {
         const response = await apiClient.get('/agent/source-code', {
             responseType: 'blob',
         });
+        return response.data;
+    },
+
+    buildPackage: async (params?: { version?: string; force?: boolean }): Promise<BuildPackageResponse> => {
+        const response = await apiClient.post('/agent/build-package', params ?? {});
         return response.data;
     },
 };

@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
-import AgentDownloadService, { AgentFilesResponse, AgentPackage, AgentInstaller } from '@/services/AgentDownloadService';
+import AgentDownloadService, {
+    AgentFilesResponse,
+    AgentPackage,
+    AgentInstaller,
+    BuildPackageResponse,
+} from '@/services/AgentDownloadService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +17,9 @@ export default function AgentDownloads() {
     const { toast } = useToast();
     const [files, setFiles] = useState<AgentFilesResponse | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isBuildingPackage, setIsBuildingPackage] = useState(false);
+    const [newPackageVersion, setNewPackageVersion] = useState('');
+    const [overwritePackage, setOverwritePackage] = useState(false);
 
     useEffect(() => {
         fetchFiles();
@@ -31,6 +39,39 @@ export default function AgentDownloads() {
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleBuildPackage = async () => {
+        try {
+            setIsBuildingPackage(true);
+            const payload: { version?: string; force?: boolean } = {};
+
+            if (newPackageVersion.trim() !== '') {
+                payload.version = newPackageVersion.trim();
+            }
+
+            if (overwritePackage) {
+                payload.force = true;
+            }
+
+            const response: BuildPackageResponse = await AgentDownloadService.buildPackage(payload);
+
+            toast({
+                title: 'Pacote criado com sucesso',
+                description: `Versão: ${response.version ?? 'desconhecida'}`,
+            });
+
+            await fetchFiles();
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Erro ao criar pacote do agente',
+                description: err.response?.data?.message || 'Erro desconhecido',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsBuildingPackage(false);
         }
     };
 
@@ -117,6 +158,138 @@ export default function AgentDownloads() {
                 </CardContent>
             </Card>
 
+            {/* Guia de instalação e atualização */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Info className="h-5 w-5" />
+                        Guia de instalação e atualização
+                    </CardTitle>
+                    <CardDescription>
+                        Passo a passo para instalar novos agentes e configurar atualizações automáticas
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div>
+                        <h3 className="text-sm font-semibold mb-2">Instalação (resumo)</h3>
+                        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>Garantir que o computador possui Python 3.8 ou superior instalado (veja seção Python abaixo).</li>
+                            <li>Baixar o script de instalação adequado nesta página:
+                                <ul className="list-disc list-inside ml-5">
+                                    <li>Windows: <code className="bg-gray-100 px-1 rounded">install_windows.ps1</code></li>
+                                    <li>Linux: <code className="bg-gray-100 px-1 rounded">install_linux.sh</code></li>
+                                </ul>
+                            </li>
+                            <li>No Windows:
+                                <ul className="list-disc list-inside ml-5">
+                                    <li>Abrir o PowerShell como <strong>Administrador</strong>.</li>
+                                    <li>Navegar até a pasta onde o script foi salvo.</li>
+                                    <li>Executar: <code className="bg-gray-100 px-1 rounded">.\install_windows.ps1</code>.</li>
+                                </ul>
+                            </li>
+                            <li>No Linux:
+                                <ul className="list-disc list-inside ml-5">
+                                    <li>Dar permissão de execução: <code className="bg-gray-100 px-1 rounded">chmod +x install_linux.sh</code>.</li>
+                                    <li>Executar: <code className="bg-gray-100 px-1 rounded">sudo ./install_linux.sh</code>.</li>
+                                </ul>
+                            </li>
+                            <li>Configurar as variáveis de ambiente (ou arquivo <code className="bg-gray-100 px-1 rounded">.env</code>) do agente:
+                                <ul className="list-disc list-inside ml-5">
+                                    <li><code className="bg-gray-100 px-1 rounded">API_BASE_URL</code> (ex.: <code className="bg-gray-100 px-1 rounded">http://seu-servidor:8000/api/v1</code>)</li>
+                                    <li><code className="bg-gray-100 px-1 rounded">LAB_ID</code></li>
+                                    <li><code className="bg-gray-100 px-1 rounded">AGENT_EMAIL</code> e <code className="bg-gray-100 px-1 rounded">AGENT_PASSWORD</code></li>
+                                </ul>
+                            </li>
+                        </ol>
+                    </div>
+
+                    <div>
+                        <h3 className="text-sm font-semibold mb-2">Atualização (resumo)</h3>
+                        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                            <li>O serviço do agente (<code className="bg-gray-100 px-1 rounded">main.py</code>) não verifica atualização sozinho.</li>
+                            <li>Para atualizar, usar o script <code className="bg-gray-100 px-1 rounded">update.py</code> na pasta do agente.</li>
+                            <li>Atualização automática (sem perguntar):
+                                <ul className="list-disc list-inside ml-5">
+                                    <li>Definir variável: <code className="bg-gray-100 px-1 rounded">AUTO_UPDATE=1</code>.</li>
+                                    <li>Executar: <code className="bg-gray-100 px-1 rounded">python update.py</code> ou <code className="bg-gray-100 px-1 rounded">.venv/bin/python update.py</code>.</li>
+                                </ul>
+                            </li>
+                            <li>Linux (cron, exemplo diário às 02:00):
+                                <pre className="bg-gray-100 rounded p-2 text-xs overflow-x-auto mt-1">
+{`0 2 * * * cd /opt/iflab-agent && AUTO_UPDATE=1 /opt/iflab-agent/.venv/bin/python update.py >> /var/log/iflab-agent-update.log 2>&1`}
+                                </pre>
+                            </li>
+                            <li>Windows (Agendador de Tarefas):
+                                <ul className="list-disc list-inside ml-5">
+                                    <li>Criar tarefa que executa o PowerShell na pasta do agente.</li>
+                                    <li>Exemplo de ação:
+                                        <pre className="bg-gray-100 rounded p-2 text-xs overflow-x-auto mt-1">
+{`powershell.exe -Command "cd C:\\caminho\\para\\agent; $env:AUTO_UPDATE='1'; .\\.venv\\Scripts\\python.exe update.py"`}
+                                        </pre>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ol>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Python */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Info className="h-5 w-5" />
+                        Requisito: Python
+                    </CardTitle>
+                    <CardDescription>
+                        O agente requer Python 3.8 ou superior. Recomenda-se usar a versão mais recente estável.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-muted-foreground">
+                        <div className="space-y-2">
+                            <p className="font-semibold text-foreground">Windows</p>
+                            <p>
+                                Baixe o instalador oficial do Python para Windows na página de downloads:
+                            </p>
+                            <a
+                                href="https://www.python.org/downloads/windows/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 underline"
+                            >
+                                Baixar Python para Windows (site oficial)
+                            </a>
+                            <p className="text-xs mt-2">
+                                Recomenda-se marcar a opção <code className="bg-gray-100 px-1 rounded">Add Python to PATH</code> durante a instalação.
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <p className="font-semibold text-foreground">Linux</p>
+                            <p>
+                                A maioria das distribuições já possui Python 3 instalado. Caso precise de uma versão mais recente:
+                            </p>
+                            <ul className="list-disc list-inside space-y-1 ml-4">
+                                <li>Ubuntu/Debian: <code className="bg-gray-100 px-1 rounded">sudo apt install python3.11</code></li>
+                                <li>Fedora: <code className="bg-gray-100 px-1 rounded">sudo dnf install python3.11</code></li>
+                                <li>Outras distros: consultar o gerenciador de pacotes.</li>
+                            </ul>
+                            <p className="mt-2">
+                                Também é possível baixar o Python pelo site oficial:
+                            </p>
+                            <a
+                                href="https://www.python.org/downloads/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 underline"
+                            >
+                                Baixar Python (site oficial)
+                            </a>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
             {/* Pacotes ZIP */}
             <Card>
                 <CardHeader>
@@ -128,7 +301,59 @@ export default function AgentDownloads() {
                         Pacotes de atualização do agente para instalação em computadores
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
+                    {/* Criar pacote */}
+                    <div className="border border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+                        <p className="text-sm font-semibold">Criar novo pacote de atualização</p>
+                        <div className="grid grid-cols-1 md:grid-cols-[2fr,auto] gap-3 items-center">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">
+                                    Versão (ex.: 1.0.0). Deixe vazio para versão automática (incrementa apenas o patch).
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newPackageVersion}
+                                    onChange={(e) => setNewPackageVersion(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    placeholder="1.0.0"
+                                />
+                            </div>
+                            <div className="flex flex-col items-start gap-2">
+                                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                                    <input
+                                        type="checkbox"
+                                        checked={overwritePackage}
+                                        onChange={(e) => setOverwritePackage(e.target.checked)}
+                                        className="h-3 w-3 rounded border border-input"
+                                    />
+                                    Sobrescrever pacote existente (se já houver a mesma versão)
+                                </label>
+                                <Button
+                                    size="sm"
+                                    onClick={handleBuildPackage}
+                                    disabled={isBuildingPackage}
+                                >
+                                    {isBuildingPackage ? (
+                                        <>
+                                            <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                                            Criando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Package className="h-3 w-3 mr-2" />
+                                            Criar pacote
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Quando a versão estiver em branco, o sistema usará a última versão conhecida e incrementará o patch automaticamente
+                            (ex.: 1.0.0 → 1.0.1).
+                        </p>
+                    </div>
+
+                    {/* Lista de pacotes */}
                     {files.packages.length === 0 ? (
                         <div className="space-y-4">
                             <div className="text-center py-4 text-muted-foreground">

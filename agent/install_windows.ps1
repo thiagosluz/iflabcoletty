@@ -187,16 +187,17 @@ if (-not $pillowSuccess) {
 }
 Write-ColorOutput Green "Pillow installed successfully"
 
-# Install other dependencies
-Write-ColorOutput Yellow "Installing other dependencies..."
-$otherDeps = @("requests==2.31.0", "psutil==5.9.8", "mac-vendor-lookup==0.1.12", "mss==9.0.1")
-foreach ($dep in $otherDeps) {
-    Write-Output "Installing $dep..."
-    & "$AgentDir\.venv\Scripts\pip.exe" install $dep
-    if ($LASTEXITCODE -ne 0) {
-        Write-ColorOutput Red "Error installing $dep"
-        exit 1
-    }
+# Install remaining dependencies from requirements.txt (inclui python-dotenv e demais)
+Write-ColorOutput Yellow "Installing dependencies from requirements.txt..."
+$requirementsPath = Join-Path $AgentDir "requirements.txt"
+if (-not (Test-Path $requirementsPath)) {
+    Write-ColorOutput Red "Error: requirements.txt not found at $requirementsPath"
+    exit 1
+}
+& "$AgentDir\.venv\Scripts\pip.exe" install -r $requirementsPath
+if ($LASTEXITCODE -ne 0) {
+    Write-ColorOutput Red "Error installing dependencies from requirements.txt"
+    exit 1
 }
 
 Write-ColorOutput Green "All dependencies installed successfully"

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -186,6 +187,88 @@ class AgentController extends Controller
                 'how_to_create' => 'Run: php artisan agent:build-package [version]',
             ],
         ]);
+    }
+
+    /**
+     * Build an agent package (ZIP) for a given version or automatically
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function buildPackage(Request $request)
+    {
+        $this->authorize('computers.view');
+
+        $data = $request->validate([
+            'version' => ['nullable', 'string', 'regex:/^\d+\.\d+\.\d+$/'],
+            'force' => ['sometimes', 'boolean'],
+        ]);
+
+        $version = $data['version'] ?? null;
+        $force = (bool) ($data['force'] ?? false);
+
+        try {
+            $artisanParams = [];
+
+            if ($version !== null && $version !== '') {
+                $artisanParams['version'] = $version;
+            }
+
+            if ($force) {
+                $artisanParams['--force'] = true;
+            }
+
+            $exitCode = Artisan::call('agent:build-package', $artisanParams);
+            $output = Artisan::output();
+
+            if ($exitCode !== 0) {
+                Log::error('agent:build-package failed', [
+                    'exit_code' => $exitCode,
+                    'output' => $output,
+                    'params' => $artisanParams,
+                ]);
+
+                return response()->json([
+                    'message' => 'Falha ao criar pacote do agente.',
+                    'output' => $output,
+                ], 500);
+            }
+
+            // Descobrir a versão final a partir do arquivo latest_version.txt
+            $latestVersionFile = storage_path('app/agent/latest_version.txt');
+            $finalVersion = $version;
+
+            if (file_exists($latestVersionFile)) {
+                $finalVersion = trim(file_get_contents($latestVersionFile));
+            }
+
+            // Caminho do pacote gerado
+            $packagePath = null;
+            $size = null;
+
+            if ($finalVersion) {
+                $packagePath = $this->getPackagePath($finalVersion);
+                if ($packagePath && file_exists($packagePath)) {
+                    $size = filesize($packagePath);
+                }
+            }
+
+            return response()->json([
+                'message' => 'Pacote do agente criado com sucesso.',
+                'version' => $finalVersion,
+                'path' => $packagePath,
+                'size' => $size,
+                'output' => $output,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Error while building agent package', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'Erro ao criar pacote do agente: '.$e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
