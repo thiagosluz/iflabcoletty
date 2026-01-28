@@ -33,9 +33,16 @@ class SoftwareInstallationController extends Controller
             $query->where('computer_id', $request->query('computer_id'));
         }
 
-        // Search by software name
+        // Search by software name, computer hostname/machine_id, or installer type
         if ($search = $request->query('search')) {
-            $query->where('software_name', 'like', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('software_name', 'like', "%{$search}%")
+                    ->orWhere('installer_type', 'like', "%{$search}%")
+                    ->orWhereHas('computer', function ($computerQuery) use ($search) {
+                        $computerQuery->where('hostname', 'like', "%{$search}%")
+                            ->orWhere('machine_id', 'like', "%{$search}%");
+                    });
+            });
         }
 
         // Pagination
@@ -101,25 +108,55 @@ class SoftwareInstallationController extends Controller
     {
         // Require authentication (agent or user)
         if (! auth()->check()) {
+            Log::warning('Installer download attempted without authentication', ['file_id' => $fileId]);
+
             return response()->json(['message' => 'Não autenticado'], 401);
         }
 
-        // Find file by ID
+        // Validate file_id format (UUID)
+        $fileId = trim($fileId);
+        if (strlen($fileId) < 32 || ! preg_match('/^[a-f0-9\-]{36}$/i', $fileId)) {
+            Log::warning('Installer download invalid file_id format', ['file_id' => $fileId]);
+
+            return response()->json(['message' => 'ID do arquivo inválido'], 400);
+        }
+
         $hash = substr($fileId, 0, 2);
-        $files = Storage::files("installers/{$hash}");
+        $diskPath = "installers/{$hash}";
 
-        foreach ($files as $file) {
-            $basename = basename($file);
-            if (str_starts_with($basename, $fileId)) {
-                $fullPath = storage_path("app/{$file}");
+        // Try direct path first (same naming as upload: {fileId}.{ext})
+        $extensions = ['exe', 'msi', 'zip'];
+        foreach ($extensions as $ext) {
+            $relativePath = "{$diskPath}/{$fileId}.{$ext}";
+            $fullPath = Storage::path($relativePath);
+            if (file_exists($fullPath) && is_file($fullPath)) {
+                Log::info('Installer download serving file', ['file_id' => $fileId, 'path' => $relativePath]);
 
-                if (file_exists($fullPath)) {
-                    return response()->download($fullPath, basename($file), [
-                        'Content-Type' => 'application/octet-stream',
-                    ]);
+                return response()->download($fullPath, "{$fileId}.{$ext}", [
+                    'Content-Type' => 'application/octet-stream',
+                ]);
+            }
+        }
+
+        // Fallback: list directory and match by prefix
+        $files = Storage::files($diskPath);
+        if (! empty($files)) {
+            foreach ($files as $file) {
+                $basename = basename($file);
+                if (str_starts_with($basename, $fileId)) {
+                    $fullPath = Storage::path($file);
+                    if (file_exists($fullPath)) {
+                        Log::info('Installer download serving file (fallback)', ['file_id' => $fileId, 'path' => $file]);
+
+                        return response()->download($fullPath, $basename, [
+                            'Content-Type' => 'application/octet-stream',
+                        ]);
+                    }
                 }
             }
         }
+
+        Log::warning('Installer file not found', ['file_id' => $fileId, 'disk_path' => $diskPath]);
 
         return response()->json(['message' => 'Arquivo não encontrado'], 404);
     }
@@ -192,9 +229,10 @@ class SoftwareInstallationController extends Controller
                     'status' => 'pending',
                 ]);
 
-                // Create SoftwareInstallation record for history
+                // Create SoftwareInstallation record for history (linked to command)
                 SoftwareInstallation::create([
                     'computer_id' => $computer->id,
+                    'command_id' => $command->id,
                     'user_id' => auth()->id(),
                     'software_name' => $validated['software_name'] ?? null,
                     'installer_type' => $validated['method'],
@@ -220,5 +258,17 @@ class SoftwareInstallationController extends Controller
             'skipped' => $computers->count() - $windowsComputers->count(),
             'errors' => $errors,
         ], 201);
+    }
+
+    /**
+     * Delete software installation
+     */
+    public function destroy(SoftwareInstallation $softwareInstallation)
+    {
+        $this->authorize('software-installations.delete');
+
+        $softwareInstallation->delete();
+
+        return response()->json(['message' => 'Instalação excluída com sucesso'], 200);
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Computer;
 use App\Models\ComputerCommand;
 use App\Models\Lab;
+use App\Models\SoftwareInstallation;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -199,6 +200,19 @@ class RemoteControlController extends Controller
         }
 
         $command->update($data);
+
+        // Sync SoftwareInstallation when this command is install_software
+        if ($command->command === 'install_software') {
+            $installation = SoftwareInstallation::where('command_id', $command->id)->first();
+            if ($installation) {
+                $installation->update([
+                    'status' => $validated['status'],
+                    'output' => $data['output'],
+                    'error_message' => $validated['status'] === 'failed' ? ($data['output'] ?? null) : null,
+                    'executed_at' => $data['executed_at'] ?? $installation->executed_at,
+                ]);
+            }
+        }
 
         return response()->json($command);
     }

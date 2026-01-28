@@ -239,6 +239,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/software-installations/upload', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'upload']);
         Route::get('/software-installations', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'index']);
         Route::get('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'show']);
+        Route::delete('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'destroy']);
         Route::get('/installers/{fileId}/download', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'download']);
     });
 });

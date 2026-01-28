@@ -84,6 +84,11 @@ const SoftwareInstallationService = {
         const response = await apiClient.get(`/software-installations/${id}`);
         return response.data;
     },
+
+    deleteInstallation: async (id: number): Promise<{ message: string }> => {
+        const response = await apiClient.delete(`/software-installations/${id}`);
+        return response.data;
+    },
 };
 
 export default SoftwareInstallationService;

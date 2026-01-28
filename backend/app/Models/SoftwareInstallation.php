@@ -12,6 +12,7 @@ class SoftwareInstallation extends Model
 
     protected $fillable = [
         'computer_id',
+        'command_id',
         'user_id',
         'software_name',
         'installer_type',
@@ -37,6 +38,11 @@ class SoftwareInstallation extends Model
     public function computer(): BelongsTo
     {
         return $this->belongsTo(Computer::class);
+    }
+
+    public function command(): BelongsTo
+    {
+        return $this->belongsTo(ComputerCommand::class, 'command_id');
     }
 
     public function user(): BelongsTo

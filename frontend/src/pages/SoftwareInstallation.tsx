@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import apiClient from '@/lib/axios';
 import SoftwareInstallationService, { SoftwareInstallation, CreateInstallationRequest } from '@/services/SoftwareInstallationService';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Upload, Link, Network, Package, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Loader2, Upload, Link, Network, Package, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
     Select,
     SelectContent,
@@ -65,6 +76,14 @@ export default function SoftwareInstallation() {
     const [networkPath, setNetworkPath] = useState('');
     const [installations, setInstallations] = useState<SoftwareInstallation[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [expandedOutputId, setExpandedOutputId] = useState<number | null>(null);
+    const [historySearch, setHistorySearch] = useState('');
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyPerPage, setHistoryPerPage] = useState(20);
+    const [historyTotal, setHistoryTotal] = useState(0);
+    const [historyLastPage, setHistoryLastPage] = useState(1);
+    const [installationToDelete, setInstallationToDelete] = useState<number | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         fetchLabs();
@@ -138,12 +157,66 @@ export default function SoftwareInstallation() {
         }
     };
 
-    const fetchInstallations = async () => {
+    const fetchInstallations = useCallback(async (page = historyPage, perPage = historyPerPage, search = historySearch) => {
         try {
-            const response = await SoftwareInstallationService.getInstallations({ per_page: 50 });
-            setInstallations(response.data);
+            const params: { per_page?: number; search?: string; page?: number } = { per_page: perPage };
+            if (search) params.search = search;
+            if (page > 1) params.page = page;
+            
+            const response = await SoftwareInstallationService.getInstallations(params);
+            const list = Array.isArray(response.data) ? response.data : (response.data?.data ?? []);
+            setInstallations(list);
+            setHistoryTotal(response.total || list.length);
+            setHistoryLastPage(response.last_page || 1);
+            setHistoryPage(response.current_page || 1);
         } catch (error) {
             console.error('Error fetching installations:', error);
+        }
+    }, [historyPage, historyPerPage, historySearch]);
+
+    // Poll for status updates when there are pending or processing installations
+    const hasActiveInstallations = installations.some(
+        (i) => i.status === 'pending' || i.status === 'processing'
+    );
+    useEffect(() => {
+        if (!hasActiveInstallations || !showHistory) return;
+        const interval = setInterval(() => fetchInstallations(historyPage, historyPerPage, historySearch), 3000);
+        return () => clearInterval(interval);
+    }, [hasActiveInstallations, showHistory, historyPage, historyPerPage, historySearch, fetchInstallations]);
+
+    // Fetch installations when modal opens
+    useEffect(() => {
+        if (showHistory) {
+            setHistoryPage(1);
+            setHistorySearch('');
+            fetchInstallations(1, historyPerPage, '');
+        }
+    }, [showHistory]);
+
+    const handleHistorySearch = useCallback(() => {
+        setHistoryPage(1);
+        fetchInstallations(1, historyPerPage, historySearch);
+    }, [historySearch, historyPerPage, fetchInstallations]);
+
+    const handleDeleteInstallation = async (id: number) => {
+        setIsDeleting(true);
+        try {
+            await SoftwareInstallationService.deleteInstallation(id);
+            toast({
+                title: 'Instalação excluída',
+                description: 'A instalação foi excluída com sucesso',
+            });
+            fetchInstallations(historyPage, historyPerPage, historySearch);
+            setInstallationToDelete(null);
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Erro ao excluir',
+                description: err.response?.data?.message || 'Erro desconhecido',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -240,8 +313,10 @@ export default function SoftwareInstallation() {
             setSoftwareName('');
             setInstallArgs('');
             
-            // Refresh installations
-            fetchInstallations();
+            // Refresh installations if history modal is open
+            if (showHistory) {
+                fetchInstallations(historyPage, historyPerPage, historySearch);
+            }
         } catch (error: unknown) {
             const err = error as { response?: { data?: { message?: string } } };
             toast({
@@ -281,6 +356,13 @@ export default function SoftwareInstallation() {
             default:
                 return <Badge variant="outline"><Clock className="h-3 w-3 mr-1" /> Pendente</Badge>;
         }
+    };
+
+    const getProgressMessage = (installation: SoftwareInstallation): string => {
+        if (installation.status === 'pending') return 'Aguardando agente...';
+        const text = (installation.output || installation.error_message || '').trim();
+        if (!text) return installation.status === 'processing' ? 'Em andamento...' : '';
+        return text.length > 80 ? text.slice(0, 80) + '...' : text;
     };
 
     // No need for additional filtering - backend already handles search
@@ -559,11 +641,55 @@ export default function SoftwareInstallation() {
 
             {/* History Dialog */}
             <Dialog open={showHistory} onOpenChange={setShowHistory}>
-                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Histórico de Instalações</DialogTitle>
+                        <CardDescription>
+                            {hasActiveInstallations && (
+                                <span className="flex items-center gap-2 text-blue-600">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Atualizando a cada 3 segundos enquanto houver instalações em andamento.
+                                </span>
+                            )}
+                        </CardDescription>
                     </DialogHeader>
-                    <div className="mt-4">
+                    <div className="mt-4 space-y-4">
+                        {/* Search and Per Page Controls */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                                <Input
+                                    placeholder="Pesquisar por software, computador ou método..."
+                                    value={historySearch}
+                                    onChange={(e) => setHistorySearch(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleHistorySearch();
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <Button onClick={handleHistorySearch} variant="outline" size="sm">
+                                Buscar
+                            </Button>
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="per-page" className="text-sm whitespace-nowrap">Por página:</Label>
+                                <Select value={historyPerPage.toString()} onValueChange={(v) => {
+                                    setHistoryPerPage(parseInt(v));
+                                    setHistoryPage(1);
+                                }}>
+                                    <SelectTrigger id="per-page" className="w-20">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="10">10</SelectItem>
+                                        <SelectItem value="20">20</SelectItem>
+                                        <SelectItem value="50">50</SelectItem>
+                                        <SelectItem value="100">100</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -571,44 +697,151 @@ export default function SoftwareInstallation() {
                                     <TableHead>Computador</TableHead>
                                     <TableHead>Método</TableHead>
                                     <TableHead>Status</TableHead>
+                                    <TableHead>Progresso</TableHead>
                                     <TableHead>Data</TableHead>
+                                    <TableHead className="w-20">Ações</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {installations.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center text-muted-foreground">
-                                            Nenhuma instalação encontrada
+                                        <TableCell colSpan={7} className="text-center text-muted-foreground">
+                                            {historySearch ? 'Nenhuma instalação encontrada para a pesquisa' : 'Nenhuma instalação encontrada'}
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     installations.map(installation => (
-                                        <TableRow key={installation.id}>
-                                            <TableCell>
-                                                {installation.software_name || 'N/A'}
-                                            </TableCell>
-                                            <TableCell>
-                                                {installation.computer?.hostname || installation.computer?.machine_id}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">
-                                                    {installation.installer_type}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                {getStatusBadge(installation.status)}
-                                            </TableCell>
-                                            <TableCell>
-                                                {new Date(installation.created_at).toLocaleString('pt-BR')}
-                                            </TableCell>
-                                        </TableRow>
+                                        <Fragment key={installation.id}>
+                                            <TableRow>
+                                                <TableCell>
+                                                    {installation.software_name || 'N/A'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {installation.computer?.hostname || installation.computer?.machine_id}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">
+                                                        {installation.installer_type}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {getStatusBadge(installation.status)}
+                                                </TableCell>
+                                                <TableCell className="max-w-xs">
+                                                    {installation.status === 'processing' && (
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <Progress value={50} className="h-1.5 flex-1" />
+                                                            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                                                        </div>
+                                                    )}
+                                                    <span className="text-sm text-muted-foreground block truncate" title={installation.output || installation.error_message || undefined}>
+                                                        {getProgressMessage(installation)}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {new Date(installation.created_at).toLocaleString('pt-BR')}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1">
+                                                        {(installation.output || installation.error_message) && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8"
+                                                                onClick={() => setExpandedOutputId(expandedOutputId === installation.id ? null : installation.id)}
+                                                            >
+                                                                {expandedOutputId === installation.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                            onClick={() => setInstallationToDelete(installation.id)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                            {expandedOutputId === installation.id && (installation.output || installation.error_message) && (
+                                                <TableRow>
+                                                    <TableCell colSpan={7} className="bg-muted/50 py-3">
+                                                        <pre className="text-xs whitespace-pre-wrap break-words font-sans max-h-40 overflow-y-auto">
+                                                            {installation.output || installation.error_message}
+                                                        </pre>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </Fragment>
                                     ))
                                 )}
                             </TableBody>
                         </Table>
+
+                        {/* Pagination */}
+                        {historyTotal > 0 && (
+                            <div className="flex items-center justify-between">
+                                <div className="text-sm text-muted-foreground">
+                                    Mostrando {((historyPage - 1) * historyPerPage) + 1} a {Math.min(historyPage * historyPerPage, historyTotal)} de {historyTotal} instalações
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => fetchInstallations(historyPage - 1, historyPerPage, historySearch)}
+                                        disabled={historyPage === 1}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        Anterior
+                                    </Button>
+                                    <span className="text-sm">
+                                        Página {historyPage} de {historyLastPage}
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => fetchInstallations(historyPage + 1, historyPerPage, historySearch)}
+                                        disabled={historyPage >= historyLastPage}
+                                    >
+                                        Próxima
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={installationToDelete !== null} onOpenChange={(open) => !open && setInstallationToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir instalação?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta ação não pode ser desfeita. O registro desta instalação será permanentemente removido do histórico.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => installationToDelete && handleDeleteInstallation(installationToDelete)}
+                            disabled={isDeleting}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Excluindo...
+                                </>
+                            ) : (
+                                'Excluir'
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

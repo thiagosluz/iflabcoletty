@@ -799,16 +799,17 @@ exit 1
                 install_args = params.get('install_args', '')
                 silent_mode = params.get('silent_mode', True)
                 reboot_after = params.get('reboot_after', False)
-                
+
                 try:
                     installer_path = None
-                    
+
                     if method == 'upload':
                         file_id = params.get('file_id')
                         if not file_id:
                             output = "Missing file_id for upload method"
                             success = False
                         else:
+                            self.update_command_status(command_id, 'processing', 'Baixando instalador do servidor...')
                             installer_path = self.download_installer(file_id)
                     elif method == 'url':
                         installer_url = params.get('installer_url')
@@ -816,6 +817,7 @@ exit 1
                             output = "Missing installer_url for url method"
                             success = False
                         else:
+                            self.update_command_status(command_id, 'processing', 'Baixando instalador da URL...')
                             installer_path = self.download_from_url(installer_url)
                     elif method == 'network':
                         network_path = params.get('network_path')
@@ -823,19 +825,19 @@ exit 1
                             output = "Missing network_path for network method"
                             success = False
                         else:
+                            self.update_command_status(command_id, 'processing', 'Copiando instalador da rede...')
                             installer_path = self.copy_from_network(network_path)
                     else:
                         output = f"Unknown installation method: {method}"
                         success = False
-                    
+
                     if installer_path:
-                        # Execute installer
+                        self.update_command_status(command_id, 'processing', 'Executando instalador...')
                         result = self.execute_installer(installer_path, install_args, silent_mode)
                         success = result['success']
                         output = f"Software: {software_name}\n{result['output']}"
-                        
+
                         if reboot_after and success:
-                            # Schedule reboot after 30 seconds
                             if platform.system() == 'Windows':
                                 os.system("shutdown /r /t 30")
                                 output += "\n[Reboot scheduled in 30 seconds]"
@@ -925,36 +927,51 @@ exit 1
             logger.error(f"Failed to update command status: {e}")
 
     def download_installer(self, file_id):
-        """Download installer from server."""
-        try:
-            # Create temp directory if it doesn't exist
-            temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            url = f"{config.API_BASE_URL}/installers/{file_id}/download"
-            response = self.session.get(url, stream=True, timeout=300)  # 5 min timeout
+        """Download installer from server. Ensures auth and retries on 401."""
+        import re
+        file_id = (file_id or '').strip()
+        if not file_id:
+            raise ValueError("file_id is required for installer download")
+
+        # Ensure we are authenticated before download
+        if not self.token and not self.login():
+            raise RuntimeError("Agent not authenticated; cannot download installer")
+
+        temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        url = f"{config.API_BASE_URL}/installers/{file_id}/download"
+        logger.info("Downloading installer from %s", url)
+
+        response = None
+        for attempt in range(2):
+            response = self.session.get(url, stream=True, timeout=300)
+            if response.status_code == 200:
+                break
+            if response.status_code == 401 and attempt == 0:
+                logger.warning("Download returned 401; re-authenticating and retrying")
+                if self.login():
+                    continue
+            logger.error(
+                "Failed to download installer: %s %s body=%s",
+                response.status_code,
+                url,
+                (response.text or "")[:200],
+            )
             response.raise_for_status()
-            
-            # Get filename from Content-Disposition header or use file_id
-            filename = file_id
-            if 'Content-Disposition' in response.headers:
-                import re
-                match = re.search(r'filename="?([^"]+)"?', response.headers['Content-Disposition'])
-                if match:
-                    filename = match.group(1)
-            
-            file_path = os.path.join(temp_dir, filename)
-            
-            # Download file
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            logger.info(f"Downloaded installer: {file_path}")
-            return file_path
-        except Exception as e:
-            logger.error(f"Failed to download installer: {e}")
-            raise
+
+        filename = file_id
+        if 'Content-Disposition' in response.headers:
+            match = re.search(r'filename="?([^"]+)"?', response.headers['Content-Disposition'])
+            if match:
+                filename = match.group(1).strip()
+
+        file_path = os.path.join(temp_dir, filename)
+        with open(file_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        logger.info("Downloaded installer: %s", file_path)
+        return file_path
 
     def download_from_url(self, url):
         """Download installer from external URL."""
