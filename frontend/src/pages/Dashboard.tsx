@@ -4,6 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Monitor, Activity, Server, Cpu, MemoryStick, HardDrive, Package } from 'lucide-react';
 import echo from '@/lib/echo';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { useNavigate } from 'react-router-dom';
 
 interface HardwareAverages {
     cpu?: {
@@ -36,6 +44,13 @@ interface Stats {
     total_softwares?: number;
     hardware_averages?: HardwareAverages | null;
     os_distribution?: OSDistribution[];
+    outdated_agents?: number;
+    installations_in_progress?: number;
+}
+
+interface LabOption {
+    id: number;
+    name: string;
 }
 
 interface HistoryPoint {
@@ -50,12 +65,25 @@ export default function Dashboard() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [history, setHistory] = useState<HistoryPoint[]>([]);
     const [loading, setLoading] = useState(true);
+    const [labs, setLabs] = useState<LabOption[]>([]);
+    const [selectedLab, setSelectedLab] = useState<string>('all');
+    const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d'>('24h');
+    const navigate = useNavigate();
 
     const fetchData = async () => {
         try {
+            const params: Record<string, string | number> = {};
+            if (selectedLab !== 'all') {
+                params.lab_id = selectedLab;
+            }
+            const hours =
+                timeRange === '1h' ? 1 :
+                timeRange === '7d' ? 24 * 7 : 24;
+            params.hours = hours;
+
             const [statsRes, historyRes] = await Promise.all([
-                apiClient.get('/dashboard/stats'),
-                apiClient.get('/dashboard/history')
+                apiClient.get('/dashboard/stats', { params }),
+                apiClient.get('/dashboard/history', { params })
             ]);
             setStats(statsRes.data);
             setHistory(historyRes.data.map((h: any) => ({
@@ -72,6 +100,17 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
+        const fetchLabs = async () => {
+            try {
+                const res = await apiClient.get('/labs?per_page=1000');
+                const data = res.data.data || res.data || [];
+                setLabs(data);
+            } catch (e) {
+                console.error('Falha ao buscar laboratórios', e);
+            }
+        };
+
+        fetchLabs();
         fetchData();
 
         // Listen for real-time updates via WebSocket
@@ -89,6 +128,12 @@ export default function Dashboard() {
         }
     }, []);
 
+    // Refetch when filters change
+    useEffect(() => {
+        fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedLab, timeRange]);
+
     if (loading || !stats) {
         return (
             <div className="flex justify-center items-center h-screen">
@@ -105,11 +150,52 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-6">
-            <h2 className="text-3xl font-bold tracking-tight">Visão Geral do Dashboard</h2>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h2 className="text-3xl font-bold tracking-tight">Visão Geral do Dashboard</h2>
+                    <p className="text-sm text-muted-foreground mt-1">
+                        Hoje, {stats.online_computers} de {stats.total_computers} computadores estão online.
+                    </p>
+                </div>
+                <div className="flex flex-wrap gap-3 items-center">
+                    <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground">Laboratório</span>
+                        <Select value={selectedLab} onValueChange={setSelectedLab}>
+                            <SelectTrigger className="w-48">
+                                <SelectValue placeholder="Todos os laboratórios" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Todos os laboratórios</SelectItem>
+                                {labs.map((lab) => (
+                                    <SelectItem key={lab.id} value={lab.id.toString()}>
+                                        {lab.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="space-y-1">
+                        <span className="text-xs text-muted-foreground">Período</span>
+                        <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
+                            <SelectTrigger className="w-40">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="1h">Última 1h</SelectItem>
+                                <SelectItem value="24h">Últimas 24h</SelectItem>
+                                <SelectItem value="7d">Últimos 7 dias</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+            </div>
 
             {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
+                <Card
+                    onClick={() => navigate('/admin/labs')}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total de Laboratórios</CardTitle>
                         <Server className="h-4 w-4 text-muted-foreground" />
@@ -120,7 +206,10 @@ export default function Dashboard() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                    onClick={() => navigate('/admin/computers')}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total de Computadores</CardTitle>
                         <Monitor className="h-4 w-4 text-muted-foreground" />
@@ -131,7 +220,10 @@ export default function Dashboard() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                    onClick={() => navigate('/admin/computers')}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Online Agora</CardTitle>
                         <Activity className="h-4 w-4 text-green-500" />
@@ -142,7 +234,10 @@ export default function Dashboard() {
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card
+                    onClick={() => navigate('/admin/softwares')}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Softwares Únicos</CardTitle>
                         <Package className="h-4 w-4 text-purple-500" />
@@ -150,6 +245,45 @@ export default function Dashboard() {
                     <CardContent>
                         <div className="text-2xl font-bold text-purple-600">{stats.total_softwares || 0}</div>
                         <p className="text-xs text-muted-foreground">Softwares detectados</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Health / Operations Cards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
+                <Card
+                    onClick={() => navigate('/admin/computers')}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Agentes Desatualizados</CardTitle>
+                        <Cpu className="h-4 w-4 text-red-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-red-600">
+                            {stats.outdated_agents ?? 0}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Computadores que não estão na última versão do agente
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card
+                    onClick={() => navigate('/admin/software-installations')}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Instalações em Andamento</CardTitle>
+                        <Package className="h-4 w-4 text-blue-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">
+                            {stats.installations_in_progress ?? 0}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Instalações remotas de software com status &quot;processando&quot;
+                        </p>
                     </CardContent>
                 </Card>
             </div>

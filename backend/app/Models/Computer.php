@@ -13,6 +13,7 @@ class Computer extends Model
         'lab_id',
         'machine_id',
         'public_hash',
+        'public_hash_expires_at',
         'hostname',
         'hostname',
         'hardware_info',
@@ -23,6 +24,7 @@ class Computer extends Model
 
     protected $casts = [
         'hardware_info' => 'array',
+        'public_hash_expires_at' => 'datetime',
     ];
 
     protected static function boot()

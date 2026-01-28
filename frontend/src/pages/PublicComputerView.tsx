@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import { Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon } from 'lucide-react';
+import { Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Download } from 'lucide-react';
 
 interface HardwareInfo {
     cpu?: {
@@ -48,6 +48,7 @@ interface PublicComputerData {
     hostname: string | null;
     lab: {
         name: string;
+        description?: string | null;
     };
     hardware_info: HardwareInfo | null;
     status: 'online' | 'offline';
@@ -64,6 +65,8 @@ export default function PublicComputerView() {
     const [loadingSoftwares, setLoadingSoftwares] = useState(false);
     const [softwarePagination, setSoftwarePagination] = useState<PaginationMeta | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
+    const [sortBy, setSortBy] = useState<'name' | 'vendor' | 'installed_at'>('name');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
     useEffect(() => {
         if (hash) {
@@ -98,6 +101,8 @@ export default function PublicComputerView() {
         } catch (err: unknown) {
             if (axios.isAxiosError(err) && err.response?.status === 404) {
                 setError('Computador não encontrado. O link pode estar inválido ou expirado.');
+            } else if (axios.isAxiosError(err) && err.response?.status === 410) {
+                setError('Este link público expirou. Solicite um novo link ao administrador do sistema.');
             } else {
                 setError('Erro ao carregar informações do computador. Tente novamente mais tarde.');
             }
@@ -117,6 +122,8 @@ export default function PublicComputerView() {
             if (softwareSearch) {
                 params.append('search', softwareSearch);
             }
+            params.append('sort_by', sortBy);
+            params.append('sort_direction', sortDirection);
 
             const response = await axios.get(`/api/v1/public/computers/${hash}/softwares?${params.toString()}`);
             setSoftwares(response.data.data || []);
@@ -199,15 +206,36 @@ export default function PublicComputerView() {
         );
     }
 
-    if (!computer) {
+        if (!computer) {
         return null;
     }
 
     const isOnline = computer.status === 'online';
+        const lastSeenDate = new Date(computer.last_seen);
+        const isStale = Date.now() - lastSeenDate.getTime() > 24 * 60 * 60 * 1000;
+
+        const handleExportSoftwares = () => {
+            if (!softwares.length) return;
+            const lines = softwares.map((s) => {
+                const parts = [s.name];
+                if (s.version) parts.push(`v${s.version}`);
+                if (s.vendor) parts.push(`by ${s.vendor}`);
+                return parts.join(' - ');
+            });
+            const text = lines.join('\n');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(
+                    () => alert('Lista de softwares copiada para a área de transferência.'),
+                    () => alert('Não foi possível copiar automaticamente. Você pode selecionar e copiar manualmente.')
+                );
+            } else {
+                alert(text);
+            }
+        };
 
     return (
         <div className="min-h-screen bg-gray-50 py-8 px-4">
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-5xl mx-auto">
                 {/* Header */}
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                     <div className="flex items-center justify-between flex-wrap gap-4">
@@ -216,6 +244,11 @@ export default function PublicComputerView() {
                                 {computer.hostname || 'Computador'}
                             </h1>
                             <p className="text-gray-600">{computer.lab.name}</p>
+                            {computer.lab.description && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {computer.lab.description}
+                                </p>
+                            )}
                         </div>
                         <div className="flex items-center gap-3">
                             <div className={`h-4 w-4 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
@@ -224,8 +257,15 @@ export default function PublicComputerView() {
                             </span>
                         </div>
                     </div>
-                    <div className="mt-4 text-sm text-gray-500">
-                        Última atualização: {new Date(computer.last_seen).toLocaleString('pt-BR')}
+                    <div className="mt-4 text-sm text-gray-500 space-y-1">
+                        <div>
+                            Última atualização: {lastSeenDate.toLocaleString('pt-BR')}
+                        </div>
+                        {isStale && (
+                            <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1 inline-block">
+                                As informações podem estar desatualizadas (sem atualizações há mais de 24 horas).
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -347,24 +387,57 @@ export default function PublicComputerView() {
 
                 {/* Installed Software */}
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Package className="h-5 w-5 text-gray-700" />
-                        <h2 className="text-xl font-semibold text-gray-900">
-                            Software Instalado {softwarePagination && `(${softwarePagination.total})`}
-                        </h2>
+                    <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
+                        <div className="flex items-center gap-2">
+                            <Package className="h-5 w-5 text-gray-700" />
+                            <h2 className="text-xl font-semibold text-gray-900">
+                                Software Instalado {softwarePagination && `(${softwarePagination.total})`}
+                            </h2>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleExportSoftwares}
+                            disabled={!softwares.length}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <Download className="h-4 w-4" />
+                            Exportar lista
+                        </button>
                     </div>
 
-                    {/* Search */}
-                    <div className="mb-6">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Buscar por nome, versão ou fabricante..."
-                                value={softwareSearch}
-                                onChange={(e) => setSoftwareSearch(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            />
+                    {/* Search & Sort */}
+                    <div className="mb-6 flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
+                        <div className="flex-1">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nome, versão ou fabricante..."
+                                    value={softwareSearch}
+                                    onChange={(e) => setSoftwareSearch(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-gray-500">Ordenar por:</span>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                                className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white"
+                            >
+                                <option value="name">Nome</option>
+                                <option value="vendor">Fabricante</option>
+                                <option value="installed_at">Data de instalação</option>
+                            </select>
+                            <select
+                                value={sortDirection}
+                                onChange={(e) => setSortDirection(e.target.value as typeof sortDirection)}
+                                className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white"
+                            >
+                                <option value="asc">Ascendente</option>
+                                <option value="desc">Descendente</option>
+                            </select>
                         </div>
                     </div>
 

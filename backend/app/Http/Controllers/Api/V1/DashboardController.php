@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Computer;
 use App\Models\Lab;
+use App\Models\SoftwareInstallation;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use OpenApi\Attributes as OA;
 
@@ -39,17 +41,25 @@ class DashboardController extends Controller
             new OA\Response(response: 401, description: 'Não autenticado'),
         ]
     )]
-    public function stats()
+    public function stats(Request $request)
     {
         $this->authorize('dashboard.view');
 
         // "Online" threshold: updated in the last 5 minutes
         $threshold = Carbon::now()->subMinutes(5);
 
+        $labId = $request->query('lab_id');
+
+        // Base query for computers (optionally filtered by lab)
+        $computerQuery = Computer::query();
+        if ($labId) {
+            $computerQuery->where('lab_id', $labId);
+        }
+
         // Use query builder instead of loading all models into memory
         // Only load computers with hardware_info for calculations
         // Filter in PHP after loading to handle JSON properly
-        $allComputers = Computer::get(['id', 'hardware_info']);
+        $allComputers = (clone $computerQuery)->get(['id', 'lab_id', 'hardware_info', 'agent_version', 'updated_at']);
         $computersWithHardware = $allComputers->filter(function ($computer) {
             return ! empty($computer->hardware_info) &&
                    is_array($computer->hardware_info) &&
@@ -60,51 +70,94 @@ class DashboardController extends Controller
         $osDistribution = $this->getOSDistribution($allComputers);
         $totalSoftwares = $this->getTotalUniqueSoftwares();
 
+        // Agent versions: count outdated agents compared to latest version
+        $outdatedAgents = 0;
+        try {
+            $agentController = new AgentController;
+            $latestVersion = $agentController->getLatestVersion();
+            if ($latestVersion) {
+                $agentsQuery = (clone $computerQuery)->whereNotNull('agent_version');
+                $outdatedAgents = $agentsQuery->where('agent_version', '!=', $latestVersion)->count();
+            }
+        } catch (\Throwable $e) {
+            // In case of any issue (e.g. no packages yet), keep 0 and avoid breaking dashboard
+            $outdatedAgents = 0;
+        }
+
+        // Software installations in progress
+        $installationsQuery = SoftwareInstallation::where('status', 'processing');
+        if ($labId) {
+            $installationsQuery->whereHas('computer', function ($q) use ($labId) {
+                $q->where('lab_id', $labId);
+            });
+        }
+        $installationsInProgress = $installationsQuery->count();
+
         return [
-            'total_labs' => Lab::count(),
-            'total_computers' => Computer::count(),
-            'online_computers' => Computer::where('updated_at', '>=', $threshold)->count(),
-            'offline_computers' => Computer::where('updated_at', '<', $threshold)->count(),
+            'total_labs' => $labId ? Lab::where('id', $labId)->count() : Lab::count(),
+            'total_computers' => (clone $computerQuery)->count(),
+            'online_computers' => (clone $computerQuery)->where('updated_at', '>=', $threshold)->count(),
+            'offline_computers' => (clone $computerQuery)->where('updated_at', '<', $threshold)->count(),
             'total_softwares' => $totalSoftwares,
             'hardware_averages' => $hardwareAverages,
             'os_distribution' => $osDistribution,
+            'outdated_agents' => $outdatedAgents,
+            'installations_in_progress' => $installationsInProgress,
         ];
     }
 
-    public function history()
+    public function history(Request $request)
     {
         $this->authorize('dashboard.view');
+
+        $hours = (int) $request->query('hours', 24);
+        $hours = max(1, min($hours, 24 * 7)); // between 1 hour and 7 days
+
+        $labId = $request->query('lab_id');
+        $computerIds = null;
+        if ($labId) {
+            $computerIds = Computer::where('lab_id', $labId)->pluck('id');
+            if ($computerIds->isEmpty()) {
+                return response()->json([]);
+            }
+        }
 
         $driver = DB::getDriverName();
 
         if ($driver === 'sqlite') {
-            $metrics = \App\Models\ComputerMetric::selectRaw('
+            $metrics = \App\Models\ComputerMetric::when($computerIds, function ($q) use ($computerIds) {
+                $q->whereIn('computer_id', $computerIds);
+            })->selectRaw('
                 strftime(\'%Y-%m-%d %H:00:00\', recorded_at) as hour,
                 AVG(cpu_usage_percent) as avg_cpu,
                 AVG(memory_usage_percent) as avg_memory
             ')
-                ->where('recorded_at', '>=', now()->subHours(24))
+                ->where('recorded_at', '>=', now()->subHours($hours))
                 ->groupBy('hour')
                 ->orderBy('hour')
                 ->get();
         } elseif ($driver === 'pgsql') {
-            $metrics = \App\Models\ComputerMetric::selectRaw('
+            $metrics = \App\Models\ComputerMetric::when($computerIds, function ($q) use ($computerIds) {
+                $q->whereIn('computer_id', $computerIds);
+            })->selectRaw('
                 DATE_TRUNC(\'hour\', recorded_at) as hour,
                 AVG(cpu_usage_percent) as avg_cpu,
                 AVG(memory_usage_percent) as avg_memory
             ')
-                ->where('recorded_at', '>=', now()->subHours(24))
+                ->where('recorded_at', '>=', now()->subHours($hours))
                 ->groupBy('hour')
                 ->orderBy('hour')
                 ->get();
         } else {
             // MySQL
-            $metrics = \App\Models\ComputerMetric::selectRaw('
+            $metrics = \App\Models\ComputerMetric::when($computerIds, function ($q) use ($computerIds) {
+                $q->whereIn('computer_id', $computerIds);
+            })->selectRaw('
                 DATE_FORMAT(recorded_at, \'%Y-%m-%d %H:00:00\') as hour,
                 AVG(cpu_usage_percent) as avg_cpu,
                 AVG(memory_usage_percent) as avg_memory
             ')
-                ->where('recorded_at', '>=', now()->subHours(24))
+                ->where('recorded_at', '>=', now()->subHours($hours))
                 ->groupBy('hour')
                 ->orderBy('hour')
                 ->get();
