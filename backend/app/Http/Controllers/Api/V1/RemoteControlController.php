@@ -24,7 +24,7 @@ class RemoteControlController extends Controller
     public function store(Request $request, Computer $computer)
     {
         $validated = $request->validate([
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software',
             'parameters' => 'nullable|array',
         ]);
 
@@ -55,7 +55,7 @@ class RemoteControlController extends Controller
         $validated = $request->validate([
             'computer_ids' => 'required|array',
             'computer_ids.*' => 'exists:computers,id',
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software',
             'parameters' => 'nullable|array',
         ]);
 
@@ -92,7 +92,7 @@ class RemoteControlController extends Controller
         $this->authorize('remote-control.execute');
 
         $validated = $request->validate([
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software',
             'parameters' => 'nullable|array',
         ]);
 

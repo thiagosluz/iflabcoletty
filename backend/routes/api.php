@@ -147,6 +147,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/agent/download/{version}', [AgentController::class, 'downloadUpdate']);
         Route::get('/agent/version-info', [AgentController::class, 'versionInfo']);
 
+        // Agent Downloads
+        Route::get('/agent/files', [AgentController::class, 'listFiles']);
+        Route::get('/agent/installer/{platform}', [AgentController::class, 'downloadInstaller']);
+        Route::get('/agent/source-code', [AgentController::class, 'downloadSourceCode']);
+
         // Software
         Route::apiResource('softwares', SoftwareController::class)->only(['index', 'show']);
 
@@ -226,6 +231,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/system/queue/retry-failed', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'retryFailedJobs']);
         Route::post('/system/queue/clear', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'clearQueue']);
         Route::post('/system/queue/delete', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'deleteQueue']);
+
+        // Software Installations
+        Route::post('/software-installations', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'store']);
+        Route::post('/software-installations/upload', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'upload']);
+        Route::get('/software-installations', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'index']);
+        Route::get('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'show']);
+        Route::get('/installers/{fileId}/download', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'download']);
     });
 });
 

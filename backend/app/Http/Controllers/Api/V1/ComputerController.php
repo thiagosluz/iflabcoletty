@@ -30,9 +30,8 @@ class ComputerController extends Controller
      */
     private function buildComputerQuery(Request $request)
     {
-        // Optimized: Select only necessary fields and eager load lab with limited fields
-        $query = Computer::with('lab:id,name')
-            ->select('id', 'lab_id', 'hostname', 'machine_id', 'public_hash', 'updated_at', 'created_at');
+        // Don't use select() to ensure casts work properly (hardware_info needs to be cast to array)
+        $query = Computer::with('lab:id,name');
 
         if ($request->has('lab_id')) {
             $query->where('lab_id', $request->query('lab_id'));

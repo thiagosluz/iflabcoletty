@@ -134,8 +134,72 @@ if (-not (Test-Path ".venv")) {
 
 # Install dependencies
 Write-ColorOutput Yellow "Installing Python dependencies..."
-& "$AgentDir\.venv\Scripts\python.exe" -m pip install --upgrade pip
-& "$AgentDir\.venv\Scripts\pip.exe" install -r requirements.txt
+& "$AgentDir\.venv\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel
+
+# Install Pillow first (it often has issues on Windows)
+Write-ColorOutput Yellow "Installing Pillow (image processing library)..."
+Write-Output "Attempting to install Pillow with pre-compiled wheels..."
+
+# Try to install Pillow with only binary packages (wheels) first
+$pillowResult = & "$AgentDir\.venv\Scripts\pip.exe" install --only-binary :all: --upgrade Pillow 2>&1
+$pillowSuccess = $LASTEXITCODE -eq 0
+
+if (-not $pillowSuccess) {
+    Write-ColorOutput Yellow "Pre-compiled wheel not available, trying standard installation..."
+    # Try standard installation (may use wheel or try to build)
+    $pillowResult = & "$AgentDir\.venv\Scripts\pip.exe" install --upgrade Pillow 2>&1
+    $pillowSuccess = $LASTEXITCODE -eq 0
+}
+
+if (-not $pillowSuccess) {
+    Write-ColorOutput Red "ERROR: Failed to install Pillow"
+    Write-Output ""
+    Write-Output "Pillow installation failed. Common causes:"
+    Write-Output "  - No pre-compiled wheel available for your Python version/architecture"
+    Write-Output "  - Missing Visual C++ Build Tools (required for compilation)"
+    Write-Output ""
+    Write-Output "Solutions:"
+    Write-Output ""
+    Write-Output "Option 1 (Recommended): Install Visual C++ Build Tools"
+    Write-Output "  1. Download: https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022"
+    Write-Output "  2. Run installer and select 'Desktop development with C++' workload"
+    Write-Output "  3. Restart PowerShell as Administrator"
+    Write-Output "  4. Run this installation script again"
+    Write-Output ""
+    Write-Output "Option 2: Check Python version compatibility"
+    Write-Output "  Pillow wheels are available for Python 3.8-3.12 on Windows"
+    Write-Output "  Current Python version:"
+    python --version
+    Write-Output ""
+    Write-Output "Option 3: Install Pillow manually from wheel"
+    Write-Output "  1. Visit: https://pypi.org/project/Pillow/#files"
+    Write-Output "  2. Download wheel matching your Python version (e.g., cp312 for Python 3.12)"
+    Write-Output "  3. Install: pip install path\to\Pillow-*.whl"
+    Write-Output "  4. Then continue with: pip install -r requirements.txt --no-deps Pillow"
+    Write-Output ""
+    Write-Output "Option 4: Skip Pillow (screenshots will not work)"
+    Write-Output "  1. Edit requirements.txt and comment out: # Pillow>=10.0.0"
+    Write-Output "  2. Run this script again"
+    Write-Output ""
+    Write-ColorOutput Yellow "Full error output:"
+    Write-Output $pillowResult
+    exit 1
+}
+Write-ColorOutput Green "Pillow installed successfully"
+
+# Install other dependencies
+Write-ColorOutput Yellow "Installing other dependencies..."
+$otherDeps = @("requests==2.31.0", "psutil==5.9.8", "mac-vendor-lookup==0.1.12", "mss==9.0.1")
+foreach ($dep in $otherDeps) {
+    Write-Output "Installing $dep..."
+    & "$AgentDir\.venv\Scripts\pip.exe" install $dep
+    if ($LASTEXITCODE -ne 0) {
+        Write-ColorOutput Red "Error installing $dep"
+        exit 1
+    }
+}
+
+Write-ColorOutput Green "All dependencies installed successfully"
 
 # Check if service already exists
 $serviceExists = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue

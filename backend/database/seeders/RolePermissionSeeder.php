@@ -91,6 +91,11 @@ class RolePermissionSeeder extends Seeder
             'scheduled-tasks.create',
             'scheduled-tasks.update',
             'scheduled-tasks.delete',
+
+            // Software Installations
+            'software-installations.view',
+            'software-installations.create',
+            'software-installations.delete',
         ];
 
         // Criar permissões com guard_name explícito
@@ -147,6 +152,9 @@ class RolePermissionSeeder extends Seeder
             'scheduled-tasks.create',
             'scheduled-tasks.update',
             'scheduled-tasks.delete',
+            'software-installations.view',
+            'software-installations.create',
+            'software-installations.delete',
         ]);
 
         // Permissões para professor (pode visualizar e criar relatórios)

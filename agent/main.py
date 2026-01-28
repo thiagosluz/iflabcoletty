@@ -130,12 +130,79 @@ class Agent:
             return {}
 
     def get_software_list(self):
-        """Collect installed software (basic implementation)."""
+        """Collect installed software (Windows and Linux)."""
         softwares = []
         try:
-            # For Linux, try dpkg
-            if platform.system() == 'Linux':
-                # Use subprocess run directly instead of import inside function
+            if platform.system() == 'Windows':
+                # Windows: Query registry for installed software
+                import winreg
+                
+                # Registry paths for installed software
+                registry_paths = [
+                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+                    (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+                ]
+                
+                seen_names = set()  # Avoid duplicates
+                
+                for hkey, path in registry_paths:
+                    try:
+                        key = winreg.OpenKey(hkey, path)
+                        i = 0
+                        while i < 1000:  # Limit iterations
+                            try:
+                                subkey_name = winreg.EnumKey(key, i)
+                                subkey = winreg.OpenKey(key, subkey_name)
+                                
+                                try:
+                                    name = winreg.QueryValueEx(subkey, "DisplayName")[0]
+                                    version = None
+                                    vendor = None
+                                    
+                                    try:
+                                        version = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
+                                    except (FileNotFoundError, OSError):
+                                        pass
+                                    
+                                    try:
+                                        vendor = winreg.QueryValueEx(subkey, "Publisher")[0]
+                                    except (FileNotFoundError, OSError):
+                                        pass
+                                    
+                                    # Skip if no name or already seen
+                                    if name and name not in seen_names:
+                                        seen_names.add(name)
+                                        softwares.append({
+                                            'name': name,
+                                            'version': version,
+                                            'vendor': vendor
+                                        })
+                                        
+                                        # Limit to 200 entries total
+                                        if len(softwares) >= 200:
+                                            break
+                                
+                                except (FileNotFoundError, OSError):
+                                    pass
+                                finally:
+                                    winreg.CloseKey(subkey)
+                                
+                                i += 1
+                            except OSError:
+                                break
+                        
+                        winreg.CloseKey(key)
+                        
+                        if len(softwares) >= 200:
+                            break
+                    
+                    except (FileNotFoundError, OSError, PermissionError) as e:
+                        logger.debug(f"Could not access registry path {path}: {e}")
+                        continue
+                
+            elif platform.system() == 'Linux':
+                # Linux: Use dpkg
                 result = subprocess.run(['dpkg', '-l'], capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
@@ -148,8 +215,9 @@ class Agent:
                                     'version': parts[2],
                                     'vendor': None
                                 })
-                    # Limit to first 100 to avoid overwhelming the server
-                    softwares = softwares[:100]
+                    # Limit to first 200 to avoid overwhelming the server
+                    softwares = softwares[:200]
+        
         except Exception as e:
             logger.warning(f"Could not collect software list: {e}")
         
@@ -501,16 +569,126 @@ class Agent:
             
             elif command_type == 'lock':
                 if platform.system() == 'Windows':
-                    os.system("rundll32.exe user32.dll,LockWorkStation")
-                    success = True
-                    output = "Lock command issued."
+                    # On Windows, lock the workstation
+                    # Services running as SYSTEM cannot directly lock - must execute in user session
+                    try:
+                        # Method 1: Use schtasks to execute lock command as logged-in user
+                        # This is the most reliable method for Windows services
+                        ps_script = r'''
+# Get logged-in user from Win32_ComputerSystem
+$cs = Get-WmiObject -Class Win32_ComputerSystem
+$user = $cs.UserName
+
+if (-not $user) {
+    Write-Error "No user logged in"
+    exit 1
+}
+
+# Parse domain and username
+if ($user -match '^(.+)\\(.+)$') {
+    $domain = $matches[1]
+    $username = $matches[2]
+} else {
+    $domain = $env:COMPUTERNAME
+    $username = $user
+}
+
+# Create unique task name
+$taskName = "IFLabLock_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+
+# Create and run scheduled task
+$createCmd = "schtasks /Create /TN `"$taskName`" /TR `"rundll32.exe user32.dll,LockWorkStation`" /SC ONCE /ST 23:59 /F /RU `"$domain\$username`" /RL HIGHEST"
+$createResult = cmd /c $createCmd 2>&1
+
+if ($LASTEXITCODE -eq 0) {
+    # Run the task
+    $runCmd = "schtasks /Run /TN `"$taskName`""
+    $runResult = cmd /c $runCmd 2>&1
+    Start-Sleep -Milliseconds 800
+    
+    # Clean up
+    $deleteCmd = "schtasks /Delete /TN `"$taskName`" /F"
+    cmd /c $deleteCmd 2>&1 | Out-Null
+    
+    if ($LASTEXITCODE -eq 0) {
+        exit 0
+    }
+}
+
+Write-Error "schtasks failed: $createResult $runResult"
+exit 1
+'''
+                        
+                        # Execute PowerShell script
+                        try:
+                            result = subprocess.run(
+                                ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_script],
+                                capture_output=True,
+                                text=True,
+                                timeout=25
+                            )
+                            
+                            if result.returncode == 0:
+                                success = True
+                                output = "Lock command issued successfully (scheduled task method)."
+                                logger.info("Lock executed via schtasks method")
+                            else:
+                                error_msg = result.stderr or result.stdout or "Unknown error"
+                                logger.warning(f"PowerShell/schtasks method failed: {error_msg}")
+                                raise Exception(f"schtasks returned {result.returncode}: {error_msg}")
+                        
+                        except Exception as e:
+                            logger.warning(f"PowerShell/schtasks method failed: {e}")
+                            success = False
+                            output = f"Lock failed: {str(e)}. The service may need administrator privileges to create scheduled tasks, or no user may be logged in."
+                            logger.error(f"Lock command failed: {e}")
+                    
+                    except Exception as e:
+                        logger.error(f"Error executing lock command: {e}")
+                        success = False
+                        output = f"Lock failed: {str(e)}"
+                
                 else:
-                    # Try common linux lock commands
-                    # Use loginctl if available (systemd)
-                    if os.system("loginctl lock-session") != 0:
-                        os.system("xdg-screensaver lock || gnome-screensaver-command -l")
-                    success = True
-                    output = "Lock command issued (Linux best effort)."
+                    # Linux: Try common lock commands
+                    try:
+                        # Use loginctl if available (systemd)
+                        result = subprocess.run(
+                            ['loginctl', 'lock-session'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0:
+                            success = True
+                            output = "Lock command issued (loginctl)."
+                        else:
+                            # Try xdg-screensaver or gnome-screensaver
+                            result2 = subprocess.run(
+                                ['xdg-screensaver', 'lock'],
+                                capture_output=True,
+                                text=True,
+                                timeout=5
+                            )
+                            if result2.returncode == 0:
+                                success = True
+                                output = "Lock command issued (xdg-screensaver)."
+                            else:
+                                result3 = subprocess.run(
+                                    ['gnome-screensaver-command', '-l'],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=5
+                                )
+                                if result3.returncode == 0:
+                                    success = True
+                                    output = "Lock command issued (gnome-screensaver)."
+                                else:
+                                    success = False
+                                    output = "Lock failed: No lock command available."
+                    except Exception as e:
+                        logger.error(f"Error executing lock command on Linux: {e}")
+                        success = False
+                        output = f"Lock failed: {str(e)}"
 
             elif command_type == 'message':
                 msg = params.get('message', 'Alert from Admin')
@@ -584,6 +762,59 @@ class Agent:
                     output = "Missing cmd_line parameter"
                     success = False
 
+            elif command_type == 'install_software':
+                method = params.get('method')  # 'upload', 'url', 'network'
+                software_name = params.get('software_name', 'Unknown')
+                install_args = params.get('install_args', '')
+                silent_mode = params.get('silent_mode', True)
+                reboot_after = params.get('reboot_after', False)
+                
+                try:
+                    installer_path = None
+                    
+                    if method == 'upload':
+                        file_id = params.get('file_id')
+                        if not file_id:
+                            output = "Missing file_id for upload method"
+                            success = False
+                        else:
+                            installer_path = self.download_installer(file_id)
+                    elif method == 'url':
+                        installer_url = params.get('installer_url')
+                        if not installer_url:
+                            output = "Missing installer_url for url method"
+                            success = False
+                        else:
+                            installer_path = self.download_from_url(installer_url)
+                    elif method == 'network':
+                        network_path = params.get('network_path')
+                        if not network_path:
+                            output = "Missing network_path for network method"
+                            success = False
+                        else:
+                            installer_path = self.copy_from_network(network_path)
+                    else:
+                        output = f"Unknown installation method: {method}"
+                        success = False
+                    
+                    if installer_path:
+                        # Execute installer
+                        result = self.execute_installer(installer_path, install_args, silent_mode)
+                        success = result['success']
+                        output = f"Software: {software_name}\n{result['output']}"
+                        
+                        if reboot_after and success:
+                            # Schedule reboot after 30 seconds
+                            if platform.system() == 'Windows':
+                                os.system("shutdown /r /t 30")
+                                output += "\n[Reboot scheduled in 30 seconds]"
+                            else:
+                                output += "\n[Reboot not supported on this platform]"
+                except Exception as e:
+                    output = f"Installation error: {str(e)}"
+                    success = False
+                    logger.error(f"Installation failed: {e}")
+
             else:
                 output = f"Unknown command: {command_type}"
                 success = False
@@ -602,6 +833,234 @@ class Agent:
             self.session.put(url, json=payload)
         except Exception as e:
             logger.error(f"Failed to update command status: {e}")
+
+    def download_installer(self, file_id):
+        """Download installer from server."""
+        try:
+            # Create temp directory if it doesn't exist
+            temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            url = f"{config.API_BASE_URL}/installers/{file_id}/download"
+            response = self.session.get(url, stream=True, timeout=300)  # 5 min timeout
+            response.raise_for_status()
+            
+            # Get filename from Content-Disposition header or use file_id
+            filename = file_id
+            if 'Content-Disposition' in response.headers:
+                import re
+                match = re.search(r'filename="?([^"]+)"?', response.headers['Content-Disposition'])
+                if match:
+                    filename = match.group(1)
+            
+            file_path = os.path.join(temp_dir, filename)
+            
+            # Download file
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            logger.info(f"Downloaded installer: {file_path}")
+            return file_path
+        except Exception as e:
+            logger.error(f"Failed to download installer: {e}")
+            raise
+
+    def download_from_url(self, url):
+        """Download installer from external URL."""
+        try:
+            # Create temp directory if it doesn't exist
+            temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            # Validate URL
+            if not url.startswith(('http://', 'https://')):
+                raise ValueError(f"Invalid URL scheme: {url}")
+            
+            # Get filename from URL
+            filename = os.path.basename(url.split('?')[0])
+            if not filename or '.' not in filename:
+                filename = f"installer_{uuid.uuid4().hex[:8]}.exe"
+            
+            # Validate extension
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in ['.exe', '.msi', '.zip']:
+                raise ValueError(f"Unsupported file extension: {ext}")
+            
+            file_path = os.path.join(temp_dir, filename)
+            
+            # Download file
+            response = requests.get(url, stream=True, timeout=300)  # 5 min timeout
+            response.raise_for_status()
+            
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            logger.info(f"Downloaded installer from URL: {file_path}")
+            return file_path
+        except Exception as e:
+            logger.error(f"Failed to download from URL: {e}")
+            raise
+
+    def copy_from_network(self, network_path):
+        """Copy installer from network share."""
+        try:
+            if platform.system() != 'Windows':
+                raise ValueError("Network share copy only supported on Windows")
+            
+            # Create temp directory if it doesn't exist
+            temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            # Validate network path format
+            if not network_path.startswith('\\\\'):
+                raise ValueError(f"Invalid network path format: {network_path}")
+            
+            filename = os.path.basename(network_path)
+            file_path = os.path.join(temp_dir, filename)
+            
+            # Use robocopy for better reliability, fallback to copy
+            try:
+                # Try robocopy first (more reliable)
+                result = subprocess.run(
+                    ['robocopy', os.path.dirname(network_path), temp_dir, filename, '/NFL', '/NDL', '/NJH', '/NJS'],
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                # robocopy returns 0-7 for success, 8+ for errors
+                if result.returncode >= 8:
+                    raise subprocess.CalledProcessError(result.returncode, 'robocopy', result.stderr)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                # Fallback to copy command
+                result = subprocess.run(
+                    ['copy', f'"{network_path}"', f'"{file_path}"'],
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if result.returncode != 0:
+                    raise subprocess.CalledProcessError(result.returncode, 'copy', result.stderr)
+            
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"File not copied: {file_path}")
+            
+            logger.info(f"Copied installer from network: {file_path}")
+            return file_path
+        except Exception as e:
+            logger.error(f"Failed to copy from network: {e}")
+            raise
+
+    def execute_installer(self, installer_path, install_args, silent_mode):
+        """Execute installer with appropriate arguments."""
+        try:
+            if not os.path.exists(installer_path):
+                return {'success': False, 'output': f"Installer not found: {installer_path}"}
+            
+            ext = os.path.splitext(installer_path)[1].lower()
+            output_lines = []
+            
+            if ext == '.msi':
+                # MSI installer
+                args = ['msiexec', '/i', installer_path]
+                if silent_mode:
+                    args.append('/qn')  # Quiet, no UI
+                else:
+                    args.append('/qb')  # Basic UI
+                
+                if install_args:
+                    args.extend(install_args.split())
+                
+                result = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,  # 10 min timeout for installation
+                    cwd=os.path.dirname(installer_path)
+                )
+                
+                output_lines.append(f"MSI Installer executed with return code: {result.returncode}")
+                if result.stdout:
+                    output_lines.append(f"STDOUT: {result.stdout}")
+                if result.stderr:
+                    output_lines.append(f"STDERR: {result.stderr}")
+                
+                # MSI return codes: 0 = success, others = failure
+                success = result.returncode == 0
+                
+            elif ext == '.exe':
+                # EXE installer
+                args = [installer_path]
+                
+                if install_args:
+                    args.extend(install_args.split())
+                elif silent_mode:
+                    # Try common silent flags
+                    args.extend(['/S', '/quiet', '/silent', '/VERYSILENT'])
+                
+                result = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,  # 10 min timeout
+                    cwd=os.path.dirname(installer_path)
+                )
+                
+                output_lines.append(f"EXE Installer executed with return code: {result.returncode}")
+                if result.stdout:
+                    output_lines.append(f"STDOUT: {result.stdout}")
+                if result.stderr:
+                    output_lines.append(f"STDERR: {result.stderr}")
+                
+                # EXE return codes: 0 = success typically
+                success = result.returncode == 0
+                
+            elif ext == '.zip':
+                # ZIP file - extract and look for installer
+                import zipfile
+                extract_dir = os.path.join(os.path.dirname(installer_path), 'extracted')
+                os.makedirs(extract_dir, exist_ok=True)
+                
+                with zipfile.ZipFile(installer_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                
+                # Look for .exe or .msi in extracted files
+                installer_found = None
+                for root, dirs, files in os.walk(extract_dir):
+                    for file in files:
+                        if file.endswith(('.exe', '.msi')):
+                            installer_found = os.path.join(root, file)
+                            break
+                    if installer_found:
+                        break
+                
+                if installer_found:
+                    # Recursively call execute_installer
+                    return self.execute_installer(installer_found, install_args, silent_mode)
+                else:
+                    return {'success': False, 'output': 'No installer found in ZIP file'}
+            else:
+                return {'success': False, 'output': f"Unsupported installer type: {ext}"}
+            
+            # Cleanup temp file after successful installation
+            if success:
+                try:
+                    os.remove(installer_path)
+                    logger.info(f"Cleaned up installer: {installer_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup installer: {e}")
+            
+            return {
+                'success': success,
+                'output': '\n'.join(output_lines)
+            }
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'output': 'Installation timed out after 10 minutes'}
+        except Exception as e:
+            logger.error(f"Failed to execute installer: {e}")
+            return {'success': False, 'output': f"Installation error: {str(e)}"}
 
     def run(self):
         logger.info(f"Starting Agent for Machine ID: {self.machine_id}")

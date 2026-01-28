@@ -81,6 +81,14 @@ export default function DashboardLayout() {
                         <Activity className="mr-3 h-5 w-5" />
                         Saúde do Sistema
                     </Link>
+                    <Link to="/admin/software-installations" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Package className="mr-3 h-5 w-5" />
+                        Instalação de Programas
+                    </Link>
+                    <Link to="/admin/agent-downloads" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <Download className="mr-3 h-5 w-5" />
+                        Downloads do Agente
+                    </Link>
                     <Link to="/admin/users" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
                         <Users className="mr-3 h-5 w-5" />
                         Usuários

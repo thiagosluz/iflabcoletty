@@ -22,6 +22,8 @@ import Alerts from './pages/Alerts';
 import AlertRules from './pages/AlertRules';
 import PublicComputerView from './pages/PublicComputerView';
 import SystemHealth from './pages/SystemHealth';
+import SoftwareInstallation from './pages/SoftwareInstallation';
+import AgentDownloads from './pages/AgentDownloads';
 
 function App() {
   return (
@@ -50,6 +52,8 @@ function App() {
           <Route path="alerts" element={<Alerts />} />
           <Route path="alert-rules" element={<AlertRules />} />
           <Route path="system-health" element={<SystemHealth />} />
+          <Route path="software-installations" element={<SoftwareInstallation />} />
+          <Route path="agent-downloads" element={<AgentDownloads />} />
           <Route index element={<Navigate to="dashboard" replace />} />
         </Route>
 
