@@ -18,6 +18,7 @@ class Computer extends Model
         'hardware_info',
         'position_x',
         'position_y',
+        'agent_version',
     ];
 
     protected $casts = [

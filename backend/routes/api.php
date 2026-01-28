@@ -152,6 +152,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/agent/installer/{platform}', [AgentController::class, 'downloadInstaller']);
         Route::get('/agent/source-code', [AgentController::class, 'downloadSourceCode']);
         Route::post('/agent/build-package', [AgentController::class, 'buildPackage']);
+        Route::delete('/agent/packages/{version}', [AgentController::class, 'deletePackage']);
 
         // Software
         Route::apiResource('softwares', SoftwareController::class)->only(['index', 'show']);

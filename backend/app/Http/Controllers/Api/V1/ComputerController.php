@@ -94,9 +94,24 @@ class ComputerController extends Controller
 
         // Optimized: Eager load relationships to avoid N+1 queries
         // Note: Activities are now loaded separately via getActivities endpoint
-        return $computer->load([
+        $computer = $computer->load([
             'lab:id,name,description',
         ]);
+
+        // Add latest agent version to response
+        $versionFile = storage_path('app/agent/latest_version.txt');
+        $latestVersion = '1.0.0';
+
+        if (file_exists($versionFile)) {
+            $latestVersion = trim(file_get_contents($versionFile));
+        } else {
+            $latestVersion = config('app.agent_latest_version', '1.0.0');
+        }
+
+        // Add latest_agent_version to the response
+        $computer->latest_agent_version = $latestVersion;
+
+        return $computer;
     }
 
     /**
@@ -171,6 +186,7 @@ class ComputerController extends Controller
             'hostname' => 'nullable|string',
             'machine_id' => 'sometimes|string|unique:computers,machine_id,'.$computer->id,
             'hardware_info' => 'sometimes|array',
+            'agent_version' => 'sometimes|nullable|string',
         ]);
 
         $computer->update($validated);
@@ -262,6 +278,7 @@ class ComputerController extends Controller
             'softwares.*.name' => 'required|string',
             'softwares.*.version' => 'nullable|string',
             'softwares.*.vendor' => 'nullable|string',
+            'agent_version' => 'sometimes|nullable|string',
         ]);
 
         // Check if computer was offline before this report
@@ -270,6 +287,11 @@ class ComputerController extends Controller
         // Update hardware info
         if (isset($validated['hardware_info'])) {
             $computer->update(['hardware_info' => $validated['hardware_info']]);
+        }
+
+        // Update agent version
+        if (isset($validated['agent_version'])) {
+            $computer->update(['agent_version' => $validated['agent_version']]);
         }
 
         // Sync software and detect changes

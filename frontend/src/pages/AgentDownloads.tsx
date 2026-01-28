@@ -10,8 +10,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
-import { Download, RefreshCw, Loader2, Package, FileCode, Monitor, Server, CheckCircle2, XCircle, Info } from 'lucide-react';
+import { Download, RefreshCw, Loader2, Package, FileCode, Monitor, Server, CheckCircle2, XCircle, Info, Trash2 } from 'lucide-react';
 import apiClient from '@/lib/axios';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function AgentDownloads() {
     const { toast } = useToast();
@@ -20,6 +30,9 @@ export default function AgentDownloads() {
     const [isBuildingPackage, setIsBuildingPackage] = useState(false);
     const [newPackageVersion, setNewPackageVersion] = useState('');
     const [overwritePackage, setOverwritePackage] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [packageToDelete, setPackageToDelete] = useState<AgentPackage | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     useEffect(() => {
         fetchFiles();
@@ -99,6 +112,36 @@ export default function AgentDownloads() {
                 description: err.response?.data?.message || 'Erro desconhecido',
                 variant: 'destructive',
             });
+        }
+    };
+
+    const handleDeleteClick = (pkg: AgentPackage) => {
+        setPackageToDelete(pkg);
+        setDeleteDialogOpen(true);
+    };
+
+    const handleDeleteConfirm = async () => {
+        if (!packageToDelete) return;
+
+        try {
+            setIsDeleting(true);
+            await AgentDownloadService.deletePackage(packageToDelete.version);
+            toast({
+                title: 'Pacote excluído',
+                description: `Versão ${packageToDelete.version} excluída com sucesso.`,
+            });
+            setDeleteDialogOpen(false);
+            setPackageToDelete(null);
+            await fetchFiles();
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            toast({
+                title: 'Erro ao excluir pacote',
+                description: err.response?.data?.message || 'Erro desconhecido',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -382,6 +425,7 @@ export default function AgentDownloads() {
                                 <TableRow>
                                     <TableHead>Versão</TableHead>
                                     <TableHead>Tamanho</TableHead>
+                                    <TableHead>Computadores</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Data</TableHead>
                                     <TableHead className="text-right">Ações</TableHead>
@@ -402,6 +446,9 @@ export default function AgentDownloads() {
                                         </TableCell>
                                         <TableCell>{pkg.size_human}</TableCell>
                                         <TableCell>
+                                            <span className="font-medium">{pkg.computers_count ?? 0}</span>
+                                        </TableCell>
+                                        <TableCell>
                                             {pkg.exists ? (
                                                 <Badge className="bg-green-500">
                                                     <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -418,18 +465,31 @@ export default function AgentDownloads() {
                                             {pkg.created_at ? new Date(pkg.created_at).toLocaleDateString('pt-BR') : '-'}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {pkg.exists ? (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => handleDownload(pkg.download_url, `iflab-agent-${pkg.version}.zip`)}
-                                                >
-                                                    <Download className="h-4 w-4 mr-2" />
-                                                    Baixar
-                                                </Button>
-                                            ) : (
-                                                <span className="text-sm text-muted-foreground">-</span>
-                                            )}
+                                            <div className="flex items-center justify-end gap-2">
+                                                {pkg.exists ? (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => handleDownload(pkg.download_url, `iflab-agent-${pkg.version}.zip`)}
+                                                    >
+                                                        <Download className="h-4 w-4 mr-2" />
+                                                        Baixar
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-sm text-muted-foreground">-</span>
+                                                )}
+
+                                                {pkg.exists && (pkg.computers_count ?? 0) === 0 && !pkg.is_latest && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        onClick={() => handleDeleteClick(pkg)}
+                                                        title="Excluir pacote"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -569,6 +629,37 @@ export default function AgentDownloads() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir pacote</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir a versão <strong>{packageToDelete?.version}</strong>?
+                            <br />
+                            Nenhum computador está usando esta versão.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteConfirm}
+                            disabled={isDeleting}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Excluindo...
+                                </>
+                            ) : (
+                                'Excluir'
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

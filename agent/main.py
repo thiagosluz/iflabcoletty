@@ -14,6 +14,7 @@ from PIL import Image
 import io
 import base64
 import subprocess
+from pathlib import Path
 
 # Setup Logging
 logging.basicConfig(
@@ -32,6 +33,8 @@ class Agent:
         self.token = None
         self.machine_id = self._get_or_create_machine_id()
         self.computer_db_id = None # ID in the database
+        self.agent_dir = Path(__file__).parent.absolute()
+        self.version_file = self.agent_dir / ".agent_version"
 
     def _get_or_create_machine_id(self):
         """Get machine ID from file or generate new one."""
@@ -223,12 +226,39 @@ class Agent:
         
         return softwares
 
+    def get_current_version(self):
+        """Get the current agent version.
+
+        Priority:
+        1) .agent_version (written by update.py)
+        2) VERSION (shipped inside agent ZIP package)
+        """
+        if self.version_file.exists():
+            try:
+                with open(self.version_file, 'r') as f:
+                    return f.read().strip()
+            except Exception as e:
+                logger.warning(f"Error reading version file: {e}")
+        
+        # Fallback to VERSION file (present in built ZIP packages)
+        version_in_zip = self.agent_dir / "VERSION"
+        if version_in_zip.exists():
+            try:
+                with open(version_in_zip, 'r') as f:
+                    v = f.read().strip()
+                    if v:
+                        return v
+            except Exception as e:
+                logger.warning(f"Error reading VERSION file: {e}")
+        return "0.0.0"
+
     def collect_data(self):
         """Collect system information."""
         return {
             'lab_id': config.LAB_ID,
             'machine_id': self.machine_id,
             'hostname': socket.gethostname(),
+            'agent_version': self.get_current_version(),
         }
 
     def _find_computer_by_machine_id(self, bypass_cache=False):
@@ -441,7 +471,8 @@ class Agent:
             
             report_data = {
                 'hardware_info': hardware_info,
-                'softwares': software_list
+                'softwares': software_list,
+                'agent_version': self.get_current_version()
             }
             
             report_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/report"
@@ -814,6 +845,65 @@ exit 1
                     output = f"Installation error: {str(e)}"
                     success = False
                     logger.error(f"Installation failed: {e}")
+
+            elif command_type == 'update_agent':
+                try:
+                    logger.info("Executing remote update_agent command...")
+                    # Run update.py with AUTO_UPDATE=1 to skip confirmation
+                    update_script = self.agent_dir / "update.py"
+                    
+                    if not update_script.exists():
+                        output = "update.py not found in agent directory"
+                        success = False
+                    else:
+                        # Determine Python executable (use venv if available)
+                        if platform.system() == 'Windows':
+                            python_exe = self.agent_dir / ".venv" / "Scripts" / "python.exe"
+                        else:
+                            python_exe = self.agent_dir / ".venv" / "bin" / "python"
+                        
+                        # Fallback to system python if venv doesn't exist
+                        if not python_exe.exists():
+                            python_exe = "python3" if platform.system() != 'Windows' else "python"
+                        
+                        # Set environment variable for auto-update
+                        env = os.environ.copy()
+                        env['AUTO_UPDATE'] = '1'
+                        
+                        # Execute update.py
+                        result = subprocess.run(
+                            [str(python_exe), str(update_script)],
+                            cwd=str(self.agent_dir),
+                            capture_output=True,
+                            text=True,
+                            timeout=300,  # 5 minutes timeout
+                            env=env
+                        )
+                        
+                        output_lines = []
+                        if result.stdout:
+                            output_lines.append("STDOUT:")
+                            output_lines.append(result.stdout)
+                        if result.stderr:
+                            output_lines.append("STDERR:")
+                            output_lines.append(result.stderr)
+                        
+                        output = "\n".join(output_lines) if output_lines else f"Update completed with exit code: {result.returncode}"
+                        success = result.returncode == 0
+                        
+                        if success:
+                            logger.info("Agent update completed successfully")
+                        else:
+                            logger.warning(f"Agent update failed with exit code: {result.returncode}")
+                            
+                except subprocess.TimeoutExpired:
+                    output = "Update command timed out after 5 minutes"
+                    success = False
+                    logger.error("Update command timed out")
+                except Exception as e:
+                    output = f"Error executing update: {str(e)}"
+                    success = False
+                    logger.error(f"Update command failed: {e}")
 
             else:
                 output = f"Unknown command: {command_type}"

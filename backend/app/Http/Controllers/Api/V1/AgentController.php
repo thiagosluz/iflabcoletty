@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Computer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -75,7 +76,7 @@ class AgentController extends Controller
     /**
      * Get the latest agent version
      */
-    private function getLatestVersion(): string
+    public function getLatestVersion(): string
     {
         // Option 1: Read from config file
         $versionFile = storage_path('app/agent/latest_version.txt');
@@ -358,6 +359,9 @@ class AgentController extends Controller
                     $size = file_exists($file) ? filesize($file) : 0;
                     $latestVersion = $this->getLatestVersion();
 
+                    // Count computers using this agent version
+                    $computersCount = Computer::where('agent_version', $version)->count();
+
                     $packages[] = [
                         'version' => $version,
                         'size' => $size,
@@ -366,6 +370,7 @@ class AgentController extends Controller
                         'exists' => true,
                         'is_latest' => $version === $latestVersion,
                         'created_at' => file_exists($file) ? date('Y-m-d H:i:s', filemtime($file)) : null,
+                        'computers_count' => $computersCount,
                     ];
                 }
             }
@@ -627,5 +632,68 @@ class AgentController extends Controller
         $bytes /= pow(1024, $pow);
 
         return round($bytes, $precision).' '.$units[$pow];
+    }
+
+    /**
+     * Delete an agent package (only if no computers are using it)
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function deletePackage(Request $request, string $version)
+    {
+        $this->authorize('computers.view');
+
+        // Check if any computers are using this version
+        $computersCount = Computer::where('agent_version', $version)->count();
+
+        if ($computersCount > 0) {
+            return response()->json([
+                'message' => "Não é possível excluir: existem {$computersCount} computador(es) usando esta versão.",
+            ], 403);
+        }
+
+        // Check if this is the latest version
+        $latestVersion = $this->getLatestVersion();
+        if ($version === $latestVersion) {
+            return response()->json([
+                'message' => 'Não é possível excluir a versão mais recente.',
+            ], 403);
+        }
+
+        // Get package path
+        $packagePath = $this->getPackagePath($version);
+
+        if (! $packagePath || ! file_exists($packagePath)) {
+            return response()->json([
+                'message' => 'Pacote não encontrado.',
+            ], 404);
+        }
+
+        // Delete the package file
+        try {
+            if (unlink($packagePath)) {
+                Log::info("Agent package deleted: {$version}", [
+                    'path' => $packagePath,
+                    'user_id' => auth()->id(),
+                ]);
+
+                return response()->json([
+                    'message' => 'Pacote excluído com sucesso.',
+                ]);
+            } else {
+                return response()->json([
+                    'message' => 'Erro ao excluir o arquivo do pacote.',
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            Log::error("Error deleting agent package: {$version}", [
+                'error' => $e->getMessage(),
+                'path' => $packagePath,
+            ]);
+
+            return response()->json([
+                'message' => 'Erro ao excluir o pacote: '.$e->getMessage(),
+            ], 500);
+        }
     }
 }

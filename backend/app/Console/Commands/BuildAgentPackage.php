@@ -121,6 +121,11 @@ class BuildAgentPackage extends Command
         $this->line("  Added: VERSION ({$version})");
         $addedCount++;
 
+        // Also create .agent_version so fresh installs don't show 0.0.0
+        $zip->addFromString('.agent_version', $versionContent);
+        $this->line("  Added: .agent_version ({$version})");
+        $addedCount++;
+
         $zip->close();
 
         if (! file_exists($zipPath)) {

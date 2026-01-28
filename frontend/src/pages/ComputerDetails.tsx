@@ -6,7 +6,7 @@ import QRCodeDisplay from '@/components/QRCodeDisplay';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap, RefreshCw } from 'lucide-react';
+import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap, RefreshCw, Code2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -107,6 +107,8 @@ interface Computer {
     public_hash: string;
     hostname: string | null;
     hardware_info: HardwareInfo | null;
+    agent_version?: string | null;
+    latest_agent_version?: string;
     lab: {
         id: number;
         name: string;
@@ -1007,6 +1009,61 @@ export default function ComputerDetails() {
                             </div>
                         </div>
                     )}
+
+                    {/* Agent Version */}
+                    <div className="bg-white shadow rounded-lg p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Code2 className="h-5 w-5 text-gray-700" />
+                                <h2 className="text-lg font-semibold">Agente</h2>
+                            </div>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm text-gray-500">Versão do agente instalada</p>
+                                    <p className="text-lg font-medium">
+                                        {computer.agent_version || 'Desconhecida'}
+                                    </p>
+                                </div>
+                                {computer.agent_version && computer.latest_agent_version && (
+                                    <div className="flex items-center gap-2">
+                                        {computer.agent_version === computer.latest_agent_version ? (
+                                            <Badge className="bg-green-500">
+                                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                                Atualizado
+                                            </Badge>
+                                        ) : (
+                                            <Badge className="bg-yellow-500">
+                                                <AlertCircle className="h-3 w-3 mr-1" />
+                                                Desatualizado
+                                            </Badge>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            {computer.latest_agent_version && (
+                                <div>
+                                    <p className="text-sm text-gray-500">Versão mais recente disponível</p>
+                                    <p className="text-sm font-medium">{computer.latest_agent_version}</p>
+                                </div>
+                            )}
+                            {computer.agent_version && 
+                             computer.latest_agent_version && 
+                             computer.agent_version !== computer.latest_agent_version && (
+                                <div className="pt-2 border-t">
+                                    <Button
+                                        size="sm"
+                                        onClick={() => handleCommand('update_agent')}
+                                        className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                        Atualizar agente
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Installed Software */}
                     <div className="bg-white shadow rounded-lg p-6">

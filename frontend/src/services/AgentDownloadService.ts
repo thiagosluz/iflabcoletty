@@ -8,6 +8,7 @@ export interface AgentPackage {
     exists: boolean;
     is_latest: boolean;
     created_at: string | null;
+    computers_count?: number;
 }
 
 export interface AgentInstaller {
@@ -71,6 +72,10 @@ const AgentDownloadService = {
     buildPackage: async (params?: { version?: string; force?: boolean }): Promise<BuildPackageResponse> => {
         const response = await apiClient.post('/agent/build-package', params ?? {});
         return response.data;
+    },
+
+    deletePackage: async (version: string): Promise<void> => {
+        await apiClient.delete(`/agent/packages/${version}`);
     },
 };
 
