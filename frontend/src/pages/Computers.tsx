@@ -216,7 +216,10 @@ export default function Computers() {
 
         try {
             setIsExporting(true);
-            const payload: any = { format: exportFormat };
+            const payload: any = {
+                format: exportFormat,
+                base_url: typeof window !== 'undefined' ? window.location.origin : undefined,
+            };
             if (exportLabId !== 'all') {
                 payload.lab_id = parseInt(exportLabId);
             }

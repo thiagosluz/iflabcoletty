@@ -10,6 +10,7 @@ use App\Models\Software;
 use App\Traits\LogsActivity;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ComputerController extends Controller
 {
@@ -356,8 +357,9 @@ class ComputerController extends Controller
 
     /**
      * Generate QR code for a single computer
+     * Accepts optional base_url query param so the QR code uses the same URL the user is accessing.
      */
-    public function generateQrCode(Computer $computer)
+    public function generateQrCode(Request $request, Computer $computer)
     {
         $this->authorize('computers.view');
 
@@ -368,8 +370,7 @@ class ComputerController extends Controller
             ], 400);
         }
 
-        // Verify FRONTEND_URL is configured
-        $frontendUrl = config('app.frontend_url');
+        $frontendUrl = $this->normalizeBaseUrl($request->input('base_url') ?: config('app.frontend_url'));
         if (empty($frontendUrl)) {
             return response()->json([
                 'message' => 'FRONTEND_URL não está configurado. Configure a variável de ambiente FRONTEND_URL no arquivo .env ou docker-compose.yml.',
@@ -391,6 +392,7 @@ class ComputerController extends Controller
 
     /**
      * Export QR codes for multiple computers as PDF or ZIP
+     * Accepts optional base_url from frontend (e.g. window.location.origin) so QR codes use the same URL the user is accessing.
      */
     public function exportQrCodes(Request $request)
     {
@@ -399,15 +401,15 @@ class ComputerController extends Controller
         $validated = $request->validate([
             'lab_id' => 'nullable|exists:labs,id',
             'format' => 'required|in:pdf,zip',
+            'base_url' => 'nullable|string|max:500',
         ]);
 
         try {
-
-            // Verify FRONTEND_URL is configured
-            $frontendUrl = config('app.frontend_url');
+            // Use base_url from request (dynamic, from frontend) or fall back to config
+            $frontendUrl = $this->normalizeBaseUrl($request->input('base_url') ?: config('app.frontend_url'));
             if (empty($frontendUrl)) {
                 return response()->json([
-                    'message' => 'FRONTEND_URL não está configurado. Configure a variável de ambiente FRONTEND_URL no arquivo .env ou docker-compose.yml.',
+                    'message' => 'FRONTEND_URL não está configurado e base_url não foi enviado. Configure FRONTEND_URL no .env ou envie base_url na requisição.',
                 ], 500);
             }
 
@@ -438,12 +440,12 @@ class ComputerController extends Controller
             }
 
             if ($validated['format'] === 'pdf') {
-                return $this->exportAsPdf($computersWithHash);
+                return $this->exportAsPdf($computersWithHash, $frontendUrl);
             } else {
-                return $this->exportAsZip($computersWithHash);
+                return $this->exportAsZip($computersWithHash, $frontendUrl);
             }
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes: '.$e->getMessage(), [
+            Log::error('Erro ao exportar QR codes: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'request' => $request->all(),
             ]);
@@ -455,13 +457,30 @@ class ComputerController extends Controller
     }
 
     /**
+     * Normalize base URL (remove trailing slash, ensure scheme)
+     */
+    private function normalizeBaseUrl(?string $url): string
+    {
+        if (empty($url) || ! is_string($url)) {
+            return '';
+        }
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        if (! preg_match('#^https?://#i', $url)) {
+            $url = 'http://'.$url;
+        }
+        return rtrim($url, '/');
+    }
+
+    /**
      * Export QR codes as PDF
      */
-    private function exportAsPdf($computers)
+    private function exportAsPdf($computers, string $frontendUrl)
     {
         try {
             $qrCodes = [];
-            $frontendUrl = config('app.frontend_url');
 
             foreach ($computers as $computer) {
                 $publicUrl = $frontendUrl.'/public/pc/'.$computer->public_hash;
@@ -499,7 +518,7 @@ class ComputerController extends Controller
 
             return $pdf->download($downloadName);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes como PDF: '.$e->getMessage(), [
+            Log::error('Erro ao exportar QR codes como PDF: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
@@ -512,7 +531,7 @@ class ComputerController extends Controller
     /**
      * Export QR codes as ZIP
      */
-    private function exportAsZip($computers)
+    private function exportAsZip($computers, string $frontendUrl)
     {
         try {
             $zip = new \ZipArchive;
@@ -535,7 +554,6 @@ class ComputerController extends Controller
                 ], 500);
             }
 
-            $frontendUrl = config('app.frontend_url');
             $usedFilenames = [];
 
             foreach ($computers as $computer) {
@@ -576,7 +594,7 @@ class ComputerController extends Controller
 
             return response()->download($zipFileName, $downloadName)->deleteFileAfterSend(true);
         } catch (\Exception $e) {
-            \Log::error('Erro ao exportar QR codes como ZIP: '.$e->getMessage(), [
+            Log::error('Erro ao exportar QR codes como ZIP: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
