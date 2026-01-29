@@ -1,0 +1,1 @@
+# NSSM is downloaded during GitHub Actions build; place nssm.exe here for local Inno Setup builds.

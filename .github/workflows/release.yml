@@ -6,23 +6,73 @@ on:
       - "v*"
 
 jobs:
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r agent/requirements.txt pyinstaller
+
+      - name: Build agent with PyInstaller
+        run: |
+          cd agent
+          pyinstaller pyinstaller.spec
+
+      - name: Download NSSM
+        run: |
+          $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
+          $nssmZip = "$env:RUNNER_TEMP\nssm.zip"
+          $nssmDir = "agent/installer/nssm"
+          New-Item -ItemType Directory -Path $nssmDir -Force
+          Invoke-WebRequest -Uri $nssmUrl -OutFile $nssmZip -UseBasicParsing
+          Expand-Archive -Path $nssmZip -DestinationPath $env:RUNNER_TEMP -Force
+          Copy-Item "$env:RUNNER_TEMP\nssm-2.24\win64\nssm.exe" -Destination "$nssmDir\nssm.exe"
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Build installer with Inno Setup
+        run: |
+          iscc /DVersion=${{ github.ref_name }} agent/installer/iflab-agent.iss
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: agent/dist/iflab-agent-setup-*.exe
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    needs: build-installer
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Necessário para gerar release notes completos
+          fetch-depth: 0
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}  # Usa o nome da tag
-          name: Release ${{ github.ref_name }}  # Título da release
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           generate_release_notes: true
           draft: false
           prerelease: false
-          # O GITHUB_TOKEN é automático, não precisa do env
+          files: windows-installer/iflab-agent-setup-*.exe

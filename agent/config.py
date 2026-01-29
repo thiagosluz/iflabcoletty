@@ -1,10 +1,15 @@
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Carrega .env na pasta do agente (onde está config.py), independente de onde o script foi executado
-load_dotenv(Path(__file__).resolve().parent / '.env')
+# Carrega .env na pasta do agente (onde está config.py) ou, se frozen (PyInstaller), no diretório do .exe
+if getattr(sys, 'frozen', False):
+    _agent_dir = Path(sys.executable).resolve().parent
+else:
+    _agent_dir = Path(__file__).resolve().parent
+load_dotenv(_agent_dir / '.env')
 
 # API Configuration
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1')
