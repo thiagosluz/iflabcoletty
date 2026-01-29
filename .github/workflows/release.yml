@@ -84,4 +84,4 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
-          files: windows-installer/release-assets/*.exe
+          files: windows-installer/**/*.exe
