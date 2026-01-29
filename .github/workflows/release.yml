@@ -22,6 +22,10 @@ jobs:
         run: |
           pip install -r agent/requirements.txt pyinstaller
 
+      - name: Write VERSION from tag
+        run: |
+          Set-Content -Path agent/VERSION -Value $env:GITHUB_REF_NAME -NoNewline
+
       - name: Build agent with PyInstaller
         run: |
           cd agent
@@ -44,11 +48,16 @@ jobs:
         run: |
           iscc /DVersion=${{ github.ref_name }} agent/installer/iflab-agent.iss
 
+      - name: Prepare release assets
+        run: |
+          New-Item -ItemType Directory -Path release-assets -Force
+          Copy-Item -Path agent/dist/iflab-agent-setup-*.exe -Destination release-assets/
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: agent/dist/iflab-agent-setup-*.exe
+          path: release-assets/
 
   release:
     name: Create Release
@@ -75,4 +84,4 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
-          files: windows-installer/iflab-agent-setup-*.exe
+          files: windows-installer/*.exe

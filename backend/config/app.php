@@ -125,4 +125,18 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Agent update (Windows installer URL base for frozen agent)
+    |--------------------------------------------------------------------------
+    |
+    | Base URL for the Windows installer (e.g. GitHub Releases download).
+    | When agents request update with platform=windows-frozen, download_url
+    | is built as: agent_installer_base_url / {tag} / iflab-agent-setup-{tag}.exe
+    | Set latest version tag in storage/app/agent/latest_version.txt (e.g. v1.0.0).
+    |
+    */
+    'agent_installer_base_url' => env('AGENT_INSTALLER_BASE_URL', 'https://github.com/iflab/iflabcoletty/releases/download'),
+    'agent_latest_version' => env('AGENT_LATEST_VERSION', '1.0.0'),
+
 ];

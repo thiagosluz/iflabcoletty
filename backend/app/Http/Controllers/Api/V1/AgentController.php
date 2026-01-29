@@ -24,9 +24,9 @@ class AgentController extends Controller
         // In production, you might want to add authentication
 
         $currentVersion = $request->query('current_version', '0.0.0');
+        $platform = $request->query('platform', '');
 
         // Get the latest version from config or storage
-        // For now, we'll use a simple version file or config
         $latestVersion = $this->getLatestVersion();
 
         // Compare versions (simple string comparison, can be improved with semver)
@@ -36,12 +36,21 @@ class AgentController extends Controller
             'available' => $updateAvailable,
             'current_version' => $currentVersion,
             'latest_version' => $latestVersion,
+            'version' => $latestVersion,
         ];
 
         if ($updateAvailable) {
-            // Get download URL
-            $downloadUrl = $this->getDownloadUrl($latestVersion);
-            $response['download_url'] = $downloadUrl;
+            // For Windows frozen (PyInstaller installer), return URL to the .exe installer
+            if ($platform === 'windows-frozen') {
+                $baseUrl = config('app.agent_installer_base_url', '');
+                if ($baseUrl !== '') {
+                    $baseUrl = rtrim($baseUrl, '/');
+                    $response['download_url'] = $baseUrl.'/'.$latestVersion.'/iflab-agent-setup-'.$latestVersion.'.exe';
+                }
+            }
+            if (empty($response['download_url'])) {
+                $response['download_url'] = $this->getDownloadUrl($latestVersion);
+            }
             $response['changelog'] = $this->getChangelog($latestVersion);
             $response['size'] = $this->getUpdateSize($latestVersion);
         }

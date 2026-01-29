@@ -1,3 +1,4 @@
+import sys
 import time
 import json
 import os
@@ -14,6 +15,7 @@ from PIL import Image
 import io
 import base64
 import subprocess
+import tempfile
 from pathlib import Path
 
 # Setup Logging
@@ -33,7 +35,10 @@ class Agent:
         self.token = None
         self.machine_id = self._get_or_create_machine_id()
         self.computer_db_id = None # ID in the database
-        self.agent_dir = Path(__file__).parent.absolute()
+        if getattr(sys, 'frozen', False):
+            self.agent_dir = Path(sys.executable).resolve().parent
+        else:
+            self.agent_dir = Path(__file__).parent.absolute()
         self.version_file = self.agent_dir / ".agent_version"
 
     def _get_or_create_machine_id(self):
@@ -851,53 +856,51 @@ exit 1
             elif command_type == 'update_agent':
                 try:
                     logger.info("Executing remote update_agent command...")
-                    # Run update.py with AUTO_UPDATE=1 to skip confirmation
-                    update_script = self.agent_dir / "update.py"
-                    
-                    if not update_script.exists():
-                        output = "update.py not found in agent directory"
-                        success = False
+                    if getattr(sys, 'frozen', False):
+                        # Agent running as PyInstaller exe: update by downloading and running installer
+                        success, output = self._run_frozen_update(command_id)
+                        if success and output == "__EXIT_FOR_INSTALLER__":
+                            self.update_command_status(command_id, 'processing', 'Baixando e executando instalador...')
+                            sys.exit(0)
+                        if not success:
+                            self.update_command_status(command_id, 'failed', output)
+                            success = False
                     else:
-                        # Determine Python executable (use venv if available)
-                        if platform.system() == 'Windows':
-                            python_exe = self.agent_dir / ".venv" / "Scripts" / "python.exe"
+                        # Source/venv: run update.py
+                        update_script = self.agent_dir / "update.py"
+                        if not update_script.exists():
+                            output = "update.py not found in agent directory"
+                            success = False
                         else:
-                            python_exe = self.agent_dir / ".venv" / "bin" / "python"
-                        
-                        # Fallback to system python if venv doesn't exist
-                        if not python_exe.exists():
-                            python_exe = "python3" if platform.system() != 'Windows' else "python"
-                        
-                        # Set environment variable for auto-update
-                        env = os.environ.copy()
-                        env['AUTO_UPDATE'] = '1'
-                        
-                        # Execute update.py
-                        result = subprocess.run(
-                            [str(python_exe), str(update_script)],
-                            cwd=str(self.agent_dir),
-                            capture_output=True,
-                            text=True,
-                            timeout=300,  # 5 minutes timeout
-                            env=env
-                        )
-                        
-                        output_lines = []
-                        if result.stdout:
-                            output_lines.append("STDOUT:")
-                            output_lines.append(result.stdout)
-                        if result.stderr:
-                            output_lines.append("STDERR:")
-                            output_lines.append(result.stderr)
-                        
-                        output = "\n".join(output_lines) if output_lines else f"Update completed with exit code: {result.returncode}"
-                        success = result.returncode == 0
-                        
-                        if success:
-                            logger.info("Agent update completed successfully")
-                        else:
-                            logger.warning(f"Agent update failed with exit code: {result.returncode}")
-                            
+                            if platform.system() == 'Windows':
+                                python_exe = self.agent_dir / ".venv" / "Scripts" / "python.exe"
+                            else:
+                                python_exe = self.agent_dir / ".venv" / "bin" / "python"
+                            if not python_exe.exists():
+                                python_exe = "python3" if platform.system() != 'Windows' else "python"
+                            env = os.environ.copy()
+                            env['AUTO_UPDATE'] = '1'
+                            result = subprocess.run(
+                                [str(python_exe), str(update_script)],
+                                cwd=str(self.agent_dir),
+                                capture_output=True,
+                                text=True,
+                                timeout=300,
+                                env=env
+                            )
+                            output_lines = []
+                            if result.stdout:
+                                output_lines.append("STDOUT:")
+                                output_lines.append(result.stdout)
+                            if result.stderr:
+                                output_lines.append("STDERR:")
+                                output_lines.append(result.stderr)
+                            output = "\n".join(output_lines) if output_lines else f"Update completed with exit code: {result.returncode}"
+                            success = result.returncode == 0
+                            if success:
+                                logger.info("Agent update completed successfully")
+                            else:
+                                logger.warning(f"Agent update failed with exit code: {result.returncode}")
                 except subprocess.TimeoutExpired:
                     output = "Update command timed out after 5 minutes"
                     success = False
@@ -925,6 +928,46 @@ exit 1
             self.session.put(url, json=payload)
         except Exception as e:
             logger.error(f"Failed to update command status: {e}")
+
+    def _run_frozen_update(self, command_id):
+        """Update agent when running as PyInstaller exe: check API, download installer, run it, exit."""
+        try:
+            if not self.token and not self.login():
+                return False, "Agente não autenticado; configure AGENT_EMAIL e AGENT_PASSWORD no .env"
+            base = config.API_BASE_URL.rstrip('/')
+            url = f"{base}/agent/check-update"
+            params = {
+                'current_version': self.get_current_version(),
+                'platform': 'windows-frozen',
+            }
+            resp = self.session.get(url, params=params, timeout=10)
+            if resp.status_code != 200:
+                return False, f"Check-update falhou: HTTP {resp.status_code}"
+            data = resp.json()
+            if not data.get('available') or not data.get('download_url'):
+                return True, "Agente já está atualizado."
+            download_url = data.get('download_url')
+            logger.info("Downloading installer from %s", download_url)
+            temp_dir = Path(tempfile.gettempdir())
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            exe_name = f"iflab-agent-setup-{uuid.uuid4().hex[:8]}.exe"
+            exe_path = temp_dir / exe_name
+            # External URL (e.g. GitHub) - no auth
+            r = requests.get(download_url, stream=True, timeout=300)
+            r.raise_for_status()
+            with open(exe_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            logger.info("Running installer: %s", exe_path)
+            subprocess.Popen(
+                [str(exe_path), '/VERYSILENT', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
+                cwd=str(self.agent_dir),
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if platform.system() == 'Windows' else 0,
+            )
+            return True, "__EXIT_FOR_INSTALLER__"
+        except Exception as e:
+            logger.exception("Frozen update failed")
+            return False, str(e)
 
     def download_installer(self, file_id):
         """Download installer from server. Ensures auth and retries on 401."""
