@@ -35,8 +35,8 @@ WORKDIR /var/www/html
 # This avoids needing Laravel to be fully configured during build
 RUN wget -q https://github.com/roadrunner-server/roadrunner/releases/download/v2025.1.6/roadrunner-2025.1.6-linux-amd64.tar.gz -O /tmp/rr.tar.gz && \
     tar -xzf /tmp/rr.tar.gz -C /tmp && \
-    mv /tmp/roadrunner-2025.1.6-linux-amd64/rr /var/www/html/rr && \
-    chmod +x /var/www/html/rr && \
+    mv /tmp/roadrunner-2025.1.6-linux-amd64/rr /usr/local/bin/rr && \
+    chmod +x /usr/local/bin/rr && \
     rm -rf /tmp/roadrunner-* /tmp/rr.tar.gz || true
 
 # Expose port
