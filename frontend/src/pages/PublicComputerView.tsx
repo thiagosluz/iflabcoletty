@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Download } from 'lucide-react';
+import { copyToClipboard } from '@/lib/utils';
 
 interface HardwareInfo {
     cpu?: {
@@ -214,7 +215,7 @@ export default function PublicComputerView() {
         const lastSeenDate = new Date(computer.last_seen);
         const isStale = Date.now() - lastSeenDate.getTime() > 24 * 60 * 60 * 1000;
 
-        const handleExportSoftwares = () => {
+        const handleExportSoftwares = async () => {
             if (!softwares.length) return;
             const lines = softwares.map((s) => {
                 const parts = [s.name];
@@ -223,13 +224,11 @@ export default function PublicComputerView() {
                 return parts.join(' - ');
             });
             const text = lines.join('\n');
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(
-                    () => alert('Lista de softwares copiada para a área de transferência.'),
-                    () => alert('Não foi possível copiar automaticamente. Você pode selecionar e copiar manualmente.')
-                );
+            const ok = await copyToClipboard(text);
+            if (ok) {
+                alert('Lista de softwares copiada para a área de transferência.');
             } else {
-                alert(text);
+                alert('Não foi possível copiar automaticamente. Você pode selecionar e copiar manualmente.\n\nConteúdo:\n' + text.slice(0, 500) + (text.length > 500 ? '...' : ''));
             }
         };
 

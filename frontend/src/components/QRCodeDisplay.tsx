@@ -2,6 +2,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Copy, Download } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { copyToClipboard as copyTextToClipboard } from '@/lib/utils';
 
 interface QRCodeDisplayProps {
     value: string;
@@ -19,16 +20,16 @@ export default function QRCodeDisplay({
     const { toast } = useToast();
 
     const copyToClipboard = async () => {
-        try {
-            await navigator.clipboard.writeText(value);
+        const ok = await copyTextToClipboard(value);
+        if (ok) {
             toast({
                 title: 'Link copiado!',
                 description: 'O link público foi copiado para a área de transferência.',
             });
-        } catch (err) {
+        } else {
             toast({
                 title: 'Erro',
-                description: 'Não foi possível copiar o link.',
+                description: 'Não foi possível copiar o link. Tente selecionar e copiar manualmente.',
                 variant: 'destructive',
             });
         }

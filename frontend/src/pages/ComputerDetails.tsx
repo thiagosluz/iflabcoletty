@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '@/lib/axios';
-import { isComputerOnline } from '@/lib/utils';
+import { isComputerOnline, copyToClipboard } from '@/lib/utils';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -794,16 +794,16 @@ export default function ComputerDetails() {
                                                 size="sm"
                                                 onClick={async () => {
                                                     const publicUrl = `${window.location.origin}/public/pc/${computer.public_hash}`;
-                                                    try {
-                                                        await navigator.clipboard.writeText(publicUrl);
+                                                    const ok = await copyToClipboard(publicUrl);
+                                                    if (ok) {
                                                         toast({
                                                             title: 'Link copiado!',
                                                             description: 'O link público foi copiado para a área de transferência.',
                                                         });
-                                                    } catch (err) {
+                                                    } else {
                                                         toast({
                                                             title: 'Erro',
-                                                            description: 'Não foi possível copiar o link.',
+                                                            description: 'Não foi possível copiar o link. Tente selecionar e copiar manualmente.',
                                                             variant: 'destructive',
                                                         });
                                                     }
