@@ -405,6 +405,12 @@ class ComputerController extends Controller
         ]);
 
         try {
+
+            Log::info('Export QR codes request', [
+                'base_url' => $request->input('base_url'),
+                'frontend_url_config' => config('app.frontend_url'),
+            ]);
+
             // Use base_url from request (dynamic, from frontend) or fall back to config
             $frontendUrl = $this->normalizeBaseUrl($request->input('base_url') ?: config('app.frontend_url'));
             if (empty($frontendUrl)) {
