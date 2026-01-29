@@ -31,15 +31,39 @@ jobs:
           cd agent
           pyinstaller pyinstaller.spec
 
-      - name: Download NSSM
+      - name: Prepare NSSM
         run: |
+          $nssmLocal = "agent/nssm-2.24/win64/nssm.exe"
+          $nssmDest = "agent/installer/nssm/nssm.exe"
+          $nssmDir = "agent/installer/nssm"
+          New-Item -ItemType Directory -Path $nssmDir -Force | Out-Null
+          if (Test-Path $nssmLocal) {
+            Copy-Item -Path $nssmLocal -Destination $nssmDest -Force
+            Write-Host "Using NSSM from repository."
+            exit 0
+          }
           $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
           $nssmZip = "$env:RUNNER_TEMP\nssm.zip"
-          $nssmDir = "agent/installer/nssm"
-          New-Item -ItemType Directory -Path $nssmDir -Force
-          Invoke-WebRequest -Uri $nssmUrl -OutFile $nssmZip -UseBasicParsing
-          Expand-Archive -Path $nssmZip -DestinationPath $env:RUNNER_TEMP -Force
-          Copy-Item "$env:RUNNER_TEMP\nssm-2.24\win64\nssm.exe" -Destination "$nssmDir\nssm.exe"
+          $maxAttempts = 3
+          $delaySeconds = 10
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              Write-Host "Download attempt $attempt of $maxAttempts..."
+              Invoke-WebRequest -Uri $nssmUrl -OutFile $nssmZip -UseBasicParsing
+              Expand-Archive -Path $nssmZip -DestinationPath $env:RUNNER_TEMP -Force
+              Copy-Item "$env:RUNNER_TEMP\nssm-2.24\win64\nssm.exe" -Destination $nssmDest -Force
+              Write-Host "NSSM downloaded and extracted successfully."
+              exit 0
+            } catch {
+              Write-Host "Attempt $attempt failed: $_"
+              if ($attempt -lt $maxAttempts) {
+                Write-Host "Waiting $delaySeconds seconds before retry..."
+                Start-Sleep -Seconds $delaySeconds
+              } else {
+                throw "Failed to download NSSM after $maxAttempts attempts."
+              }
+            }
+          }
 
       - name: Install Inno Setup
         run: choco install innosetup -y
