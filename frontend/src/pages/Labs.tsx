@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,7 +11,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Download, Trash2, Pencil } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
 import {
@@ -57,6 +57,7 @@ export default function Labs() {
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
     const [labToDelete, setLabToDelete] = useState<Lab | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [editingLab, setEditingLab] = useState<Lab | null>(null);
     const { toast } = useToast();
 
     const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<LabFormData>({
@@ -95,15 +96,21 @@ export default function Labs() {
 
     const onSubmit = async (data: LabFormData) => {
         try {
-            await apiClient.post('/labs', data);
-            toast({ title: 'Sucesso', description: 'Laboratório criado com sucesso' });
+            if (editingLab) {
+                await apiClient.put(`/labs/${editingLab.id}`, data);
+                toast({ title: 'Sucesso', description: 'Laboratório atualizado com sucesso' });
+            } else {
+                await apiClient.post('/labs', data);
+                toast({ title: 'Sucesso', description: 'Laboratório criado com sucesso' });
+            }
             setIsOpen(false);
+            setEditingLab(null);
             reset();
             fetchLabs();
         } catch (error: any) {
             toast({
                 title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao criar laboratório',
+                description: error.response?.data?.message || (editingLab ? 'Falha ao atualizar laboratório' : 'Falha ao criar laboratório'),
                 variant: 'destructive'
             });
         }
@@ -225,13 +232,13 @@ export default function Labs() {
                         title="Exportar Laboratórios"
                         description="Escolha o formato para exportar a lista de laboratórios"
                     />
-                    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                        <DialogTrigger asChild>
-                            <Button><Plus className="mr-2 h-4 w-4" /> Adicionar Laboratório</Button>
-                        </DialogTrigger>
+                    <Button onClick={() => { setEditingLab(null); reset(); setIsOpen(true); }}>
+                        <Plus className="mr-2 h-4 w-4" /> Adicionar Laboratório
+                    </Button>
+                    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditingLab(null); reset(); } }}>
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Criar Novo Laboratório</DialogTitle>
+                                <DialogTitle>{editingLab ? 'Editar Laboratório' : 'Criar Novo Laboratório'}</DialogTitle>
                             </DialogHeader>
                             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                                 <div className="space-y-2">
@@ -243,7 +250,7 @@ export default function Labs() {
                                     <Label>Descrição</Label>
                                     <Input {...register('description')} placeholder="Laboratório principal" />
                                 </div>
-                                <Button type="submit" disabled={isSubmitting}>Criar</Button>
+                                <Button type="submit" disabled={isSubmitting}>{editingLab ? 'Salvar' : 'Criar'}</Button>
                             </form>
                         </DialogContent>
                     </Dialog>
@@ -277,6 +284,10 @@ export default function Labs() {
                                             <DropdownMenuLabel>Ações</DropdownMenuLabel>
                                             <DropdownMenuItem onClick={() => navigate(`/admin/labs/${lab.id}`)}>
                                                 Ver Detalhes
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '' }); setIsOpen(true); }}>
+                                                <Pencil className="h-4 w-4 mr-2" />
+                                                Editar
                                             </DropdownMenuItem>
                                             <DropdownMenuItem 
                                                 onClick={() => setLabToDelete(lab)} 
