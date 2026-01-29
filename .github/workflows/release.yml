@@ -100,6 +100,11 @@ jobs:
         with:
           name: windows-installer
 
+      - name: List downloaded files
+        run: |
+          find . -name "*.exe" -type f
+          ls -laR
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -108,4 +113,4 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
-          files: release-assets/*.exe
+          files: "*.exe"
