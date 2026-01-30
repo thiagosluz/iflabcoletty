@@ -1,17 +1,25 @@
 # IFG Lab Manager
 
+[![Tests](https://github.com/thiagosluz/iflabcoletty/actions/workflows/tests.yml/badge.svg)](https://github.com/thiagosluz/iflabcoletty/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?logo=php)](https://www.php.net/)
+[![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel)](https://laravel.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
+
+> **Nota:** Substitua `OWNER` e `REPO` nas URLs dos badges pelo seu usuário/organização e nome do repositório no GitHub.
+
 Sistema de gerenciamento de laboratórios de informática desenvolvido para o IFG (Instituto Federal de Goiás). Permite monitorar computadores, softwares instalados, hardware e gerar relatórios completos.
 
 ## 🚀 Características
 
-- **Gerenciamento de Laboratórios**: Crie e gerencie múltiplos laboratórios
-- **Monitoramento de Computadores**: Acompanhe status, hardware e softwares instalados
+- **Gerenciamento de Laboratórios**: Crie e gerencie múltiplos laboratórios; busca e ordenação na listagem (por nome, descrição, quantidade de computadores, etc.)
+- **Monitoramento de Computadores**: Acompanhe status, hardware e softwares instalados; listagem global e por laboratório com ordenação e filtros (hostname, machine_id, laboratório, status, última atualização)
 - **Agente de Coleta**: Agente Python que coleta dados automaticamente dos computadores
-- **Relatórios**: Exporte relatórios em PDF, CSV e XLSX
+- **Relatórios**: Exporte relatórios em PDF, CSV e XLSX; relatório de detalhes do laboratório (completo ou resumido) com mapa visual do laboratório (SVG); processamento assíncrono com jobs de relatório (acompanhar e excluir jobs)
 - **QR Codes**: Gere QR codes para acesso rápido às informações dos computadores
 - **Dashboard**: Visualize estatísticas e métricas do sistema
 - **API RESTful**: API completa e documentada com Swagger/OpenAPI
-- **Interface Moderna**: Frontend React com TypeScript e Tailwind CSS
+- **Interface Moderna**: Frontend React com TypeScript, Tailwind CSS e Shadcn UI
 
 ## 🛠️ Tecnologias
 
@@ -88,6 +96,8 @@ docker compose up -d
 Documentação completa disponível em `/docs`:
 
 - [Guia de Instalação](docs/installation.md) - Instalação detalhada
+- [Instalação Ubuntu Server (local)](docs/installation-ubuntu-server-local.md) - Instalação em Ubuntu Server
+- [Guia de instalação do agente](docs/AGENT_INSTALL.md) - Instalar o agente como serviço (Linux e Windows)
 - [Guia de Desenvolvimento](docs/development.md) - Como desenvolver
 - [Documentação da API](docs/api.md) - Referência da API
 - [Arquitetura](docs/architecture.md) - Arquitetura do sistema
@@ -139,10 +149,9 @@ O agente coletará dados automaticamente e enviará para o sistema.
 
 ### Gerar Relatórios
 
-1. Acesse qualquer listagem (Laboratórios, Computadores, Softwares)
-2. Clique em "Exportar"
-3. Selecione o formato (PDF, CSV, XLSX)
-4. O relatório será gerado e baixado
+1. Acesse qualquer listagem (Laboratórios, Computadores, Softwares) e clique em "Exportar", ou abra um laboratório e use "Exportar relatório" para o **relatório de detalhes do laboratório** (completo ou resumido, com mapa visual).
+2. Selecione o formato (PDF, CSV, XLSX) e, quando disponível, processamento em background.
+3. Relatórios em background podem ser acompanhados e excluídos em "Jobs de relatório".
 
 ## 🔧 Configuração
 
@@ -180,10 +189,11 @@ Veja o [Guia de Desenvolvimento](docs/development.md) para mais detalhes.
 
 ```
 iflabcoletty/
-├── agent/              # Agente Python
+├── agent/              # Agente Python (instalador Windows via Inno Setup, scripts de serviço Linux/Windows)
 ├── backend/            # API Laravel
 │   ├── app/
 │   ├── database/
+│   ├── resources/views/reports/   # Templates de relatórios (incl. detalhes do laboratório)
 │   ├── routes/
 │   └── tests/
 ├── frontend/           # Interface React
@@ -191,7 +201,7 @@ iflabcoletty/
 │   └── ...
 ├── docker/             # Configurações Docker
 ├── docs/               # Documentação
-└── .github/            # GitHub Actions
+└── .github/            # GitHub Actions (testes, release do agente)
 ```
 
 ## 🐛 Reportar Problemas
@@ -204,7 +214,7 @@ Se encontrar algum problema, abra uma issue no repositório com:
 
 ## 📄 Licença
 
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
 
 ## 👥 Autores
 
@@ -220,7 +230,7 @@ Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalh
 
 Para suporte, consulte:
 - [Documentação](docs/)
-- [Issues do Projeto](https://github.com/.../issues)
+- [Issues do Projeto](https://github.com/thiagosluz/iflabcoletty/issues)
 - [Documentação Swagger](http://localhost/api/documentation)
 
 ---
