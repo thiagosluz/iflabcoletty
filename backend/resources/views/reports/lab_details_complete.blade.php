@@ -138,25 +138,12 @@
         </tbody>
     </table>
 
-    <h2>6. Posições no Mapa</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Hostname</th>
-                <th>Posição X (%)</th>
-                <th>Posição Y (%)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($computers as $computer)
-                <tr>
-                    <td>{{ $computer->hostname ?? $computer->machine_id }}</td>
-                    <td>{{ $computer->position_x ?? '-' }}</td>
-                    <td>{{ $computer->position_y ?? '-' }}</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
+    <h2>6. Mapa Visual</h2>
+    @if(!empty($mapSvgDataUri))
+    <div style="margin: 15px 0;">
+        <img src="{{ $mapSvgDataUri }}" alt="Mapa do laboratório" style="width: 100%; max-width: 560px; height: auto; display: block; border: 1px solid #ddd; border-radius: 4px;" />
+    </div>
+    @endif
 
     <div class="footer">
         <div>iFLab Coletty - Sistema de Gerenciamento de Laboratórios</div>

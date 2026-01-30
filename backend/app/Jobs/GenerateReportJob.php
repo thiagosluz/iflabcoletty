@@ -6,6 +6,7 @@ use App\Models\Computer;
 use App\Models\Lab;
 use App\Models\ReportJob;
 use App\Models\Software;
+use App\Services\LabMapSvgService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -318,13 +319,17 @@ class GenerateReportJob implements ShouldQueue
     {
         $viewName = $variant === 'complete' ? 'reports.lab_details_complete' : 'reports.lab_details_summary';
         $timestamp = now()->format('Y-m-d H:i:s');
-        $pdf = Pdf::loadView($viewName, [
+        $viewData = [
             'lab' => $lab,
             'stats' => $stats,
             'computers' => $computers,
             'softwares' => $softwares,
             'exportDate' => $timestamp,
-        ]);
+        ];
+        if ($variant === 'complete') {
+            $viewData['mapSvgDataUri'] = LabMapSvgService::generateDataUri($computers);
+        }
+        $pdf = Pdf::loadView($viewName, $viewData);
         $filename = 'reports/lab-detalhes-'.$lab->id.'-'.$variant.'-'.now()->format('Y-m-d_His').'.pdf';
         Storage::put($filename, $pdf->output());
 

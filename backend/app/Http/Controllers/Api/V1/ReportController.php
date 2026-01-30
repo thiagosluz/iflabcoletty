@@ -8,6 +8,7 @@ use App\Models\Computer;
 use App\Models\Lab;
 use App\Models\ReportJob;
 use App\Models\Software;
+use App\Services\LabMapSvgService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -439,13 +440,17 @@ class ReportController extends Controller
                 ? 'reports.lab_details_complete'
                 : 'reports.lab_details_summary';
             $timestamp = now()->format('Y-m-d H:i:s');
-            $pdf = Pdf::loadView($viewName, [
+            $viewData = [
                 'lab' => $lab,
                 'stats' => $stats,
                 'computers' => $computers,
                 'softwares' => $softwares,
                 'exportDate' => $timestamp,
-            ]);
+            ];
+            if ($validated['variant'] === 'complete') {
+                $viewData['mapSvgDataUri'] = LabMapSvgService::generateDataUri($computers);
+            }
+            $pdf = Pdf::loadView($viewName, $viewData);
             $filename = 'lab-detalhes-'.$lab->id.'-'.$validated['variant'].'-'.now()->format('Y-m-d_His').'.pdf';
 
             return $pdf->download($filename);
@@ -612,6 +617,26 @@ class ReportController extends Controller
         }
 
         return Storage::download($reportJob->file_path);
+    }
+
+    /**
+     * Delete a report job (only own jobs)
+     */
+    public function destroy(ReportJob $reportJob)
+    {
+        $this->authorize('reports.view');
+
+        if ($reportJob->user_id !== auth()->id()) {
+            return response()->json(['message' => 'Não autorizado'], 403);
+        }
+
+        if ($reportJob->file_path && Storage::exists($reportJob->file_path)) {
+            Storage::delete($reportJob->file_path);
+        }
+
+        $reportJob->delete();
+
+        return response()->noContent();
     }
 
     /**

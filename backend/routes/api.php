@@ -172,6 +172,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/jobs', [ReportController::class, 'listJobs']);
         Route::get('/reports/jobs/{reportJob}', [ReportController::class, 'getJobStatus']);
         Route::get('/reports/jobs/{reportJob}/download', [ReportController::class, 'downloadReport'])->name('api.v1.reports.download');
+        Route::delete('/reports/jobs/{reportJob}', [ReportController::class, 'destroy']);
 
         // Audit Logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);

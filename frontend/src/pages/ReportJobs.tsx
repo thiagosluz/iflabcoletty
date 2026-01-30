@@ -4,13 +4,23 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, RefreshCw, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
+import { Download, RefreshCw, CheckCircle2, XCircle, Clock, Loader2, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ReportJob {
     id: number;
-    type: 'labs' | 'computers' | 'softwares';
+    type: 'labs' | 'computers' | 'softwares' | 'lab_details';
     format: 'pdf' | 'csv' | 'xlsx';
     status: 'pending' | 'processing' | 'completed' | 'failed';
     file_path: string | null;
@@ -38,6 +48,8 @@ export default function ReportJobs() {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+    const [jobToDelete, setJobToDelete] = useState<ReportJob | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const { toast } = useToast();
 
     const fetchJobs = async (silent = false) => {
@@ -139,7 +151,8 @@ export default function ReportJobs() {
                 labs: 'laboratorios',
                 computers: 'computadores',
                 softwares: 'softwares',
-            }[job.type];
+                lab_details: 'lab-detalhes',
+            }[job.type] || 'relatorio';
             
             link.download = `${typeName}-${job.id}.${extension}`;
             document.body.appendChild(link);
@@ -157,6 +170,25 @@ export default function ReportJobs() {
                 description: error.response?.data?.message || 'Falha ao baixar arquivo',
                 variant: 'destructive',
             });
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!jobToDelete) return;
+        try {
+            setIsDeleting(true);
+            await apiClient.delete(`/reports/jobs/${jobToDelete.id}`);
+            toast({ title: 'Excluído', description: 'Relatório excluído com sucesso.' });
+            setJobToDelete(null);
+            await fetchJobs(false);
+        } catch (error: any) {
+            toast({
+                title: 'Erro',
+                description: error.response?.data?.message || 'Falha ao excluir relatório',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -195,6 +227,7 @@ export default function ReportJobs() {
             labs: 'Laboratórios',
             computers: 'Computadores',
             softwares: 'Softwares',
+            lab_details: 'Detalhes do laboratório',
         };
         return labels[type] || type;
     };
@@ -262,24 +295,35 @@ export default function ReportJobs() {
                                                     : '-'}
                                             </TableCell>
                                             <TableCell>
-                                                {job.status === 'completed' && job.download_url ? (
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {job.status === 'completed' && job.download_url ? (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleDownload(job)}
+                                                        >
+                                                            <Download className="h-4 w-4 mr-1" />
+                                                            Download
+                                                        </Button>
+                                                    ) : job.status === 'failed' ? (
+                                                        <span className="text-sm text-destructive">
+                                                            {job.error_message || 'Erro desconhecido'}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-sm text-muted-foreground">
+                                                            Aguardando...
+                                                        </span>
+                                                    )}
                                                     <Button
                                                         size="sm"
-                                                        variant="outline"
-                                                        onClick={() => handleDownload(job)}
+                                                        variant="ghost"
+                                                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                        onClick={() => setJobToDelete(job)}
                                                     >
-                                                        <Download className="h-4 w-4 mr-1" />
-                                                        Download
+                                                        <Trash2 className="h-4 w-4 mr-1" />
+                                                        Excluir
                                                     </Button>
-                                                ) : job.status === 'failed' ? (
-                                                    <span className="text-sm text-destructive">
-                                                        {job.error_message || 'Erro desconhecido'}
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-sm text-muted-foreground">
-                                                        Aguardando...
-                                                    </span>
-                                                )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -356,6 +400,28 @@ export default function ReportJobs() {
                     )}
                 </CardContent>
             </Card>
+
+            <AlertDialog open={jobToDelete !== null} onOpenChange={(open) => !open && setJobToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir relatório</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir este relatório? O job será removido da lista
+                            {jobToDelete?.status === 'completed' && jobToDelete?.file_path && ' e o arquivo gerado será apagado'}.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDelete}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? 'Excluindo...' : 'Excluir'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
