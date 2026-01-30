@@ -26,7 +26,8 @@ import {
     Zap,
     Terminal,
     Map as MapIcon,
-    List
+    List,
+    Download
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import LabMap from '@/components/LabMap';
@@ -56,6 +57,8 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface HardwareAverages {
     cpu?: {
@@ -160,6 +163,10 @@ export default function LabDetails() {
     const [isTerminalDialogOpen, setIsTerminalDialogOpen] = useState(false);
     const [terminalCommand, setTerminalCommand] = useState('');
     const [confirmAction, setConfirmAction] = useState<{ command: string, title: string, description: string } | null>(null);
+    const [isExportOpen, setIsExportOpen] = useState(false);
+    const [exportVariant, setExportVariant] = useState<'complete' | 'summary'>('complete');
+    const [exportAsync, setExportAsync] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -319,6 +326,39 @@ export default function LabDetails() {
         setComputerCurrentPage(1);
     };
 
+    const handleExportLabDetails = async () => {
+        if (!id) return;
+        try {
+            setIsExporting(true);
+            const response = await apiClient.post(
+                '/reports/lab-details',
+                { lab_id: parseInt(id), format: 'pdf', variant: exportVariant, async: exportAsync },
+                exportAsync ? { responseType: 'json' } : { responseType: 'blob' }
+            );
+            if (exportAsync && response.status === 202) {
+                toast({ title: 'Relatório em processamento', description: 'Você será redirecionado para acompanhar o status.' });
+                setIsExportOpen(false);
+                setTimeout(() => navigate('/admin/report-jobs'), 500);
+            } else if (!exportAsync && response.data instanceof Blob) {
+                const url = window.URL.createObjectURL(response.data);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `lab-detalhes-${id}-${exportVariant}-${new Date().toISOString().slice(0, 10)}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+                toast({ title: 'Exportação concluída', description: 'Relatório exportado em PDF.' });
+                setIsExportOpen(false);
+            }
+        } catch (error: any) {
+            const msg = error.response?.data?.message || error.message || 'Falha ao exportar relatório.';
+            toast({ title: 'Erro na exportação', description: msg, variant: 'destructive' });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
     const handleSoftwareSearchChange = (value: string) => {
         setSoftwareSearch(value);
         setSoftwareCurrentPage(1);
@@ -370,7 +410,10 @@ export default function LabDetails() {
                     </p>
                 </div>
 
-                <div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => setIsExportOpen(true)}>
+                        <Download className="mr-2 h-4 w-4" /> Exportar relatório
+                    </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline">
@@ -395,6 +438,45 @@ export default function LabDetails() {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {/* Export Report Dialog */}
+                    <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Exportar relatório do laboratório</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label>Tipo de relatório</Label>
+                                    <Select value={exportVariant} onValueChange={(v: 'complete' | 'summary') => setExportVariant(v)}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="complete">Relatório completo</SelectItem>
+                                            <SelectItem value="summary">Relatório resumido</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        {exportVariant === 'complete' ? 'Inclui todas as informações: resumo, médias, distribuição OS, lista de computadores, softwares e posições no mapa.' : 'Informações condensadas: totais, médias resumidas e distribuição de SO.'}
+                                    </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox id="export-async" checked={exportAsync} onCheckedChange={(c) => setExportAsync(c === true)} />
+                                    <Label htmlFor="export-async" className="text-sm font-normal cursor-pointer">Processar em background (recomendado)</Label>
+                                </div>
+                                {exportAsync && (
+                                    <p className="text-xs text-muted-foreground">Você será redirecionado para acompanhar o status do processamento.</p>
+                                )}
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsExportOpen(false)} disabled={isExporting}>Cancelar</Button>
+                                <Button onClick={handleExportLabDetails} disabled={isExporting}>
+                                    {isExporting ? <> <span className="animate-spin mr-2">⏳</span> {exportAsync ? 'Enviando...' : 'Exportando...'} </> : <> <Download className="mr-2 h-4 w-4" /> Exportar </>}
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
 
                     {/* Confirmation Dialog */}
                     <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>

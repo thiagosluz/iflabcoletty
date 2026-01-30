@@ -9,6 +9,7 @@ use App\Models\Lab;
 use App\Models\ReportJob;
 use App\Models\Software;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use League\Csv\Writer;
@@ -356,6 +357,211 @@ class ReportController extends Controller
             default:
                 return response()->json(['message' => 'Formato inválido'], 400);
         }
+    }
+
+    /**
+     * Export lab details report (single lab: complete or summary variant)
+     */
+    public function exportLabDetails(Request $request)
+    {
+        $this->authorize('reports.create');
+
+        $validated = $request->validate([
+            'lab_id' => 'required|exists:labs,id',
+            'variant' => 'required|in:complete,summary',
+            'format' => 'nullable|in:pdf',
+            'async' => 'nullable|boolean',
+        ]);
+
+        $labId = (int) $validated['lab_id'];
+        $variant = $validated['variant'];
+        $async = $validated['async'] ?? true;
+
+        if ($async) {
+            $reportJob = ReportJob::create([
+                'user_id' => auth()->id(),
+                'type' => 'lab_details',
+                'format' => $validated['format'] ?? 'pdf',
+                'filters' => [
+                    'lab_id' => $labId,
+                    'variant' => $variant,
+                ],
+                'status' => 'pending',
+            ]);
+
+            try {
+                GenerateReportJob::dispatch(
+                    $reportJob->id,
+                    'lab_details',
+                    $validated['format'] ?? 'pdf',
+                    ['lab_id' => $labId, 'variant' => $variant]
+                )->onQueue('default');
+            } catch (\Exception $e) {
+                \Log::error('Failed to dispatch lab details report job: '.$e->getMessage());
+                $reportJob->update([
+                    'status' => 'failed',
+                    'error_message' => 'Falha ao despachar job: '.$e->getMessage(),
+                ]);
+                throw $e;
+            }
+
+            return response()->json([
+                'message' => 'Relatório em processamento',
+                'job_id' => $reportJob->id,
+                'status' => 'pending',
+            ], 202);
+        }
+
+        return $this->exportLabDetailsSync($request);
+    }
+
+    /**
+     * Synchronous export for lab details report
+     */
+    private function exportLabDetailsSync(Request $request)
+    {
+        $validated = $request->validate([
+            'lab_id' => 'required|exists:labs,id',
+            'variant' => 'required|in:complete,summary',
+        ]);
+
+        $lab = Lab::with('computers.softwares')->findOrFail($validated['lab_id']);
+        $computers = $lab->computers;
+        $stats = $this->buildLabDetailsStats($computers);
+        $softwares = Software::whereHas('computers', function ($q) use ($lab) {
+            $q->where('lab_id', $lab->id);
+        })->withCount(['computers' => function ($q) use ($lab) {
+            $q->where('lab_id', $lab->id);
+        }])->orderBy('name')->get();
+
+        try {
+            $viewName = $validated['variant'] === 'complete'
+                ? 'reports.lab_details_complete'
+                : 'reports.lab_details_summary';
+            $timestamp = now()->format('Y-m-d H:i:s');
+            $pdf = Pdf::loadView($viewName, [
+                'lab' => $lab,
+                'stats' => $stats,
+                'computers' => $computers,
+                'softwares' => $softwares,
+                'exportDate' => $timestamp,
+            ]);
+            $filename = 'lab-detalhes-'.$lab->id.'-'.$validated['variant'].'-'.now()->format('Y-m-d_His').'.pdf';
+
+            return $pdf->download($filename);
+        } catch (\Exception $e) {
+            \Log::error('Erro ao exportar relatório de detalhes do laboratório: '.$e->getMessage());
+
+            return response()->json([
+                'message' => 'Erro ao gerar PDF: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Build lab stats from computers collection (same structure as LabController::show)
+     *
+     * @param  \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Collection  $computers
+     */
+    private function buildLabDetailsStats($computers): array
+    {
+        $computers = collect($computers);
+        $totalComputers = $computers->count();
+        if ($totalComputers === 0) {
+            return [
+                'total_computers' => 0,
+                'online_computers' => 0,
+                'offline_computers' => 0,
+                'total_softwares' => 0,
+                'hardware_averages' => null,
+                'os_distribution' => [],
+            ];
+        }
+
+        $timezone = 'America/Sao_Paulo';
+        $threshold = Carbon::now($timezone)->subMinutes(5);
+        $onlineCount = $computers->filter(function ($computer) use ($threshold, $timezone) {
+            if (! $computer->updated_at) {
+                return false;
+            }
+            $updatedAt = $computer->updated_at instanceof Carbon
+                ? $computer->updated_at->setTimezone($timezone)
+                : Carbon::parse($computer->updated_at, $timezone);
+
+            return $updatedAt->gte($threshold);
+        })->count();
+        $offlineCount = $totalComputers - $onlineCount;
+
+        $hardwareAverages = $this->buildLabDetailsHardwareAverages($computers);
+        $osDistribution = $this->buildLabDetailsOsDistribution($computers);
+        $uniqueSoftwares = $computers->flatMap(function ($computer) {
+            return $computer->softwares ?? [];
+        })->unique('id')->count();
+
+        return [
+            'total_computers' => $totalComputers,
+            'online_computers' => $onlineCount,
+            'offline_computers' => $offlineCount,
+            'total_softwares' => $uniqueSoftwares,
+            'hardware_averages' => $hardwareAverages,
+            'os_distribution' => $osDistribution,
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection  $computers
+     */
+    private function buildLabDetailsHardwareAverages($computers): ?array
+    {
+        $computersWithHardware = collect($computers)->filter(fn ($c) => ! empty($c->hardware_info));
+        if ($computersWithHardware->isEmpty()) {
+            return null;
+        }
+        $count = $computersWithHardware->count();
+        $avgPhysicalCores = $computersWithHardware->avg(fn ($c) => $c->hardware_info['cpu']['physical_cores'] ?? 0);
+        $avgLogicalCores = $computersWithHardware->avg(fn ($c) => $c->hardware_info['cpu']['logical_cores'] ?? 0);
+        $avgMemory = $computersWithHardware->avg(fn ($c) => $c->hardware_info['memory']['total_gb'] ?? 0);
+        $avgDiskTotal = $computersWithHardware->avg(fn ($c) => $c->hardware_info['disk']['total_gb'] ?? 0);
+        $avgDiskUsed = $computersWithHardware->avg(fn ($c) => $c->hardware_info['disk']['used_gb'] ?? 0);
+        $avgDiskFree = $computersWithHardware->avg(fn ($c) => $c->hardware_info['disk']['free_gb'] ?? 0);
+        $avgDiskUsagePercent = $avgDiskTotal > 0 ? round(($avgDiskUsed / $avgDiskTotal) * 100, 2) : 0;
+
+        return [
+            'cpu' => [
+                'avg_physical_cores' => round($avgPhysicalCores, 2),
+                'avg_logical_cores' => round($avgLogicalCores, 2),
+            ],
+            'memory' => ['avg_total_gb' => round($avgMemory, 2)],
+            'disk' => [
+                'avg_total_gb' => round($avgDiskTotal, 2),
+                'avg_used_gb' => round($avgDiskUsed, 2),
+                'avg_free_gb' => round($avgDiskFree, 2),
+                'avg_usage_percent' => $avgDiskUsagePercent,
+            ],
+            'computers_with_hardware_info' => $count,
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection  $computers
+     */
+    private function buildLabDetailsOsDistribution($computers): array
+    {
+        $osCounts = [];
+        foreach (collect($computers) as $computer) {
+            if (empty($computer->hardware_info['os']['system'])) {
+                continue;
+            }
+            $osName = $computer->hardware_info['os']['system'];
+            $osRelease = $computer->hardware_info['os']['release'] ?? 'Desconhecido';
+            $osKey = $osName.' '.$osRelease;
+            if (! isset($osCounts[$osKey])) {
+                $osCounts[$osKey] = ['system' => $osName, 'release' => $osRelease, 'count' => 0];
+            }
+            $osCounts[$osKey]['count']++;
+        }
+
+        return array_values($osCounts);
     }
 
     /**

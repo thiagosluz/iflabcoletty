@@ -168,6 +168,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/reports/labs', [ReportController::class, 'exportLabs']);
         Route::post('/reports/computers', [ReportController::class, 'exportComputers']);
         Route::post('/reports/softwares', [ReportController::class, 'exportSoftwares']);
+        Route::post('/reports/lab-details', [ReportController::class, 'exportLabDetails']);
         Route::get('/reports/jobs', [ReportController::class, 'listJobs']);
         Route::get('/reports/jobs/{reportJob}', [ReportController::class, 'getJobStatus']);
         Route::get('/reports/jobs/{reportJob}/download', [ReportController::class, 'downloadReport'])->name('api.v1.reports.download');
