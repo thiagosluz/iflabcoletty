@@ -9,6 +9,8 @@ import { useToast } from '@/components/ui/use-toast';
 import {
     ChevronLeft,
     ChevronRight,
+    ChevronUp,
+    ChevronDown,
     Search,
     Package,
     Monitor,
@@ -114,6 +116,9 @@ interface Software {
     computers_count?: number;
 }
 
+type LabDetailsComputerSortBy = 'hostname' | 'machine_id' | 'status' | 'updated_at';
+type SortDir = 'asc' | 'desc';
+
 interface PaginationMeta {
     current_page: number;
     last_page: number;
@@ -137,6 +142,8 @@ export default function LabDetails() {
     const [computerPerPage, setComputerPerPage] = useState(20);
     const [computerPagination, setComputerPagination] = useState<PaginationMeta | null>(null);
     const [computerStatusFilter, setComputerStatusFilter] = useState<string>('all');
+    const [computerSortBy, setComputerSortBy] = useState<LabDetailsComputerSortBy>('hostname');
+    const [computerSortDir, setComputerSortDir] = useState<SortDir>('asc');
     const [loadingComputers, setLoadingComputers] = useState(false);
 
     // Softwares state
@@ -165,7 +172,7 @@ export default function LabDetails() {
         if (id) {
             fetchComputers();
         }
-    }, [id, computerCurrentPage, computerPerPage, computerSearch, computerStatusFilter]);
+    }, [id, computerCurrentPage, computerPerPage, computerSearch, computerStatusFilter, computerSortBy, computerSortDir]);
 
     useEffect(() => {
         if (id) {
@@ -200,6 +207,8 @@ export default function LabDetails() {
             if (computerStatusFilter !== 'all') {
                 params.append('status', computerStatusFilter);
             }
+            params.append('sort_by', computerSortBy);
+            params.append('sort_dir', computerSortDir);
 
             const response = await apiClient.get(`/labs/${id}/computers?${params.toString()}`);
             setComputers(response.data.data || []);
@@ -292,6 +301,16 @@ export default function LabDetails() {
 
     const handleComputerSearchChange = (value: string) => {
         setComputerSearch(value);
+        setComputerCurrentPage(1);
+    };
+
+    const handleComputerSort = (column: LabDetailsComputerSortBy) => {
+        if (computerSortBy === column) {
+            setComputerSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setComputerSortBy(column);
+            setComputerSortDir('asc');
+        }
         setComputerCurrentPage(1);
     };
 
@@ -694,16 +713,28 @@ export default function LabDetails() {
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Hostname
+                                                    <Button variant="ghost" className="-ml-2 h-8 font-semibold text-gray-500" onClick={() => handleComputerSort('hostname')}>
+                                                        Hostname
+                                                        {computerSortBy === 'hostname' && (computerSortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                                    </Button>
                                                 </th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    ID da Máquina
+                                                    <Button variant="ghost" className="-ml-2 h-8 font-semibold text-gray-500" onClick={() => handleComputerSort('machine_id')}>
+                                                        ID da Máquina
+                                                        {computerSortBy === 'machine_id' && (computerSortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                                    </Button>
                                                 </th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Status
+                                                    <Button variant="ghost" className="-ml-2 h-8 font-semibold text-gray-500" onClick={() => handleComputerSort('status')}>
+                                                        Status
+                                                        {computerSortBy === 'status' && (computerSortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                                    </Button>
                                                 </th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Última Atualização
+                                                    <Button variant="ghost" className="-ml-2 h-8 font-semibold text-gray-500" onClick={() => handleComputerSort('updated_at')}>
+                                                        Última Atualização
+                                                        {computerSortBy === 'updated_at' && (computerSortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                                    </Button>
                                                 </th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                     Ações

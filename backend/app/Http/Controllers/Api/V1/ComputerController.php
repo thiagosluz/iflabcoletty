@@ -46,11 +46,27 @@ class ComputerController extends Controller
             });
         }
 
-        // Pagination
-        $perPage = $request->query('per_page', 20);
-        $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
+        // Sorting: whitelist columns, default hostname asc
+        $allowedSort = ['hostname', 'machine_id', 'lab', 'status', 'updated_at'];
+        $sortBy = $request->query('sort_by', 'hostname');
+        $sortDir = strtolower($request->query('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
 
-        return $query->orderBy('created_at', 'desc');
+        if (! in_array($sortBy, $allowedSort)) {
+            $sortBy = 'hostname';
+        }
+
+        if ($sortBy === 'lab') {
+            $query->leftJoin('labs', 'computers.lab_id', '=', 'labs.id')
+                ->orderBy('labs.name', $sortDir)
+                ->select('computers.*');
+        } elseif ($sortBy === 'status') {
+            // status: order by updated_at (desc = online first, asc = offline first)
+            $query->orderBy('computers.updated_at', $sortDir);
+        } else {
+            $query->orderBy('computers.'.$sortBy, $sortDir);
+        }
+
+        return $query;
     }
 
     /**

@@ -11,7 +11,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Download, Trash2, Pencil } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, Pencil } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
 import {
@@ -30,7 +30,11 @@ interface Lab {
     name: string;
     description: string;
     computers_count?: number;
+    updated_at?: string;
 }
+
+type LabSortBy = 'id' | 'name' | 'description' | 'computers_count' | 'updated_at';
+type SortDir = 'asc' | 'desc';
 
 interface PaginationMeta {
     current_page: number;
@@ -52,13 +56,31 @@ export default function Labs() {
     const navigate = useNavigate();
     const [labs, setLabs] = useState<Lab[]>([]);
     const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
     const [labToDelete, setLabToDelete] = useState<Lab | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [editingLab, setEditingLab] = useState<Lab | null>(null);
+    const [sortBy, setSortBy] = useState<LabSortBy>('name');
+    const [sortDir, setSortDir] = useState<SortDir>('asc');
     const { toast } = useToast();
+
+    const handleSort = (column: LabSortBy) => {
+        if (sortBy === column) {
+            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortBy(column);
+            setSortDir('asc');
+        }
+        setCurrentPage(1);
+    };
+
+    const handleSearchChange = (value: string) => {
+        setSearch(value);
+        setCurrentPage(1);
+    };
 
     const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<LabFormData>({
         resolver: zodResolver(labSchema),
@@ -69,6 +91,9 @@ export default function Labs() {
             const params = new URLSearchParams();
             params.append('page', currentPage.toString());
             params.append('per_page', perPage.toString());
+            if (search) params.append('search', search);
+            params.append('sort_by', sortBy);
+            params.append('sort_dir', sortDir);
 
             const response = await apiClient.get(`/labs?${params.toString()}`);
             setLabs(response.data.data || []);
@@ -87,7 +112,7 @@ export default function Labs() {
 
     useEffect(() => {
         fetchLabs();
-    }, [currentPage, perPage]);
+    }, [search, currentPage, perPage, sortBy, sortDir]);
 
     const handlePerPageChange = (value: string) => {
         setPerPage(parseInt(value));
@@ -208,30 +233,6 @@ export default function Labs() {
             <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-bold tracking-tight">Laboratórios</h2>
                 <div className="flex gap-2">
-                    <div className="flex items-center gap-2 bg-white shadow rounded-lg px-4 py-2">
-                        <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
-                        <Select value={perPage.toString()} onValueChange={handlePerPageChange}>
-                            <SelectTrigger className="w-[100px]">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="10">10</SelectItem>
-                                <SelectItem value="20">20</SelectItem>
-                                <SelectItem value="50">50</SelectItem>
-                                <SelectItem value="100">100</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <ExportDialog
-                        trigger={
-                            <Button variant="outline">
-                                <Download className="mr-2 h-4 w-4" /> Exportar
-                            </Button>
-                        }
-                        onExport={handleExport}
-                        title="Exportar Laboratórios"
-                        description="Escolha o formato para exportar a lista de laboratórios"
-                    />
                     <Button onClick={() => { setEditingLab(null); reset(); setIsOpen(true); }}>
                         <Plus className="mr-2 h-4 w-4" /> Adicionar Laboratório
                     </Button>
@@ -257,22 +258,89 @@ export default function Labs() {
                 </div>
             </div>
 
+            <div className="flex gap-4 items-center">
+                <div className="relative w-72">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Buscar por nome ou descrição..."
+                        className="pl-8"
+                        value={search}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                    />
+                </div>
+                <div className="flex items-center gap-2 bg-white shadow rounded-lg px-4 py-2">
+                    <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
+                        <Select value={perPage.toString()} onValueChange={handlePerPageChange}>
+                            <SelectTrigger className="w-[100px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <ExportDialog
+                        trigger={
+                            <Button variant="outline">
+                                <Download className="mr-2 h-4 w-4" /> Exportar
+                            </Button>
+                        }
+                        onExport={handleExport}
+                        title="Exportar Laboratórios"
+                        description="Escolha o formato para exportar a lista de laboratórios"
+                    />
+            </div>
+
             <div className="border rounded-md">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Nome</TableHead>
-                            <TableHead>Descrição</TableHead>
-                            <TableHead>Computadores</TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('id')}>
+                                    ID
+                                    {sortBy === 'id' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('name')}>
+                                    Nome
+                                    {sortBy === 'name' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('description')}>
+                                    Descrição
+                                    {sortBy === 'description' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('computers_count')}>
+                                    Computadores
+                                    {sortBy === 'computers_count' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('updated_at')}>
+                                    Última Atualização
+                                    {sortBy === 'updated_at' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
                             <TableHead className="w-[100px]">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {labs.map((lab) => (
                             <TableRow key={lab.id}>
+                                <TableCell className="font-mono text-xs">{lab.id}</TableCell>
                                 <TableCell className="font-medium">{lab.name}</TableCell>
                                 <TableCell>{lab.description}</TableCell>
                                 <TableCell>{lab.computers_count || 0}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                    {lab.updated_at ? new Date(lab.updated_at).toLocaleString('pt-BR') : '-'}
+                                </TableCell>
                                 <TableCell>
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
@@ -302,7 +370,7 @@ export default function Labs() {
                         ))}
                         {labs.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={4} className="text-center h-24">Nenhum laboratório encontrado.</TableCell>
+                                <TableCell colSpan={6} className="text-center h-24">Nenhum laboratório encontrado.</TableCell>
                             </TableRow>
                         )}
                     </TableBody>

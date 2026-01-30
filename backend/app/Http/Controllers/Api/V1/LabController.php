@@ -36,11 +36,30 @@ class LabController extends Controller
         $query = Lab::select('id', 'name', 'description', 'created_at', 'updated_at')
             ->withCount('computers');
 
+        // Search by name or description
+        if ($search = $request->query('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // Sorting: whitelist columns, default name asc
+        $allowedSort = ['id', 'name', 'description', 'computers_count', 'updated_at', 'created_at'];
+        $sortBy = $request->query('sort_by', 'name');
+        $sortDir = strtolower($request->query('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+        if (! in_array($sortBy, $allowedSort)) {
+            $sortBy = 'name';
+        }
+
+        $query->orderBy($sortBy, $sortDir);
+
         // Pagination
         $perPage = $request->query('per_page', 20);
         $perPage = min(max((int) $perPage, 5), 100); // Limit between 5 and 100
 
-        return $query->orderBy('name')->paginate($perPage);
+        return $query->paginate($perPage);
     }
 
     #[OA\Post(
@@ -130,6 +149,8 @@ class LabController extends Controller
             new OA\Parameter(name: 'search', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
             new OA\Parameter(name: 'status', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['online', 'offline'])),
             new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', example: 20)),
+            new OA\Parameter(name: 'sort_by', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['hostname', 'machine_id', 'status', 'updated_at'])),
+            new OA\Parameter(name: 'sort_dir', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['asc', 'desc'])),
         ],
         responses: [
             new OA\Response(response: 200, description: 'Lista de computadores'),
@@ -159,11 +180,26 @@ class LabController extends Controller
             }
         }
 
+        // Sorting: whitelist columns, default hostname asc
+        $allowedSort = ['hostname', 'machine_id', 'status', 'updated_at'];
+        $sortBy = $request->query('sort_by', 'hostname');
+        $sortDir = strtolower($request->query('sort_dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+
+        if (! in_array($sortBy, $allowedSort)) {
+            $sortBy = 'hostname';
+        }
+
+        if ($sortBy === 'status') {
+            $query->orderBy('updated_at', $sortDir);
+        } else {
+            $query->orderBy($sortBy, $sortDir);
+        }
+
         // Pagination
         $perPage = $request->query('per_page', 20);
         $perPage = min(max((int) $perPage, 5), 100);
 
-        return $query->orderBy('created_at', 'desc')->paginate($perPage);
+        return $query->paginate($perPage);
     }
 
     /**

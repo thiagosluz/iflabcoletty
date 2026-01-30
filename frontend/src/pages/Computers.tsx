@@ -12,7 +12,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, Download, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
 import {
@@ -54,6 +54,9 @@ interface PaginationMeta {
 // Use shared utility function for consistency
 const isOnline = (dateString: string) => isComputerOnline(dateString, 5);
 
+type ComputerSortBy = 'hostname' | 'machine_id' | 'lab' | 'status' | 'updated_at';
+type SortDir = 'asc' | 'desc';
+
 const computerSchema = z.object({
     lab_id: z.string().min(1, "Laboratório é obrigatório"),
     hostname: z.string().optional(),
@@ -79,7 +82,19 @@ export default function Computers() {
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
     const [computerToDelete, setComputerToDelete] = useState<Computer | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [sortBy, setSortBy] = useState<ComputerSortBy>('hostname');
+    const [sortDir, setSortDir] = useState<SortDir>('asc');
     const { toast } = useToast();
+
+    const handleSort = (column: ComputerSortBy) => {
+        if (sortBy === column) {
+            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortBy(column);
+            setSortDir('asc');
+        }
+        setCurrentPage(1);
+    };
 
     const { register, control, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ComputerFormData>({
         resolver: zodResolver(computerSchema),
@@ -100,6 +115,8 @@ export default function Computers() {
             params.append('per_page', perPage.toString());
             if (search) params.append('search', search);
             if (labFilter !== 'all') params.append('lab_id', labFilter);
+            params.append('sort_by', sortBy);
+            params.append('sort_dir', sortDir);
 
             const { data } = await apiClient.get(`/computers?${params.toString()}`);
             setComputers(data.data || []);
@@ -122,7 +139,7 @@ export default function Computers() {
 
     useEffect(() => {
         fetchComputers();
-    }, [search, labFilter, currentPage, perPage]);
+    }, [search, labFilter, currentPage, perPage, sortBy, sortDir]);
 
     const handleSearchChange = (value: string) => {
         setSearch(value);
@@ -524,11 +541,36 @@ export default function Computers() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Hostname</TableHead>
-                            <TableHead>ID da Máquina</TableHead>
-                            <TableHead>Laboratório</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Última Atualização</TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('hostname')}>
+                                    Hostname
+                                    {sortBy === 'hostname' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('machine_id')}>
+                                    ID da Máquina
+                                    {sortBy === 'machine_id' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('lab')}>
+                                    Laboratório
+                                    {sortBy === 'lab' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('status')}>
+                                    Status
+                                    {sortBy === 'status' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
+                            <TableHead>
+                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('updated_at')}>
+                                    Última Atualização
+                                    {sortBy === 'updated_at' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                </Button>
+                            </TableHead>
                             <TableHead className="w-[100px]">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
