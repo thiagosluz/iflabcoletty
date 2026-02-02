@@ -9,6 +9,7 @@ use App\Traits\LogsActivity;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use OpenApi\Attributes as OA;
 
 class LabController extends Controller
@@ -33,7 +34,7 @@ class LabController extends Controller
         $this->authorize('labs.view');
 
         // Optimized: Select only necessary fields
-        $query = Lab::select('id', 'name', 'description', 'created_at', 'updated_at')
+        $query = Lab::select('id', 'name', 'description', 'default_wallpaper_url', 'default_wallpaper_enabled', 'created_at', 'updated_at')
             ->withCount('computers');
 
         // Search by name or description
@@ -130,6 +131,8 @@ class LabController extends Controller
                 'id' => $lab->id,
                 'name' => $lab->name,
                 'description' => $lab->description,
+                'default_wallpaper_url' => $lab->default_wallpaper_url,
+                'default_wallpaper_enabled' => $lab->default_wallpaper_enabled ?? true,
                 'created_at' => $lab->created_at,
             ],
             'stats' => $stats,
@@ -410,6 +413,8 @@ class LabController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255|unique:labs,name,'.$lab->id,
             'description' => 'nullable|string',
+            'default_wallpaper_url' => 'nullable|string|max:500',
+            'default_wallpaper_enabled' => 'nullable|boolean',
         ]);
 
         $lab->update($validated);
@@ -418,6 +423,33 @@ class LabController extends Controller
         $this->logActivity('update', $lab, $oldValues, $lab->toArray());
 
         return response()->json($lab);
+    }
+
+    /**
+     * Upload default wallpaper image for the lab.
+     */
+    public function uploadWallpaper(Request $request, Lab $lab)
+    {
+        $this->authorize('labs.update');
+
+        $validated = $request->validate([
+            'wallpaper' => 'required|file|image|mimes:jpeg,jpg,png,gif,webp|max:5120',
+        ]);
+
+        $file = $request->file('wallpaper');
+        $ext = $file->getClientOriginalExtension() ?: 'jpg';
+        $path = 'labs/'.$lab->id;
+        $filename = 'wallpaper.'.$ext;
+
+        Storage::disk('public')->putFileAs($path, $file, $filename);
+
+        $url = config('app.url').'/storage/'.$path.'/'.$filename;
+        $lab->update(['default_wallpaper_url' => $url]);
+
+        return response()->json([
+            'default_wallpaper_url' => $url,
+            'message' => 'Papel de parede atualizado com sucesso.',
+        ]);
     }
 
     public function destroy(Lab $lab)

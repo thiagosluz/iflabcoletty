@@ -120,6 +120,7 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('labs', LabController::class);
         Route::get('/labs/{lab}/computers', [LabController::class, 'getComputers']);
         Route::get('/labs/{lab}/softwares', [LabController::class, 'getSoftwares']);
+        Route::post('/labs/{lab}/wallpaper', [LabController::class, 'uploadWallpaper']);
 
         // Computers
         Route::apiResource('computers', ComputerController::class);

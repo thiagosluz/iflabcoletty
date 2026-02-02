@@ -7,10 +7,10 @@ import platform
 import logging
 import requests
 import socket
-import psutil
+import psutil  # type: ignore[import-untyped]
 import config
-import mss
-import mss.tools
+import mss  # type: ignore[import-untyped]
+import mss.tools  # type: ignore
 from PIL import Image
 import io
 import base64
@@ -35,7 +35,9 @@ class Agent:
         })
         self.token = None
         self.machine_id = self._get_or_create_machine_id()
-        self.computer_db_id = None # ID in the database
+        self.computer_db_id = None  # ID in the database
+        self._cached_lab_wallpaper_url = None  # URL do papel de parede padrão do lab
+        self._cached_lab_wallpaper_enabled = True  # Se o agente deve aplicar o wallpaper
         if getattr(sys, 'frozen', False):
             self.agent_dir = Path(sys.executable).resolve().parent
         else:
@@ -324,6 +326,9 @@ class Agent:
             
             if existing:
                 self.computer_db_id = existing['id']
+                lab_data = existing.get('lab') or {}
+                self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
+                self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
                 logger.info(f"Computer found (ID: {self.computer_db_id}). Updating...")
                 # Update
                 update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
@@ -349,6 +354,9 @@ class Agent:
                         
                         if found_computer:
                             self.computer_db_id = found_computer['id']
+                            lab_data = found_computer.get('lab') or {}
+                            self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
+                            self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
                             logger.info(f"Found existing computer (ID: {self.computer_db_id}). Updating...")
                             update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
                             update_response = self.session.put(update_url, json=data)
@@ -362,6 +370,9 @@ class Agent:
                             
                             if found_computer:
                                 self.computer_db_id = found_computer['id']
+                                lab_data = found_computer.get('lab') or {}
+                                self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
+                                self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
                                 logger.info(f"Found existing computer on retry (ID: {self.computer_db_id}). Updating...")
                                 update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
                                 update_response = self.session.put(update_url, json=data)
@@ -1038,6 +1049,111 @@ exit 1
             logger.exception("Frozen update failed")
             return False, str(e)
 
+    def _download_wallpaper(self, url):
+        """Baixa imagem da URL para um arquivo local. Retorna path absoluto ou None em erro."""
+        try:
+            cache_dir = Path(tempfile.gettempdir()) / "iflab_agent_wallpaper"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            ext = "jpg"
+            if "." in url.split("?")[0]:
+                ext = url.split("?")[0].rsplit(".", 1)[-1].lower()
+                if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
+                    ext = "jpg"
+            file_path = cache_dir / f"lab_wallpaper.{ext}"
+            r = self.session.get(url, stream=True, timeout=30)
+            r.raise_for_status()
+            with open(file_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            return str(file_path.resolve())
+        except Exception as e:
+            logger.warning("Failed to download lab wallpaper from %s: %s", url, e)
+            return None
+
+    def _get_current_wallpaper_path(self):
+        """Retorna o caminho/URI do wallpaper atual do SO, ou None."""
+        try:
+            if platform.system() == "Windows":
+                ps_script = "Get-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Wallpaper"
+                result = subprocess.run(
+                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode == 0 and result.stdout and result.stdout.strip():
+                    return result.stdout.strip()
+                return None
+            else:
+                result = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.background", "picture-uri"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout and result.stdout.strip():
+                    uri = result.stdout.strip().strip("'\"")
+                    if uri.startswith("file://"):
+                        return uri[7:]
+                    return uri
+                return None
+        except Exception as e:
+            logger.debug("Could not get current wallpaper path: %s", e)
+            return None
+
+    def _set_wallpaper(self, file_path):
+        """Aplica o arquivo como papel de parede. file_path deve ser caminho absoluto."""
+        try:
+            abs_path = str(Path(file_path).resolve())
+            if platform.system() == "Windows":
+                value_escaped = abs_path.replace("\\", "\\\\").replace('"', '`"')
+                ps_script = f'''
+Set-ItemProperty -Path "HKCU:\\Control Panel\\Desktop" -Name Wallpaper -Value "{value_escaped}"
+rundll32.exe user32.dll, UpdatePerUserSystemParameters
+'''
+                result = subprocess.run(
+                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(result.stderr or result.stdout or "Unknown error")
+            else:
+                uri = "file://" + abs_path
+                result = subprocess.run(
+                    ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", uri],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(result.stderr or result.stdout or "Unknown error")
+        except Exception as e:
+            logger.warning("Failed to set wallpaper: %s", e)
+            raise
+
+    def _enforce_lab_wallpaper(self):
+        """Verifica o wallpaper padrão do lab no servidor e, se o atual for diferente, aplica o padrão."""
+        if not getattr(self, '_cached_lab_wallpaper_enabled', True):
+            return
+        url = (self._cached_lab_wallpaper_url or "").strip()
+        if not url:
+            return
+        try:
+            current_path = self._get_current_wallpaper_path()
+            local_path = self._download_wallpaper(url)
+            if not local_path:
+                return
+            normalized_current = (current_path or "").replace("\\", "/").rstrip("/")
+            normalized_local = local_path.replace("\\", "/").rstrip("/")
+            if normalized_current and normalized_current == normalized_local:
+                return
+            self._set_wallpaper(local_path)
+            logger.info("Lab default wallpaper applied: %s", local_path)
+        except Exception as e:
+            logger.debug("Lab wallpaper enforcement skipped or failed: %s", e)
+
     def download_installer(self, file_id):
         """Download installer from server. Ensures auth and retries on 401."""
         import re
@@ -1289,34 +1405,41 @@ exit 1
         
         last_metrics_time = 0
         last_report_time = 0
-        
+        last_wallpaper_check_time = 0
+
         while True:
             if not self.token:
                 if not self.login():
-                    time.sleep(10) # Wait before retry
+                    time.sleep(10)  # Wait before retry
                     continue
-            
+
             # Always ensure registered
             self.register_or_update()
-            
+
             # Check for commands frequently (every loop)
             if self.computer_db_id:
                 self.check_commands()
-            
+
             current_time = time.time()
-            
+
             # Send metrics every 30s
             if current_time - last_metrics_time >= 30:
                 if self.computer_db_id:
                     self.send_metrics_report()
                 last_metrics_time = current_time
-            
+
             # Send detailed report every 5 minutes (300s)
             if current_time - last_report_time >= 300:
                 if self.computer_db_id:
                     self.send_detailed_report()
                 last_report_time = current_time
-            
+
+            # Enforce lab default wallpaper every 5 minutes (300s)
+            if current_time - last_wallpaper_check_time >= 300:
+                if self.computer_db_id:
+                    self._enforce_lab_wallpaper()
+                last_wallpaper_check_time = current_time
+
             # Short sleep for responsive command handling
             time.sleep(5)
 

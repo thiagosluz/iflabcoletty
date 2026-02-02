@@ -27,7 +27,12 @@ import {
     Terminal,
     Map as MapIcon,
     List,
-    Download
+    Download,
+    Image as ImageIcon,
+    Trash2,
+    ExternalLink,
+    Pencil,
+    PowerOff
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import LabMap from '@/components/LabMap';
@@ -96,6 +101,8 @@ interface Lab {
     id: number;
     name: string;
     description: string;
+    default_wallpaper_url?: string | null;
+    default_wallpaper_enabled?: boolean;
     created_at: string;
 }
 
@@ -167,6 +174,9 @@ export default function LabDetails() {
     const [exportVariant, setExportVariant] = useState<'complete' | 'summary'>('complete');
     const [exportAsync, setExportAsync] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
+    const [isWallpaperDialogOpen, setIsWallpaperDialogOpen] = useState(false);
+    const [wallpaperEditUrl, setWallpaperEditUrl] = useState('');
+    const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -356,6 +366,58 @@ export default function LabDetails() {
             toast({ title: 'Erro na exportação', description: msg, variant: 'destructive' });
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    const handleWallpaperExcluir = async () => {
+        if (!id || !lab) return;
+        try {
+            await apiClient.put(`/labs/${id}`, { ...lab, default_wallpaper_url: '' });
+            toast({ title: 'Papel de parede removido', description: 'O papel de parede padrão foi excluído.' });
+            fetchLabDetails();
+        } catch (error: any) {
+            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao remover.', variant: 'destructive' });
+        }
+    };
+
+    const handleWallpaperToggleEnabled = async () => {
+        if (!id || !lab) return;
+        const next = !(lab.default_wallpaper_enabled ?? true);
+        try {
+            await apiClient.put(`/labs/${id}`, { default_wallpaper_enabled: next });
+            toast({ title: next ? 'Ativado' : 'Desativado', description: next ? 'O agente voltará a aplicar o papel de parede nos computadores.' : 'O agente deixará de aplicar o papel de parede.' });
+            fetchLabDetails();
+        } catch (error: any) {
+            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao atualizar.', variant: 'destructive' });
+        }
+    };
+
+    const handleWallpaperSave = async (url: string) => {
+        if (!id) return;
+        try {
+            await apiClient.put(`/labs/${id}`, { default_wallpaper_url: url || '' });
+            toast({ title: 'Salvo', description: url ? 'Papel de parede atualizado.' : 'Papel de parede removido.' });
+            setIsWallpaperDialogOpen(false);
+            setWallpaperEditUrl('');
+            fetchLabDetails();
+        } catch (error: any) {
+            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao salvar.', variant: 'destructive' });
+        }
+    };
+
+    const handleWallpaperUpload = async (file: File) => {
+        if (!id) return;
+        try {
+            setUploadingWallpaper(true);
+            const formData = new FormData();
+            formData.append('wallpaper', file);
+            const res = await apiClient.post(`/labs/${id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            setWallpaperEditUrl(res.data.default_wallpaper_url);
+            toast({ title: 'Imagem enviada', description: 'Salve para confirmar ou altere a URL.' });
+        } catch (error: any) {
+            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao enviar imagem.', variant: 'destructive' });
+        } finally {
+            setUploadingWallpaper(false);
         }
     };
 
@@ -627,6 +689,118 @@ export default function LabDetails() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Papel de parede padrão */}
+                    <div className="bg-white shadow rounded-lg p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <ImageIcon className="h-5 w-5 text-gray-700" />
+                            <h2 className="text-lg font-semibold">Papel de parede padrão</h2>
+                        </div>
+                        {lab.default_wallpaper_url ? (
+                            <div className="flex flex-col sm:flex-row gap-4 items-start">
+                                <div className="flex-shrink-0">
+                                    <a href={lab.default_wallpaper_url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-gray-200 max-w-[280px] max-h-[160px] bg-gray-100">
+                                        <img src={lab.default_wallpaper_url} alt="Papel de parede" className="w-full h-full object-cover aspect-video" />
+                                    </a>
+                                    <p className="text-xs text-muted-foreground mt-1">Clique na imagem para abrir em tamanho real</p>
+                                </div>
+                                <div className="flex-1 space-y-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${lab.default_wallpaper_enabled !== false ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                                            {lab.default_wallpaper_enabled !== false ? 'Utilizando' : 'Desativado'}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 break-all">{lab.default_wallpaper_url}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button variant="outline" size="sm" asChild>
+                                            <a href={lab.default_wallpaper_url} target="_blank" rel="noopener noreferrer">
+                                                <ExternalLink className="h-4 w-4 mr-2" /> Visualizar
+                                            </a>
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => { setWallpaperEditUrl(lab.default_wallpaper_url || ''); setIsWallpaperDialogOpen(true); }}>
+                                            <Pencil className="h-4 w-4 mr-2" /> Alterar
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={handleWallpaperToggleEnabled}>
+                                            {lab.default_wallpaper_enabled !== false ? <PowerOff className="h-4 w-4 mr-2" /> : <Power className="h-4 w-4 mr-2" />}
+                                            {lab.default_wallpaper_enabled !== false ? 'Desativar uso' : 'Ativar uso'}
+                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50">
+                                                    <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Excluir papel de parede?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        O papel de parede padrão será removido do laboratório. Os agentes deixarão de aplicar esta imagem nos computadores.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleWallpaperExcluir} className="bg-red-600 hover:bg-red-700">
+                                                        Excluir
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <p className="text-gray-500">Nenhum papel de parede definido. Os computadores do laboratório manterão o papel de parede atual.</p>
+                                <Button variant="outline" onClick={() => { setWallpaperEditUrl(''); setIsWallpaperDialogOpen(true); }}>
+                                    <ImageIcon className="h-4 w-4 mr-2" /> Definir papel de parede
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Dialog Alterar/Definir papel de parede */}
+                    <Dialog open={isWallpaperDialogOpen} onOpenChange={(open) => { setIsWallpaperDialogOpen(open); if (!open) setWallpaperEditUrl(''); }}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>{lab?.default_wallpaper_url ? 'Alterar papel de parede' : 'Definir papel de parede padrão'}</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <Label>URL da imagem</Label>
+                                    <Input
+                                        value={wallpaperEditUrl}
+                                        onChange={(e) => setWallpaperEditUrl(e.target.value)}
+                                        placeholder="https://exemplo.com/imagem.jpg"
+                                    />
+                                </div>
+                                {id && (
+                                    <div className="space-y-2">
+                                        <Label>Ou envie uma imagem</Label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                id="wallpaper-upload-detail"
+                                                type="file"
+                                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) handleWallpaperUpload(file);
+                                                    e.target.value = '';
+                                                }}
+                                            />
+                                            <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('wallpaper-upload-detail')?.click()} disabled={uploadingWallpaper}>
+                                                {uploadingWallpaper ? 'Enviando...' : 'Selecionar arquivo'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsWallpaperDialogOpen(false)}>Cancelar</Button>
+                                <Button onClick={() => handleWallpaperSave(wallpaperEditUrl.trim())}>Salvar</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
 
                     {/* Hardware Averages */}
                     {stats.hardware_averages && (

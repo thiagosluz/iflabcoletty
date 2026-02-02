@@ -32,7 +32,7 @@ services:
       - ./backend:/var/www/html
       - ./agent:/var/www/agent
       - ./docker/php/php.ini:/usr/local/etc/php/conf.d/99-custom.ini
-    command: php artisan octane:start --server=roadrunner --host=0.0.0.0 --port=8000
+    command: sh -c "php artisan storage:link 2>/dev/null || true && exec php artisan octane:start --server=roadrunner --host=0.0.0.0 --port=8000"
     depends_on:
       - db
       - redis
@@ -118,6 +118,8 @@ services:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
       # In dev, we might proxy to frontend dev server, but for "prod-like" setup:
       - ./frontend/dist:/var/www/frontend
+      # Backend storage (uploaded files: lab wallpapers, etc.) - mount the actual dir so /storage/ resolves
+      - ./backend/storage/app/public:/var/www/backend-storage:ro
     networks:
       - iflab-net
 

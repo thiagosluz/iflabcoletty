@@ -77,7 +77,7 @@ class ComputerController extends Controller
     {
         $computer = Computer::where('machine_id', $machineId)
             ->select('id', 'lab_id', 'hostname', 'machine_id', 'public_hash', 'updated_at', 'created_at')
-            ->with('lab:id,name')
+            ->with('lab:id,name,default_wallpaper_url,default_wallpaper_enabled')
             ->first();
 
         if (! $computer) {

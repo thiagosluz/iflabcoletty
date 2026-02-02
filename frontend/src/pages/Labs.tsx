@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -29,6 +30,8 @@ interface Lab {
     id: number;
     name: string;
     description: string;
+    default_wallpaper_url?: string | null;
+    default_wallpaper_enabled?: boolean;
     computers_count?: number;
     updated_at?: string;
 }
@@ -48,6 +51,8 @@ interface PaginationMeta {
 const labSchema = z.object({
     name: z.string().min(2),
     description: z.string().optional(),
+    default_wallpaper_url: z.string().max(500).optional(),
+    default_wallpaper_enabled: z.boolean().optional(),
 });
 
 type LabFormData = z.infer<typeof labSchema>;
@@ -82,9 +87,11 @@ export default function Labs() {
         setCurrentPage(1);
     };
 
-    const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<LabFormData>({
+    const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<LabFormData>({
         resolver: zodResolver(labSchema),
     });
+    const wallpaperEnabled = watch('default_wallpaper_enabled');
+    const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
 
     const fetchLabs = async () => {
         try {
@@ -122,7 +129,11 @@ export default function Labs() {
     const onSubmit = async (data: LabFormData) => {
         try {
             if (editingLab) {
-                await apiClient.put(`/labs/${editingLab.id}`, data);
+                const payload = {
+                    ...data,
+                    default_wallpaper_enabled: data.default_wallpaper_enabled === true,
+                };
+                await apiClient.put(`/labs/${editingLab.id}`, payload);
                 toast({ title: 'Sucesso', description: 'Laboratório atualizado com sucesso' });
             } else {
                 await apiClient.post('/labs', data);
@@ -251,6 +262,52 @@ export default function Labs() {
                                     <Label>Descrição</Label>
                                     <Input {...register('description')} placeholder="Laboratório principal" />
                                 </div>
+                                <div className="space-y-2">
+                                    <Label>Papel de parede padrão (URL)</Label>
+                                    <Input {...register('default_wallpaper_url')} placeholder="https://exemplo.com/imagem.jpg" />
+                                    <p className="text-xs text-muted-foreground">O agente aplicará este papel de parede nos computadores do laboratório. Deixe vazio para não definir.</p>
+                                    {editingLab && (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <Label htmlFor="wallpaper-upload" className="text-sm cursor-pointer text-primary hover:underline">Ou envie uma imagem:</Label>
+                                            <input
+                                                id="wallpaper-upload"
+                                                type="file"
+                                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                                className="hidden"
+                                                onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (!file || !editingLab) return;
+                                                    try {
+                                                        setUploadingWallpaper(true);
+                                                        const formData = new FormData();
+                                                        formData.append('wallpaper', file);
+                                                        const res = await apiClient.post(`/labs/${editingLab.id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                                                        setValue('default_wallpaper_url', res.data.default_wallpaper_url);
+                                                        toast({ title: 'Sucesso', description: 'Imagem enviada. Salve o formulário para confirmar.' });
+                                                    } catch (err: any) {
+                                                        toast({ title: 'Erro', description: err.response?.data?.message || 'Falha ao enviar imagem', variant: 'destructive' });
+                                                    } finally {
+                                                        setUploadingWallpaper(false);
+                                                        e.target.value = '';
+                                                    }
+                                                }}
+                                            />
+                                            <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('wallpaper-upload')?.click()} disabled={uploadingWallpaper}>
+                                                {uploadingWallpaper ? 'Enviando...' : 'Selecionar arquivo'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                                {editingLab && (
+                                    <div className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id="default_wallpaper_enabled"
+                                            checked={wallpaperEnabled ?? true}
+                                            onCheckedChange={(c) => setValue('default_wallpaper_enabled', c === true)}
+                                        />
+                                        <Label htmlFor="default_wallpaper_enabled" className="text-sm font-normal cursor-pointer">Utilizar papel de parede nos computadores do laboratório</Label>
+                                    </div>
+                                )}
                                 <Button type="submit" disabled={isSubmitting}>{editingLab ? 'Salvar' : 'Criar'}</Button>
                             </form>
                         </DialogContent>
@@ -353,7 +410,7 @@ export default function Labs() {
                                             <DropdownMenuItem onClick={() => navigate(`/admin/labs/${lab.id}`)}>
                                                 Ver Detalhes
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '' }); setIsOpen(true); }}>
+                                            <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '', default_wallpaper_url: lab.default_wallpaper_url ?? '', default_wallpaper_enabled: lab.default_wallpaper_enabled ?? true }); setIsOpen(true); }}>
                                                 <Pencil className="h-4 w-4 mr-2" />
                                                 Editar
                                             </DropdownMenuItem>
