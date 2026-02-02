@@ -24,7 +24,8 @@ jobs:
 
       - name: Write VERSION from tag
         run: |
-          Set-Content -Path agent/VERSION -Value $env:GITHUB_REF_NAME -NoNewline
+          $version = $env:GITHUB_REF_NAME -replace '^v',''
+          Set-Content -Path agent/VERSION -Value $version -NoNewline
 
       - name: Build agent with PyInstaller
         run: |

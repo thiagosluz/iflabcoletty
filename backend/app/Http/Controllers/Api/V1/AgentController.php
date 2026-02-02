@@ -45,10 +45,11 @@ class AgentController extends Controller
                 $baseUrl = config('app.agent_installer_base_url', '');
                 if ($baseUrl !== '') {
                     $baseUrl = rtrim($baseUrl, '/');
-                    $response['download_url'] = $baseUrl.'/'.$latestVersion.'/iflab-agent-setup-'.$latestVersion.'.exe';
+                    $tag = str_starts_with($latestVersion, 'v') ? $latestVersion : 'v'.$latestVersion;
+                    $response['download_url'] = $baseUrl.'/'.$tag.'/iflab-agent-setup-'.$tag.'.exe';
                 }
             }
-            if (empty($response['download_url'])) {
+            if (empty($response['download_url']) && $platform !== 'windows-frozen') {
                 $response['download_url'] = $this->getDownloadUrl($latestVersion);
             }
             $response['changelog'] = $this->getChangelog($latestVersion);

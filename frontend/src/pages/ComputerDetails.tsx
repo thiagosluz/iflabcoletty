@@ -303,12 +303,9 @@ export default function ComputerDetails() {
             // But for now, let's assume async behavior and we poll separately or just fire and forget for control commands
             const res = await apiClient.post(`/computers/${id}/commands`, { command, parameters: params });
 
-            if (command === 'screenshot' || command === 'ps_list') {
-                // These commands need us to poll specifically for their result
-                // In a real implementation we would likely use the command ID returned
-                // to poll /computer_commands/{id} until status=completed
+            if (command === 'screenshot' || command === 'ps_list' || command === 'update_agent') {
                 toast({
-                    title: 'Solicitação enviada',
+                    title: command === 'update_agent' ? 'Atualização solicitada' : 'Solicitação enviada',
                     description: 'Aguardando resposta do agente...',
                 });
 
@@ -361,16 +358,22 @@ export default function ComputerDetails() {
                     if (cmd.status === 'completed') {
                         if (type === 'screenshot') {
                             setLastScreenshot(cmd.output);
+                            toast({ title: 'Sucesso', description: 'Dados atualizados.' });
                         } else if (type === 'ps_list') {
                             try {
                                 setProcesses(JSON.parse(cmd.output));
                             } catch (e) {
                                 console.error("Error parsing process list", e);
                             }
+                            toast({ title: 'Sucesso', description: 'Dados atualizados.' });
+                        } else if (type === 'update_agent') {
+                            toast({ title: 'Sucesso', description: 'O agente foi atualizado ou está em processo de atualização.' });
                         }
-                        toast({ title: 'Sucesso', description: 'Dados atualizados.' });
                     } else {
-                        toast({ title: 'Falha', description: 'O agente falhou ao executar o comando.', variant: 'destructive' });
+                        const failMsg = type === 'update_agent' && cmd.output
+                            ? cmd.output
+                            : 'O agente falhou ao executar o comando.';
+                        toast({ title: 'Falha', description: failMsg, variant: 'destructive' });
                     }
                     if (type === 'screenshot') setLoadingScreenshot(false);
                     if (type === 'ps_list') setLoadingProcesses(false);

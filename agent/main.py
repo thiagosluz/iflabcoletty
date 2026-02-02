@@ -952,8 +952,7 @@ exit 1
             temp_dir.mkdir(parents=True, exist_ok=True)
             exe_name = f"iflab-agent-setup-{uuid.uuid4().hex[:8]}.exe"
             exe_path = temp_dir / exe_name
-            # External URL (e.g. GitHub) - no auth
-            r = requests.get(download_url, stream=True, timeout=300)
+            r = self.session.get(download_url, stream=True, timeout=300)
             r.raise_for_status()
             with open(exe_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):

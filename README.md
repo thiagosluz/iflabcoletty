@@ -6,7 +6,7 @@
 [![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel)](https://laravel.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
 
-> **Nota:** Substitua `OWNER` e `REPO` nas URLs dos badges pelo seu usuário/organização e nome do repositório no GitHub.
+
 
 Sistema de gerenciamento de laboratórios de informática desenvolvido para o IFG (Instituto Federal de Goiás). Permite monitorar computadores, softwares instalados, hardware e gerar relatórios completos.
 

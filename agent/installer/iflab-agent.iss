@@ -77,6 +77,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   EnvPath: String;
   EnvContent: AnsiString;
+  VersionNorm: String;
 begin
   if CurStep = ssPostInstall then
   begin
@@ -88,6 +89,12 @@ begin
       'POLL_INTERVAL=30' + #13#10 +
       'LOG_LEVEL=INFO' + #13#10;
     SaveStringToFile(EnvPath, EnvContent, False);
+
+    VersionNorm := '{#Version}';
+    if (Length(VersionNorm) > 0) and (VersionNorm[1] = 'v') then
+      VersionNorm := Copy(VersionNorm, 2, Length(VersionNorm) - 1);
+    SaveStringToFile(ExpandConstant('{app}\.agent_version'), VersionNorm, False);
+    SaveStringToFile(ExpandConstant('{app}\VERSION'), VersionNorm, False);
 
     Exec(ExpandConstant('{app}\nssm.exe'), 'install IFLabAgent "' + ExpandConstant('{app}\iflab-agent.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(ExpandConstant('{app}\nssm.exe'), 'set IFLabAgent DisplayName "IFG Lab Manager Agent"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
