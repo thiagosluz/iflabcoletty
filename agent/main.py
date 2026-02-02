@@ -14,6 +14,7 @@ import mss.tools
 from PIL import Image
 import io
 import base64
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -477,7 +478,8 @@ class Agent:
             report_data = {
                 'hardware_info': hardware_info,
                 'softwares': software_list,
-                'agent_version': self.get_current_version()
+                'agent_version': self.get_current_version(),
+                'hostname': socket.gethostname()
             }
             
             report_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/report"
@@ -853,6 +855,32 @@ exit 1
                     success = False
                     logger.error(f"Installation failed: {e}")
 
+            elif command_type == 'set_hostname':
+                new_hostname = (params.get('new_hostname') or '').strip()
+                hostname_regex = r'^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$'
+                if not new_hostname:
+                    success = False
+                    output = "Parâmetro new_hostname é obrigatório e não pode ser vazio."
+                elif len(new_hostname) > 63:
+                    success = False
+                    output = "Hostname deve ter no máximo 63 caracteres."
+                elif not re.match(hostname_regex, new_hostname):
+                    success = False
+                    output = "Hostname inválido: use apenas letras, números, hífen e ponto."
+                else:
+                    try:
+                        self._set_system_hostname(new_hostname)
+                        success = True
+                        output = f"Hostname alterado para: {new_hostname}"
+                        if platform.system() == 'Windows':
+                            output += ". Em alguns contextos o novo nome só é refletido após reiniciar o computador."
+                        # Enviar report para o backend atualizar o hostname de imediato
+                        self.send_detailed_report()
+                    except Exception as e:
+                        success = False
+                        output = f"Falha ao alterar hostname: {str(e)}"
+                        logger.error(f"set_hostname failed: {e}")
+
             elif command_type == 'update_agent':
                 try:
                     logger.info("Executing remote update_agent command...")
@@ -928,6 +956,48 @@ exit 1
             self.session.put(url, json=payload)
         except Exception as e:
             logger.error(f"Failed to update command status: {e}")
+
+    def _set_system_hostname(self, new_hostname):
+        """Alterar hostname no SO (Windows ou Linux). Requer privilégios de administrador/root."""
+        if platform.system() == 'Windows':
+            ps_script = f'Rename-Computer -NewName "{new_hostname}" -Force'
+            result = subprocess.run(
+                ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', ps_script],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                err = result.stderr or result.stdout or "Erro desconhecido"
+                raise RuntimeError(err)
+        else:
+            # Linux: hostnamectl (preferido) ou /etc/hostname
+            try:
+                result = subprocess.run(
+                    ['hostnamectl', 'set-hostname', new_hostname],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode != 0:
+                    err = result.stderr or result.stdout or "Erro ao executar hostnamectl"
+                    raise RuntimeError(err)
+            except FileNotFoundError:
+                # Fallback: escrever em /etc/hostname (requer root)
+                hostname_path = Path('/etc/hostname')
+                hostname_path.write_text(new_hostname + '\n', encoding='utf-8')
+                # Atualizar /etc/hosts para a linha 127.0.1.1
+                hosts_path = Path('/etc/hosts')
+                if hosts_path.exists():
+                    content = hosts_path.read_text(encoding='utf-8')
+                    lines = content.splitlines()
+                    new_lines = []
+                    for line in lines:
+                        if line.strip().startswith('127.0.1.1'):
+                            new_lines.append(f'127.0.1.1\t{new_hostname}')
+                        else:
+                            new_lines.append(line)
+                    hosts_path.write_text('\n'.join(new_lines) + '\n', encoding='utf-8')
 
     def _run_frozen_update(self, command_id):
         """Update agent when running as PyInstaller exe: check API, download installer, run it, exit."""

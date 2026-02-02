@@ -25,8 +25,9 @@ class RemoteControlController extends Controller
     public function store(Request $request, Computer $computer)
     {
         $validated = $request->validate([
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent,set_hostname',
             'parameters' => 'nullable|array',
+            'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
         ]);
 
         if ($validated['command'] === 'wol') {
@@ -56,8 +57,9 @@ class RemoteControlController extends Controller
         $validated = $request->validate([
             'computer_ids' => 'required|array',
             'computer_ids.*' => 'exists:computers,id',
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,set_hostname',
             'parameters' => 'nullable|array',
+            'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
         ]);
 
         $computers = Computer::whereIn('id', $validated['computer_ids'])->get();
@@ -93,8 +95,9 @@ class RemoteControlController extends Controller
         $this->authorize('remote-control.execute');
 
         $validated = $request->validate([
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent,set_hostname',
             'parameters' => 'nullable|array',
+            'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
         ]);
 
         $computers = $lab->computers;

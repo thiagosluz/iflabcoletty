@@ -31,7 +31,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Eye, Ban, Terminal } from "lucide-react"
+import { Eye, Ban, Terminal, Pencil } from "lucide-react"
 
 interface HardwareInfo {
     cpu?: {
@@ -136,6 +136,8 @@ export default function ComputerDetails() {
     const [metrics, setMetrics] = useState<ComputerMetric[]>([]);
     const [messageText, setMessageText] = useState('');
     const [isMessageOpen, setIsMessageOpen] = useState(false);
+    const [isSetHostnameOpen, setIsSetHostnameOpen] = useState(false);
+    const [newHostnameValue, setNewHostnameValue] = useState('');
     const { toast } = useToast();
 
     // Supervision State
@@ -303,9 +305,13 @@ export default function ComputerDetails() {
             // But for now, let's assume async behavior and we poll separately or just fire and forget for control commands
             const res = await apiClient.post(`/computers/${id}/commands`, { command, parameters: params });
 
-            if (command === 'screenshot' || command === 'ps_list' || command === 'update_agent') {
+            if (command === 'screenshot' || command === 'ps_list' || command === 'update_agent' || command === 'set_hostname') {
+                const titles: Record<string, string> = {
+                    update_agent: 'Atualização solicitada',
+                    set_hostname: 'Alterar nome solicitado',
+                };
                 toast({
-                    title: command === 'update_agent' ? 'Atualização solicitada' : 'Solicitação enviada',
+                    title: titles[command] || 'Solicitação enviada',
                     description: 'Aguardando resposta do agente...',
                 });
 
@@ -368,15 +374,22 @@ export default function ComputerDetails() {
                             toast({ title: 'Sucesso', description: 'Dados atualizados.' });
                         } else if (type === 'update_agent') {
                             toast({ title: 'Sucesso', description: 'O agente foi atualizado ou está em processo de atualização.' });
+                        } else if (type === 'set_hostname') {
+                            toast({ title: 'Sucesso', description: 'Nome do computador alterado com sucesso.' });
+                            fetchComputer();
                         }
                     } else {
-                        const failMsg = type === 'update_agent' && cmd.output
+                        const failMsg = (type === 'update_agent' || type === 'set_hostname') && cmd.output
                             ? cmd.output
                             : 'O agente falhou ao executar o comando.';
                         toast({ title: 'Falha', description: failMsg, variant: 'destructive' });
                     }
                     if (type === 'screenshot') setLoadingScreenshot(false);
                     if (type === 'ps_list') setLoadingProcesses(false);
+                    if (type === 'set_hostname') {
+                        setIsSetHostnameOpen(false);
+                        setNewHostnameValue('');
+                    }
                 }
             } catch (error) {
                 console.error("Polling error", error);
@@ -386,6 +399,10 @@ export default function ComputerDetails() {
                 clearInterval(interval);
                 if (type === 'screenshot') setLoadingScreenshot(false);
                 if (type === 'ps_list') setLoadingProcesses(false);
+                if (type === 'set_hostname') {
+                    setIsSetHostnameOpen(false);
+                    setNewHostnameValue('');
+                }
                 toast({ title: 'Timeout', description: 'O agente demorou muito para responder.', variant: 'destructive' });
             }
         }, 2000);
@@ -633,6 +650,57 @@ export default function ComputerDetails() {
                             Acordar (WoL)
                         </Button>
                     )}
+
+                    <Dialog open={isSetHostnameOpen} onOpenChange={setIsSetHostnameOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline">
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Alterar nome
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Alterar nome do computador</DialogTitle>
+                            </DialogHeader>
+                            <div className="py-4">
+                                <Label htmlFor="new_hostname" className="mb-2 block">Novo hostname</Label>
+                                <Input
+                                    id="new_hostname"
+                                    value={newHostnameValue}
+                                    onChange={(e) => setNewHostnameValue(e.target.value)}
+                                    placeholder="Ex: LAB01-PC01"
+                                    maxLength={63}
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Máximo 63 caracteres. Apenas letras, números, hífen e ponto. No Windows o limite é 15 caracteres.
+                                </p>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => { setIsSetHostnameOpen(false); setNewHostnameValue(''); }}>Cancelar</Button>
+                                <Button
+                                    onClick={() => {
+                                        const value = newHostnameValue.trim();
+                                        if (!value) {
+                                            toast({ title: 'Erro', description: 'Informe o novo hostname.', variant: 'destructive' });
+                                            return;
+                                        }
+                                        if (value.length > 63) {
+                                            toast({ title: 'Erro', description: 'Hostname deve ter no máximo 63 caracteres.', variant: 'destructive' });
+                                            return;
+                                        }
+                                        const hostnameRegex = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/;
+                                        if (!hostnameRegex.test(value)) {
+                                            toast({ title: 'Erro', description: 'Use apenas letras, números, hífen e ponto.', variant: 'destructive' });
+                                            return;
+                                        }
+                                        handleCommand('set_hostname', { new_hostname: value });
+                                    }}
+                                >
+                                    Enviar
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </div>
 

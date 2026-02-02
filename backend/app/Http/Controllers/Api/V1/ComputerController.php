@@ -296,6 +296,7 @@ class ComputerController extends Controller
             'softwares.*.version' => 'nullable|string',
             'softwares.*.vendor' => 'nullable|string',
             'agent_version' => 'sometimes|nullable|string',
+            'hostname' => 'sometimes|nullable|string|max:63',
         ]);
 
         // Check if computer was offline before this report
@@ -309,6 +310,11 @@ class ComputerController extends Controller
         // Update agent version
         if (isset($validated['agent_version'])) {
             $computer->update(['agent_version' => $validated['agent_version']]);
+        }
+
+        // Update hostname (e.g. after remote set_hostname or on each report)
+        if (isset($validated['hostname'])) {
+            $computer->update(['hostname' => $validated['hostname']]);
         }
 
         // Sync software and detect changes
