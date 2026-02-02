@@ -139,4 +139,15 @@ return [
     'agent_installer_base_url' => env('AGENT_INSTALLER_BASE_URL', 'https://github.com/iflab/iflabcoletty/releases/download'),
     'agent_latest_version' => env('AGENT_LATEST_VERSION', '1.0.0'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | API rate limit (protected routes)
+    |--------------------------------------------------------------------------
+    |
+    | Max requests per minute per user (or per IP when unauthenticated).
+    | Increase for environments with many agents (e.g. 5000 for 400+ agents).
+    |
+    */
+    'api_rate_limit_per_minute' => (int) env('API_RATE_LIMIT_PER_MINUTE', 5000),
+
 ];

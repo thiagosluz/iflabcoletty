@@ -107,8 +107,8 @@ Route::prefix('v1')->group(function () {
         }
     })->middleware('throttle:60,1');
 
-    // Protected Routes - Rate limit of 300 requests per minute
-    Route::middleware(['auth:sanctum', 'throttle:300,1'])->group(function () {
+    // Protected Routes - Rate limit configurable via API_RATE_LIMIT_PER_MINUTE (default 5000/min)
+    Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
 
         // Global Search
         Route::get('/search', [\App\Http\Controllers\Api\V1\SearchController::class, 'globalSearch']);

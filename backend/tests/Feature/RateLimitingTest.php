@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Tests\TestCase;
 
 class RateLimitingTest extends TestCase
@@ -39,9 +40,11 @@ class RateLimitingTest extends TestCase
 
     public function test_authenticated_routes_have_rate_limit(): void
     {
+        Config::set('app.api_rate_limit_per_minute', 300);
+
         $user = $this->actingAsUser();
 
-        // Make 300 requests (limit is 300 per minute)
+        // Make 300 requests (limit is 300 per minute in this test)
         for ($i = 0; $i < 300; $i++) {
             $response = $this->getJson('/api/v1/dashboard/stats', $this->getAuthHeaders($user));
             $this->assertEquals(200, $response->status());
@@ -95,6 +98,8 @@ class RateLimitingTest extends TestCase
 
     public function test_rate_limit_resets_after_time_window(): void
     {
+        Config::set('app.api_rate_limit_per_minute', 300);
+
         $user = $this->actingAsUser();
 
         // Make 300 requests to hit the limit
