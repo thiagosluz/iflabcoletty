@@ -46,6 +46,24 @@ class ComputerController extends Controller
             });
         }
 
+        // Filter by status (online/offline): same 5-minute threshold as Dashboard and LabController
+        $status = $request->query('status');
+        if ($status === 'online') {
+            $query->where('updated_at', '>=', now()->subMinutes(5));
+        } elseif ($status === 'offline') {
+            $query->where('updated_at', '<', now()->subMinutes(5));
+        }
+
+        // Filter by outdated agents (agent_version != latest)
+        if ($request->query('outdated')) {
+            $agentController = new AgentController;
+            $latestVersion = $agentController->getLatestVersion();
+            if ($latestVersion) {
+                $query->whereNotNull('agent_version')
+                    ->where('agent_version', '!=', $latestVersion);
+            }
+        }
+
         // Sorting: whitelist columns, default hostname asc
         $allowedSort = ['hostname', 'machine_id', 'lab', 'status', 'updated_at'];
         $sortBy = $request->query('sort_by', 'hostname');

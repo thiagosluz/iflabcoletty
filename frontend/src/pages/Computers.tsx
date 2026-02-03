@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '@/lib/axios';
 import { isComputerOnline } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
 import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 import ExportDialog from '@/components/ExportDialog';
 import {
     AlertDialog,
@@ -56,6 +57,7 @@ const isOnline = (dateString: string) => isComputerOnline(dateString, 5);
 
 type ComputerSortBy = 'hostname' | 'machine_id' | 'lab' | 'status' | 'updated_at';
 type SortDir = 'asc' | 'desc';
+type StatusFilter = 'all' | 'online' | 'offline';
 
 const computerSchema = z.object({
     lab_id: z.string().min(1, "Laboratório é obrigatório"),
@@ -67,6 +69,14 @@ type ComputerFormData = z.infer<typeof computerSchema>;
 
 export default function Computers() {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const statusFilter: StatusFilter = (() => {
+        const s = searchParams.get('status');
+        if (s === 'online' || s === 'offline') return s;
+        return 'all';
+    })();
+    const outdatedFilter = searchParams.get('outdated') === '1' || searchParams.get('outdated') === 'true';
+
     const [computers, setComputers] = useState<Computer[]>([]);
     const [labs, setLabs] = useState<Lab[]>([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -115,6 +125,9 @@ export default function Computers() {
             params.append('per_page', perPage.toString());
             if (search) params.append('search', search);
             if (labFilter !== 'all') params.append('lab_id', labFilter);
+            if (statusFilter === 'online') params.append('status', 'online');
+            if (statusFilter === 'offline') params.append('status', 'offline');
+            if (outdatedFilter) params.append('outdated', '1');
             params.append('sort_by', sortBy);
             params.append('sort_dir', sortDir);
 
@@ -139,7 +152,7 @@ export default function Computers() {
 
     useEffect(() => {
         fetchComputers();
-    }, [search, labFilter, currentPage, perPage, sortBy, sortDir]);
+    }, [search, labFilter, statusFilter, outdatedFilter, currentPage, perPage, sortBy, sortDir]);
 
     const handleSearchChange = (value: string) => {
         setSearch(value);
@@ -149,6 +162,28 @@ export default function Computers() {
     const handlePerPageChange = (value: string) => {
         setPerPage(parseInt(value));
         setCurrentPage(1); // Reset to first page when changing per page
+    };
+
+    const handleStatusFilterChange = (value: StatusFilter) => {
+        setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            if (value === 'all') p.delete('status');
+            else p.set('status', value);
+            p.delete('page');
+            return p;
+        });
+        setCurrentPage(1);
+    };
+
+    const handleOutdatedFilterChange = (checked: boolean) => {
+        setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            if (checked) p.set('outdated', '1');
+            else p.delete('outdated');
+            p.delete('page');
+            return p;
+        });
+        setCurrentPage(1);
     };
 
     const onSubmit = async (data: ComputerFormData) => {
@@ -521,6 +556,26 @@ export default function Computers() {
                         ))}
                     </SelectContent>
                 </Select>
+                <Select value={statusFilter} onValueChange={(v) => handleStatusFilterChange(v as StatusFilter)}>
+                    <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="online">Online</SelectItem>
+                        <SelectItem value="offline">Offline</SelectItem>
+                    </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                    <Checkbox
+                        id="outdated-filter"
+                        checked={outdatedFilter}
+                        onCheckedChange={(checked) => handleOutdatedFilterChange(checked === true)}
+                    />
+                    <label htmlFor="outdated-filter" className="text-sm cursor-pointer whitespace-nowrap">
+                        Agentes desatualizados
+                    </label>
+                </div>
                 <div className="flex items-center gap-2 bg-white shadow rounded-lg px-4 py-2">
                     <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
                     <Select value={perPage.toString()} onValueChange={handlePerPageChange}>
