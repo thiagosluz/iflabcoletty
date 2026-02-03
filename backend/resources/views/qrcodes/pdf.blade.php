@@ -17,55 +17,68 @@
 
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 15px;
             border-bottom: 2px solid #333;
-            padding-bottom: 15px;
+            padding-bottom: 10px;
         }
 
         .header h1 {
-            margin: 0 0 10px 0;
-            font-size: 24px;
+            margin: 0 0 8px 0;
+            font-size: 22px;
         }
 
         .header-info {
-            font-size: 12px;
+            font-size: 11px;
             color: #666;
+        }
+
+        /* Cada página contém no máximo 3 itens, um abaixo do outro */
+        .qr-page-group {
+            page-break-after: always;
+        }
+
+        .qr-page-group:last-child {
+            page-break-after: auto;
         }
 
         .qr-container {
             page-break-inside: avoid;
-            margin-bottom: 30px;
+            margin-bottom: 18px;
             border: 1px solid #ddd;
-            padding: 20px;
+            padding: 12px;
             text-align: center;
         }
 
+        .qr-container:last-child {
+            margin-bottom: 0;
+        }
+
         .qr-code {
-            margin: 20px 0;
+            margin: 8px 0;
         }
 
         .computer-name {
-            font-size: 18px;
+            font-size: 14px;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
         }
 
         .lab-name {
-            font-size: 14px;
+            font-size: 12px;
             color: #666;
-            margin-bottom: 15px;
+            margin-bottom: 6px;
         }
 
         .public-url {
-            font-size: 11px;
+            font-size: 9px;
             color: #999;
             word-break: break-all;
-            margin-top: 10px;
+            margin-top: 4px;
         }
 
         .footer {
-            margin-top: 30px;
-            padding-top: 15px;
+            margin-top: 15px;
+            padding-top: 10px;
             border-top: 1px solid #ddd;
             text-align: center;
             font-size: 10px;
@@ -83,20 +96,24 @@
         </div>
     </div>
 
-    @foreach($qrCodes as $item)
-        <div class="qr-container">
-            <div class="computer-name">
-                {{ $item['computer']->hostname ?: $item['computer']->machine_id }}
-            </div>
-            <div class="lab-name">
-                {{ $item['computer']->lab->name ?? 'Laboratório Desconhecido' }}
-            </div>
-            <div class="qr-code">
-                <img src="data:image/png;base64,{{ $item['qr_code_base64'] }}" alt="QR Code" width="200" height="200">
-            </div>
-            <div class="public-url">
-                {{ $item['public_url'] }}
-            </div>
+    @foreach(array_chunk($qrCodes, 3) as $group)
+        <div class="qr-page-group">
+            @foreach($group as $item)
+                <div class="qr-container">
+                    <div class="computer-name">
+                        {{ $item['computer']->hostname ?: $item['computer']->machine_id }}
+                    </div>
+                    <div class="lab-name">
+                        {{ $item['computer']->lab->name ?? 'Laboratório Desconhecido' }}
+                    </div>
+                    <div class="qr-code">
+                        <img src="data:image/png;base64,{{ $item['qr_code_base64'] }}" alt="QR Code" width="160" height="160">
+                    </div>
+                    <div class="public-url">
+                        {{ $item['public_url'] }}
+                    </div>
+                </div>
+            @endforeach
         </div>
     @endforeach
 

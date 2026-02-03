@@ -529,7 +529,7 @@ class ComputerController extends Controller
                 $builder = new \Endroid\QrCode\Builder\Builder;
                 $result = $builder->build(
                     data: $publicUrl,
-                    size: 200,
+                    size: 160,
                     margin: 10
                 );
 
