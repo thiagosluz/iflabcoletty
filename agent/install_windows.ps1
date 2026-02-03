@@ -238,10 +238,16 @@ if (-not (Test-Path $programDataAgent)) {
     New-Item -ItemType Directory -Path $programDataAgent -Force | Out-Null
 }
 # Ensure any user can read (so Startup script and task can read pending_wallpaper.txt and wallpaper image)
-$acl = Get-Acl $programDataAgent
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Users", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
-$acl.SetAccessRule($rule)
-Set-Acl $programDataAgent $acl
+# Use SID S-1-5-32-545 (built-in Users group) so it works on any language (e.g. "Usuários" in Portuguese)
+try {
+    $acl = Get-Acl $programDataAgent
+    $sid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-545")
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
+    $acl.SetAccessRule($rule)
+    Set-Acl $programDataAgent $acl
+} catch {
+    Write-ColorOutput Yellow "Could not set ACL on ProgramData folder (non-fatal): $_"
+}
 $setWallpaperScript = @'
 # Read path from pending_wallpaper.txt and set wallpaper via SystemParametersInfo
 $pendingFile = "$env:ProgramData\IFLabAgent\pending_wallpaper.txt"
