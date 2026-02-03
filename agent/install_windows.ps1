@@ -237,6 +237,11 @@ $programDataAgent = "$env:ProgramData\IFLabAgent"
 if (-not (Test-Path $programDataAgent)) {
     New-Item -ItemType Directory -Path $programDataAgent -Force | Out-Null
 }
+# Ensure any user can read (so Startup script and task can read pending_wallpaper.txt and wallpaper image)
+$acl = Get-Acl $programDataAgent
+$rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Users", "ReadAndExecute", "ContainerInherit,ObjectInherit", "None", "Allow")
+$acl.SetAccessRule($rule)
+Set-Acl $programDataAgent $acl
 $setWallpaperScript = @'
 # Read path from pending_wallpaper.txt and set wallpaper via SystemParametersInfo
 $pendingFile = "$env:ProgramData\IFLabAgent\pending_wallpaper.txt"
@@ -259,9 +264,20 @@ $fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
 '@
 Set-Content -Path "$programDataAgent\set_wallpaper.ps1" -Value $setWallpaperScript -Encoding UTF8
 
-# Create scheduled task to apply wallpaper at logon (runs in current user context; service can trigger it with schtasks /run)
+# All Users Startup: shortcut so ANY user gets wallpaper applied at logon (most reliable for multi-user labs)
+$startupFolder = [Environment]::GetFolderPath("CommonStartup")
+$shortcutPath = Join-Path $startupFolder "IFLabAgent-ApplyWallpaper.lnk"
+$wshShell = New-Object -ComObject WScript.Shell
+$shortcut = $wshShell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = "powershell.exe"
+$shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
+$shortcut.WorkingDirectory = $programDataAgent
+$shortcut.Save()
+[System.Runtime.Interopservices.Marshal]::ReleaseComObject($wshShell) | Out-Null
+Write-ColorOutput Green "Startup shortcut added: wallpaper will apply at every user logon (All Users)."
+
+# Create scheduled task (same user as installer) so service can trigger immediate apply when that user is logged in
 $taskName = "IFLabAgentSetWallpaper"
-$taskAction = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($existingTask) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
@@ -271,7 +287,7 @@ $taskUser = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
 $principal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Description "IFLab Agent: apply lab wallpaper" -Force | Out-Null
-Write-ColorOutput Green "Scheduled task '$taskName' created (runs at logon for $taskUser; service can trigger it for immediate apply)."
+Write-ColorOutput Green "Scheduled task '$taskName' created for $taskUser (service can trigger for immediate apply when this user is logged in)."
 
 # Set recovery options (restart on failure)
 & $nssmPath set $ServiceName AppRestartDelay 10000

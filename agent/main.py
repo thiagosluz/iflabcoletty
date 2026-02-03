@@ -1131,10 +1131,24 @@ exit 1
             dest_path = dest_dir / f"wallpaper{ext}"
             import shutil
             shutil.copy2(source_path, dest_path)
+            self._grant_users_read(str(dest_path))
             return str(dest_path.resolve())
         except Exception as e:
             logger.warning("Failed to copy wallpaper to ProgramData: %s", e)
             return None
+
+    def _grant_users_read(self, file_path):
+        """Grant Users group read access so any logged-in user can read the file (e.g. when running set_wallpaper.ps1)."""
+        if platform.system() != "Windows":
+            return
+        try:
+            subprocess.run(
+                ["icacls", file_path, "/grant", "Users:R", "/q"],
+                capture_output=True,
+                timeout=5,
+            )
+        except Exception:
+            pass
 
     def _write_pending_wallpaper(self, abs_path):
         """Write the wallpaper path to pending_wallpaper.txt for the user-session script."""
@@ -1143,6 +1157,7 @@ exit 1
             dest_dir.mkdir(parents=True, exist_ok=True)
             pending_file = dest_dir / "pending_wallpaper.txt"
             pending_file.write_text(abs_path, encoding="utf-8")
+            self._grant_users_read(str(pending_file))
             return True
         except Exception as e:
             logger.warning("Failed to write pending wallpaper path: %s", e)
@@ -1193,6 +1208,39 @@ $fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
         except Exception as e:
             logger.debug("Failed to run wallpaper task: %s", e)
 
+    def _ensure_startup_shortcut(self):
+        """Ensure All Users Startup shortcut exists so wallpaper applies at every user logon (for existing installs)."""
+        if platform.system() != "Windows":
+            return
+        try:
+            dest_dir = self._wallpaper_programdata_dir()
+            script_path = dest_dir / "set_wallpaper.ps1"
+            if not script_path.exists():
+                return
+            startup = os.environ.get("ProgramData", "C:\\ProgramData") + "\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp"
+            shortcut_path = os.path.join(startup, "IFLabAgent-ApplyWallpaper.lnk")
+            if os.path.exists(shortcut_path):
+                return
+            # Write a small helper script to create the shortcut (avoids escaping issues)
+            helper = dest_dir / "create_startup_shortcut.ps1"
+            helper.write_text(
+                f'$wsh = New-Object -ComObject WScript.Shell\n'
+                f'$s = $wsh.CreateShortcut("{shortcut_path}")\n'
+                f'$s.TargetPath = "powershell.exe"\n'
+                f'$s.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File \\"{script_path}\\""\n'
+                f'$s.WorkingDirectory = "{dest_dir}"\n'
+                f'$s.Save()\n'
+                f'[Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null\n',
+                encoding="utf-8",
+            )
+            subprocess.run(
+                ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(helper)],
+                capture_output=True,
+                timeout=10,
+            )
+        except Exception as e:
+            logger.debug("Could not ensure Startup shortcut: %s", e)
+
     def _set_wallpaper(self, file_path):
         """Aplica o arquivo como papel de parede. file_path deve ser caminho absoluto."""
         try:
@@ -1202,15 +1250,20 @@ $fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
                 return
             if platform.system() == "Windows":
                 if self._is_windows_service():
-                    # Running as service (Session 0): apply wallpaper in logged-in user session via task
+                    # Running as service (Session 0): copy to ProgramData, write pending path, run task + rely on Startup at logon
+                    logger.info("Wallpaper: running as service (Session 0), using ProgramData and scheduled task")
                     dest_path = self._copy_wallpaper_to_programdata(abs_path)
                     if not dest_path:
                         logger.warning("Could not copy wallpaper to ProgramData, skipping")
                         return
+                    logger.info("Wallpaper: copied to %s", dest_path)
                     if not self._write_pending_wallpaper(dest_path):
+                        logger.warning("Could not write pending_wallpaper.txt")
                         return
                     self._ensure_wallpaper_script()
+                    self._ensure_startup_shortcut()
                     self._run_wallpaper_task()
+                    logger.info("Wallpaper: pending file set and task triggered; will also apply at next user logon via Startup")
                     return
                 # Running in user context: apply immediately via SystemParametersInfo
                 path_escaped = abs_path.replace("'", "''")
