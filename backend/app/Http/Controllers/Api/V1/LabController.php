@@ -443,11 +443,11 @@ class LabController extends Controller
 
         Storage::disk('public')->putFileAs($path, $file, $filename);
 
-        $url = config('app.url').'/storage/'.$path.'/'.$filename;
-        $lab->update(['default_wallpaper_url' => $url]);
+        $relativePath = '/storage/'.$path.'/'.$filename;
+        $lab->update(['default_wallpaper_url' => $relativePath]);
 
         return response()->json([
-            'default_wallpaper_url' => $url,
+            'default_wallpaper_url' => $relativePath,
             'message' => 'Papel de parede atualizado com sucesso.',
         ]);
     }

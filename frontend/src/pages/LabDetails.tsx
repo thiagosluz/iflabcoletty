@@ -62,7 +62,6 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 
 interface HardwareAverages {
@@ -421,6 +420,12 @@ export default function LabDetails() {
         }
     };
 
+    const resolveWallpaperUrl = (url: string | null | undefined): string => {
+        if (!url) return '';
+        if (url.startsWith('http://') || url.startsWith('https://')) return url;
+        return window.location.origin + (url.startsWith('/') ? url : '/' + url);
+    };
+
     const handleSoftwareSearchChange = (value: string) => {
         setSoftwareSearch(value);
         setSoftwareCurrentPage(1);
@@ -699,8 +704,8 @@ export default function LabDetails() {
                         {lab.default_wallpaper_url ? (
                             <div className="flex flex-col sm:flex-row gap-4 items-start">
                                 <div className="flex-shrink-0">
-                                    <a href={lab.default_wallpaper_url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-gray-200 max-w-[280px] max-h-[160px] bg-gray-100">
-                                        <img src={lab.default_wallpaper_url} alt="Papel de parede" className="w-full h-full object-cover aspect-video" />
+                                    <a href={resolveWallpaperUrl(lab.default_wallpaper_url)} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden border border-gray-200 max-w-[280px] max-h-[160px] bg-gray-100">
+                                        <img src={resolveWallpaperUrl(lab.default_wallpaper_url)} alt="Papel de parede" className="w-full h-full object-cover aspect-video" />
                                     </a>
                                     <p className="text-xs text-muted-foreground mt-1">Clique na imagem para abrir em tamanho real</p>
                                 </div>
@@ -710,10 +715,10 @@ export default function LabDetails() {
                                             {lab.default_wallpaper_enabled !== false ? 'Utilizando' : 'Desativado'}
                                         </span>
                                     </div>
-                                    <p className="text-sm text-gray-600 break-all">{lab.default_wallpaper_url}</p>
+                                    <p className="text-sm text-gray-600 break-all">{resolveWallpaperUrl(lab.default_wallpaper_url)}</p>
                                     <div className="flex flex-wrap gap-2">
                                         <Button variant="outline" size="sm" asChild>
-                                            <a href={lab.default_wallpaper_url} target="_blank" rel="noopener noreferrer">
+                                            <a href={resolveWallpaperUrl(lab.default_wallpaper_url)} target="_blank" rel="noopener noreferrer">
                                                 <ExternalLink className="h-4 w-4 mr-2" /> Visualizar
                                             </a>
                                         </Button>

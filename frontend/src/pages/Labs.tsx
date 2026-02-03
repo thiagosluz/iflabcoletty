@@ -92,6 +92,7 @@ export default function Labs() {
     });
     const wallpaperEnabled = watch('default_wallpaper_enabled');
     const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
+    const [wallpaperFileToUpload, setWallpaperFileToUpload] = useState<File | null>(null);
 
     const fetchLabs = async () => {
         try {
@@ -136,12 +137,29 @@ export default function Labs() {
                 await apiClient.put(`/labs/${editingLab.id}`, payload);
                 toast({ title: 'Sucesso', description: 'Laboratório atualizado com sucesso' });
             } else {
-                await apiClient.post('/labs', data);
-                toast({ title: 'Sucesso', description: 'Laboratório criado com sucesso' });
+                const res = await apiClient.post('/labs', data);
+                const newLab = res.data;
+                if (wallpaperFileToUpload && newLab?.id) {
+                    try {
+                        setUploadingWallpaper(true);
+                        const formData = new FormData();
+                        formData.append('wallpaper', wallpaperFileToUpload);
+                        await apiClient.post(`/labs/${newLab.id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                        toast({ title: 'Sucesso', description: 'Laboratório criado e papel de parede enviado.' });
+                    } catch (err: any) {
+                        toast({ title: 'Laboratório criado', description: err.response?.data?.message || 'Papel de parede não foi enviado. Você pode enviá-lo ao editar.', variant: 'destructive' });
+                    } finally {
+                        setUploadingWallpaper(false);
+                        setWallpaperFileToUpload(null);
+                    }
+                } else {
+                    toast({ title: 'Sucesso', description: 'Laboratório criado com sucesso' });
+                }
             }
             setIsOpen(false);
             setEditingLab(null);
             reset();
+            setWallpaperFileToUpload(null);
             fetchLabs();
         } catch (error: any) {
             toast({
@@ -244,10 +262,10 @@ export default function Labs() {
             <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-bold tracking-tight">Laboratórios</h2>
                 <div className="flex gap-2">
-                    <Button onClick={() => { setEditingLab(null); reset(); setIsOpen(true); }}>
+                    <Button onClick={() => { setEditingLab(null); reset(); setWallpaperFileToUpload(null); setIsOpen(true); }}>
                         <Plus className="mr-2 h-4 w-4" /> Adicionar Laboratório
                     </Button>
-                    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditingLab(null); reset(); } }}>
+                    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditingLab(null); reset(); setWallpaperFileToUpload(null); } }}>
                         <DialogContent>
                             <DialogHeader>
                                 <DialogTitle>{editingLab ? 'Editar Laboratório' : 'Criar Novo Laboratório'}</DialogTitle>
@@ -266,37 +284,62 @@ export default function Labs() {
                                     <Label>Papel de parede padrão (URL)</Label>
                                     <Input {...register('default_wallpaper_url')} placeholder="https://exemplo.com/imagem.jpg" />
                                     <p className="text-xs text-muted-foreground">O agente aplicará este papel de parede nos computadores do laboratório. Deixe vazio para não definir.</p>
-                                    {editingLab && (
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Label htmlFor="wallpaper-upload" className="text-sm cursor-pointer text-primary hover:underline">Ou envie uma imagem:</Label>
-                                            <input
-                                                id="wallpaper-upload"
-                                                type="file"
-                                                accept="image/jpeg,image/png,image/gif,image/webp"
-                                                className="hidden"
-                                                onChange={async (e) => {
-                                                    const file = e.target.files?.[0];
-                                                    if (!file || !editingLab) return;
-                                                    try {
-                                                        setUploadingWallpaper(true);
-                                                        const formData = new FormData();
-                                                        formData.append('wallpaper', file);
-                                                        const res = await apiClient.post(`/labs/${editingLab.id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-                                                        setValue('default_wallpaper_url', res.data.default_wallpaper_url);
-                                                        toast({ title: 'Sucesso', description: 'Imagem enviada. Salve o formulário para confirmar.' });
-                                                    } catch (err: any) {
-                                                        toast({ title: 'Erro', description: err.response?.data?.message || 'Falha ao enviar imagem', variant: 'destructive' });
-                                                    } finally {
-                                                        setUploadingWallpaper(false);
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                        <Label htmlFor="wallpaper-upload" className="text-sm cursor-pointer text-primary hover:underline">Ou envie uma imagem:</Label>
+                                        {editingLab ? (
+                                            <>
+                                                <input
+                                                    id="wallpaper-upload"
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/gif,image/webp"
+                                                    className="hidden"
+                                                    onChange={async (e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (!file || !editingLab) return;
+                                                        try {
+                                                            setUploadingWallpaper(true);
+                                                            const formData = new FormData();
+                                                            formData.append('wallpaper', file);
+                                                            const res = await apiClient.post(`/labs/${editingLab.id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                                                            setValue('default_wallpaper_url', res.data.default_wallpaper_url);
+                                                            toast({ title: 'Sucesso', description: 'Imagem enviada. Salve o formulário para confirmar.' });
+                                                        } catch (err: any) {
+                                                            toast({ title: 'Erro', description: err.response?.data?.message || 'Falha ao enviar imagem', variant: 'destructive' });
+                                                        } finally {
+                                                            setUploadingWallpaper(false);
+                                                            e.target.value = '';
+                                                        }
+                                                    }}
+                                                />
+                                                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('wallpaper-upload')?.click()} disabled={uploadingWallpaper}>
+                                                    {uploadingWallpaper ? 'Enviando...' : 'Selecionar arquivo'}
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <input
+                                                    id="wallpaper-upload-create"
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/gif,image/webp"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) setWallpaperFileToUpload(file);
                                                         e.target.value = '';
-                                                    }
-                                                }}
-                                            />
-                                            <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('wallpaper-upload')?.click()} disabled={uploadingWallpaper}>
-                                                {uploadingWallpaper ? 'Enviando...' : 'Selecionar arquivo'}
-                                            </Button>
-                                        </div>
-                                    )}
+                                                    }}
+                                                />
+                                                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('wallpaper-upload-create')?.click()}>
+                                                    Selecionar arquivo
+                                                </Button>
+                                                {wallpaperFileToUpload && (
+                                                    <span className="text-sm text-muted-foreground">
+                                                        {wallpaperFileToUpload.name}
+                                                        <button type="button" onClick={() => setWallpaperFileToUpload(null)} className="ml-2 text-red-600 hover:underline text-xs">Remover</button>
+                                                    </span>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                                 {editingLab && (
                                     <div className="flex items-center space-x-2">
@@ -410,7 +453,7 @@ export default function Labs() {
                                             <DropdownMenuItem onClick={() => navigate(`/admin/labs/${lab.id}`)}>
                                                 Ver Detalhes
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '', default_wallpaper_url: lab.default_wallpaper_url ?? '', default_wallpaper_enabled: lab.default_wallpaper_enabled ?? true }); setIsOpen(true); }}>
+                                            <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '', default_wallpaper_url: lab.default_wallpaper_url ?? '', default_wallpaper_enabled: lab.default_wallpaper_enabled ?? true }); setWallpaperFileToUpload(null); setIsOpen(true); }}>
                                                 <Pencil className="h-4 w-4 mr-2" />
                                                 Editar
                                             </DropdownMenuItem>

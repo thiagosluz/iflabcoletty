@@ -1140,6 +1140,9 @@ rundll32.exe user32.dll, UpdatePerUserSystemParameters
         url = (self._cached_lab_wallpaper_url or "").strip()
         if not url:
             return
+        if url.startswith("/"):
+            base = config.API_BASE_URL.rstrip("/").replace("/api/v1", "").rstrip("/")
+            url = base + url
         try:
             current_path = self._get_current_wallpaper_path()
             local_path = self._download_wallpaper(url)
