@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, Search, Package, Download } from 'lucide-react';
 import ExportDialog from '@/components/ExportDialog';
+import SoftwareComputersModal from '@/components/SoftwareComputersModal';
 import { useToast } from '@/components/ui/use-toast';
 
 interface Software {
@@ -28,6 +29,7 @@ export default function Softwares() {
     const [softwares, setSoftwares] = useState<Software[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [computersModalSoftware, setComputersModalSoftware] = useState<{ id: number; name: string } | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
@@ -236,10 +238,14 @@ export default function Softwares() {
 
                                 {software.computers_count !== undefined && (
                                     <div className="mb-2">
-                                        <span className="text-xs text-gray-500">Computadores:</span>
-                                        <span className="ml-2 text-sm font-medium text-blue-600">
-                                            {software.computers_count}
-                                        </span>
+                                        <span className="text-xs text-gray-500">Computadores: </span>
+                                        <Button
+                                            variant="link"
+                                            className="h-auto p-0 ml-1 text-sm font-medium text-blue-600 hover:text-blue-800"
+                                            onClick={() => setComputersModalSoftware({ id: software.id, name: software.name })}
+                                        >
+                                            {software.computers_count} — Ver computadores
+                                        </Button>
                                     </div>
                                 )}
                                 
@@ -325,6 +331,13 @@ export default function Softwares() {
                     Mostrando {pagination.total} {pagination.total === 1 ? 'software' : 'softwares'}
                 </div>
             )}
+
+            <SoftwareComputersModal
+                open={computersModalSoftware != null}
+                onOpenChange={(open) => !open && setComputersModalSoftware(null)}
+                softwareId={computersModalSoftware?.id ?? null}
+                softwareName={computersModalSoftware?.name ?? ''}
+            />
         </div>
     );
 }

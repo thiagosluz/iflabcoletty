@@ -58,11 +58,11 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
     DialogFooter,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from '@/components/ui/checkbox';
+import SoftwareComputersModal from '@/components/SoftwareComputersModal';
 
 interface HardwareAverages {
     cpu?: {
@@ -176,6 +176,7 @@ export default function LabDetails() {
     const [isWallpaperDialogOpen, setIsWallpaperDialogOpen] = useState(false);
     const [wallpaperEditUrl, setWallpaperEditUrl] = useState('');
     const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
+    const [softwareComputersModal, setSoftwareComputersModal] = useState<{ id: number; name: string } | null>(null);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -1176,9 +1177,13 @@ export default function LabDetails() {
                                             {software.computers_count !== undefined && (
                                                 <div className="mt-3 pt-3 border-t border-gray-200">
                                                     <span className="text-xs text-gray-500">Instalado em: </span>
-                                                    <span className="text-sm font-medium text-blue-600">
-                                                        {software.computers_count} computador(es)
-                                                    </span>
+                                                    <Button
+                                                        variant="link"
+                                                        className="h-auto p-0 text-sm font-medium text-blue-600"
+                                                        onClick={() => setSoftwareComputersModal({ id: software.id, name: software.name })}
+                                                    >
+                                                        {software.computers_count} computador(es) — Ver computadores
+                                                    </Button>
                                                 </div>
                                             )}
                                         </div>
@@ -1257,6 +1262,14 @@ export default function LabDetails() {
                     )}
                 </TabsContent>
             </Tabs>
+
+            <SoftwareComputersModal
+                open={softwareComputersModal !== null}
+                onOpenChange={(open) => !open && setSoftwareComputersModal(null)}
+                softwareId={softwareComputersModal?.id ?? null}
+                softwareName={softwareComputersModal?.name ?? ''}
+                labId={id ? parseInt(id, 10) : undefined}
+            />
         </div>
     );
 }
