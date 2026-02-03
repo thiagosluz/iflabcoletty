@@ -639,7 +639,7 @@ export default function ComputerDetails() {
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setIsMessageOpen(false)}>Cancelar</Button>
-                                <Button onClick={() => handleCommand('message', { message: messageText })}>Enviar</Button>
+                                <Button onClick={() => handleCommand('message', { message: messageText ?? '' })}>Enviar</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

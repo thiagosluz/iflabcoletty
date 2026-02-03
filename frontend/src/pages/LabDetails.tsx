@@ -583,7 +583,7 @@ export default function LabDetails() {
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" onClick={() => setIsLabMessageOpen(false)}>Cancelar</Button>
-                                <Button onClick={() => handleLabCommand('message', { message: labMessageText })}>Enviar</Button>
+                                <Button onClick={() => handleLabCommand('message', { message: labMessageText ?? '' })}>Enviar</Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>

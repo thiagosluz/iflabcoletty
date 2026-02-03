@@ -28,6 +28,7 @@ class RemoteControlController extends Controller
             'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent,set_hostname',
             'parameters' => 'nullable|array',
             'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
+            'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
         ]);
 
         if ($validated['command'] === 'wol') {
@@ -60,6 +61,7 @@ class RemoteControlController extends Controller
             'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,set_hostname',
             'parameters' => 'nullable|array',
             'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
+            'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
         ]);
 
         $computers = Computer::whereIn('id', $validated['computer_ids'])->get();
@@ -98,6 +100,7 @@ class RemoteControlController extends Controller
             'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent,set_hostname',
             'parameters' => 'nullable|array',
             'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
+            'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
         ]);
 
         $computers = $lab->computers;

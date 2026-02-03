@@ -740,12 +740,18 @@ exit 1
                         output = f"Lock failed: {str(e)}"
 
             elif command_type == 'message':
-                msg = params.get('message', 'Alert from Admin')
+                msg = (params.get('message') or params.get('text') or '').strip()
+                if not msg:
+                    logger.warning("Message command with empty text, using default")
+                    msg = 'Alert from Admin'
                 if platform.system() == 'Linux':
-                    # Try notify-send (requires libnotify-bin)
-                     os.system(f"notify-send 'Admin Alert' '{msg}'")
+                    # Escape single quotes for shell: ' -> '\''
+                    msg_safe = msg.replace("'", "'\"'\"'")
+                    os.system(f"notify-send 'Admin Alert' '{msg_safe}'")
                 elif platform.system() == 'Windows':
-                     os.system(f"msg * \"{msg}\"")
+                    # Escape double quotes for cmd: " -> \"
+                    msg_safe = msg.replace('"', '\\"')
+                    os.system(f'msg * "{msg_safe}"')
                 success = True
                 output = f"Message displayed: {msg}"
             
