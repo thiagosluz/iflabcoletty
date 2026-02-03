@@ -1101,15 +1101,135 @@ exit 1
             logger.debug("Could not get current wallpaper path: %s", e)
             return None
 
+    def _is_windows_service(self):
+        """Return True if the current process is running as a Windows service (Session 0)."""
+        if platform.system() != "Windows":
+            return False
+        try:
+            ps_script = "(Get-Process -Id $PID).SessionId -eq 0"
+            result = subprocess.run(
+                ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return result.returncode == 0 and result.stdout.strip().lower() == "true"
+        except Exception:
+            return False
+
+    def _wallpaper_programdata_dir(self):
+        """Return ProgramData\\IFLabAgent path for wallpaper files (readable by all users)."""
+        pd = os.environ.get("ProgramData", "C:\\ProgramData")
+        return Path(pd) / "IFLabAgent"
+
+    def _copy_wallpaper_to_programdata(self, source_path):
+        """Copy wallpaper file to ProgramData\\IFLabAgent\\wallpaper.<ext>. Return new path or None."""
+        try:
+            dest_dir = self._wallpaper_programdata_dir()
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            ext = Path(source_path).suffix or ".jpg"
+            dest_path = dest_dir / f"wallpaper{ext}"
+            import shutil
+            shutil.copy2(source_path, dest_path)
+            return str(dest_path.resolve())
+        except Exception as e:
+            logger.warning("Failed to copy wallpaper to ProgramData: %s", e)
+            return None
+
+    def _write_pending_wallpaper(self, abs_path):
+        """Write the wallpaper path to pending_wallpaper.txt for the user-session script."""
+        try:
+            dest_dir = self._wallpaper_programdata_dir()
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            pending_file = dest_dir / "pending_wallpaper.txt"
+            pending_file.write_text(abs_path, encoding="utf-8")
+            return True
+        except Exception as e:
+            logger.warning("Failed to write pending wallpaper path: %s", e)
+            return False
+
+    def _ensure_wallpaper_script(self):
+        """Ensure ProgramData\\IFLabAgent\\set_wallpaper.ps1 exists (reads pending path and applies via SystemParametersInfo)."""
+        script_content = r'''# Read path from pending_wallpaper.txt and set wallpaper via SystemParametersInfo
+$pendingFile = "$env:ProgramData\IFLabAgent\pending_wallpaper.txt"
+if (-not (Test-Path $pendingFile)) { exit 0 }
+$path = (Get-Content $pendingFile -Raw).Trim()
+if (-not $path -or -not (Test-Path $path)) { exit 0 }
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Params {
+    [DllImport("User32.dll", CharSet=CharSet.Unicode)]
+    public static extern int SystemParametersInfo(Int32 uAction, Int32 uParam, String lpvParam, Int32 fuWinIni);
+}
+"@
+$SPI_SETDESKWALLPAPER = 0x0014
+$SPIF_UPDATEINIFILE = 0x01
+$SPIF_SENDCHANGE = 0x02
+$fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
+[Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $path, $fWinIni) | Out-Null
+'''
+        try:
+            dest_dir = self._wallpaper_programdata_dir()
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            script_path = dest_dir / "set_wallpaper.ps1"
+            script_path.write_text(script_content, encoding="utf-8")
+            return str(script_path)
+        except Exception as e:
+            logger.warning("Failed to write set_wallpaper.ps1: %s", e)
+            return None
+
+    def _run_wallpaper_task(self):
+        """Run the scheduled task that applies pending wallpaper in the logged-in user session."""
+        try:
+            result = subprocess.run(
+                ["schtasks.exe", "/run", "/tn", "IFLabAgentSetWallpaper"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                logger.debug("schtasks /run failed (task may not exist yet): %s", result.stderr or result.stdout)
+        except Exception as e:
+            logger.debug("Failed to run wallpaper task: %s", e)
+
     def _set_wallpaper(self, file_path):
         """Aplica o arquivo como papel de parede. file_path deve ser caminho absoluto."""
         try:
             abs_path = str(Path(file_path).resolve())
+            if not os.path.exists(abs_path):
+                logger.warning("Wallpaper file does not exist, skipping: %s", abs_path)
+                return
             if platform.system() == "Windows":
-                value_escaped = abs_path.replace("\\", "\\\\").replace('"', '`"')
+                if self._is_windows_service():
+                    # Running as service (Session 0): apply wallpaper in logged-in user session via task
+                    dest_path = self._copy_wallpaper_to_programdata(abs_path)
+                    if not dest_path:
+                        logger.warning("Could not copy wallpaper to ProgramData, skipping")
+                        return
+                    if not self._write_pending_wallpaper(dest_path):
+                        return
+                    self._ensure_wallpaper_script()
+                    self._run_wallpaper_task()
+                    return
+                # Running in user context: apply immediately via SystemParametersInfo
+                path_escaped = abs_path.replace("'", "''")
                 ps_script = f'''
-Set-ItemProperty -Path "HKCU:\\Control Panel\\Desktop" -Name Wallpaper -Value "{value_escaped}"
-rundll32.exe user32.dll, UpdatePerUserSystemParameters
+$path = '{path_escaped}'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Params {{
+    [DllImport("User32.dll", CharSet=CharSet.Unicode)]
+    public static extern int SystemParametersInfo(Int32 uAction, Int32 uParam, String lpvParam, Int32 fuWinIni);
+}}
+"@
+$SPI_SETDESKWALLPAPER = 0x0014
+$SPIF_UPDATEINIFILE = 0x01
+$SPIF_SENDCHANGE = 0x02
+$fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
+$ret = [Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $path, $fWinIni)
+if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
 '''
                 result = subprocess.run(
                     ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],

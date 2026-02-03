@@ -232,6 +232,47 @@ if (-not (Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir | Out-Null
 }
 
+# Create ProgramData\IFLabAgent and set_wallpaper.ps1 for lab wallpaper (applied in user session when agent runs as service)
+$programDataAgent = "$env:ProgramData\IFLabAgent"
+if (-not (Test-Path $programDataAgent)) {
+    New-Item -ItemType Directory -Path $programDataAgent -Force | Out-Null
+}
+$setWallpaperScript = @'
+# Read path from pending_wallpaper.txt and set wallpaper via SystemParametersInfo
+$pendingFile = "$env:ProgramData\IFLabAgent\pending_wallpaper.txt"
+if (-not (Test-Path $pendingFile)) { exit 0 }
+$path = (Get-Content $pendingFile -Raw).Trim()
+if (-not $path -or -not (Test-Path $path)) { exit 0 }
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Params {
+    [DllImport("User32.dll", CharSet=CharSet.Unicode)]
+    public static extern int SystemParametersInfo(Int32 uAction, Int32 uParam, String lpvParam, Int32 fuWinIni);
+}
+"@
+$SPI_SETDESKWALLPAPER = 0x0014
+$SPIF_UPDATEINIFILE = 0x01
+$SPIF_SENDCHANGE = 0x02
+$fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
+[Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $path, $fWinIni) | Out-Null
+'@
+Set-Content -Path "$programDataAgent\set_wallpaper.ps1" -Value $setWallpaperScript -Encoding UTF8
+
+# Create scheduled task to apply wallpaper at logon (runs in current user context; service can trigger it with schtasks /run)
+$taskName = "IFLabAgentSetWallpaper"
+$taskAction = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($existingTask) {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+}
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
+$taskUser = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
+$principal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Description "IFLab Agent: apply lab wallpaper" -Force | Out-Null
+Write-ColorOutput Green "Scheduled task '$taskName' created (runs at logon for $taskUser; service can trigger it for immediate apply)."
+
 # Set recovery options (restart on failure)
 & $nssmPath set $ServiceName AppRestartDelay 10000
 & $nssmPath set $ServiceName AppExit Default Restart
