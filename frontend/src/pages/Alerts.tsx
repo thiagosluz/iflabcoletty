@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle2, AlertTriangle, AlertCircle, Info, Filter, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 
 export default function Alerts() {
     const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -52,7 +53,7 @@ export default function Alerts() {
             toast({ title: 'Alerta resolvido', description: 'O alerta foi marcado como resolvido.' });
             fetchAlerts();
         } catch (error) {
-            toast({ title: 'Erro', description: 'Não foi possível resolver o alerta.', variant: 'destructive' });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 

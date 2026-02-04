@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { LayoutDashboard, Monitor, Server, LogOut, Package, FileText, Download, Database, Users, Shield, AlertTriangle, Settings, Activity, Clock as ClockIcon, PanelLeftClose, PanelLeft } from 'lucide-react';
 import NotificationBell from '@/components/NotificationBell';
 import { GlobalSearch } from '@/components/GlobalSearch';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
 
@@ -62,10 +63,10 @@ export default function DashboardLayout() {
     if (!isAuthenticated) return null;
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
+        <div className="flex h-screen overflow-hidden bg-gray-50">
             {/* Sidebar */}
             <aside
-                className={`${collapsed ? 'w-16' : 'w-64'} bg-white border-r hidden md:flex md:flex-col transition-all duration-200 shrink-0`}
+                className={`h-full ${collapsed ? 'w-16' : 'w-64'} bg-white border-r hidden md:flex md:flex-col transition-all duration-200 shrink-0`}
             >
                 <div className={`p-4 flex items-center ${collapsed ? 'justify-center' : ''}`}>
                     {collapsed ? (
@@ -76,7 +77,7 @@ export default function DashboardLayout() {
                         <h1 className="text-2xl font-bold truncate">IFLab Manager</h1>
                     )}
                 </div>
-                <nav className="space-y-1 px-2 flex-1 overflow-hidden">
+                <nav className="space-y-1 px-2 flex-1 min-h-0 overflow-y-auto">
                     <Link to="/admin/dashboard" className={navLinkClass('/admin/dashboard', collapsed)} title="Dashboard">
                         <LayoutDashboard className="h-5 w-5 shrink-0" />
                         {!collapsed && <span className="ml-3 truncate">Dashboard</span>}
@@ -184,14 +185,19 @@ export default function DashboardLayout() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 p-8 min-w-0">
+            <main className="flex-1 min-h-0 overflow-y-auto p-8 min-w-0">
                 <div className="mb-4 flex justify-between items-center gap-4">
                     <div className="flex-1 max-w-xl">
                         <GlobalSearch />
                     </div>
                     <NotificationBell />
                 </div>
-                <Outlet />
+                <ErrorBoundary
+                    title="Algo deu errado nesta página"
+                    description="Ocorreu um erro ao carregar esta página. Volte ao início ou tente novamente."
+                >
+                    <Outlet />
+                </ErrorBoundary>
             </main>
         </div>
     );

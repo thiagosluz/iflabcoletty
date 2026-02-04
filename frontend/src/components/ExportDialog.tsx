@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Download, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 
 interface ExportDialogProps {
     trigger: React.ReactNode;
@@ -52,12 +53,8 @@ export default function ExportDialog({
                 });
                 setIsOpen(false);
             }
-        } catch (error: any) {
-            toast({
-                title: 'Erro na exportação',
-                description: error.message || 'Falha ao exportar relatório.',
-                variant: 'destructive',
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsExporting(false);
         }

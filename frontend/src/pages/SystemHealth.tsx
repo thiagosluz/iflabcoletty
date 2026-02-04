@@ -17,6 +17,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 // Alert component - using Card instead
 
 interface SystemHealth {
@@ -175,12 +176,7 @@ export default function SystemHealth() {
             // Refresh health data
             await fetchHealth();
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro',
-                description: err.response?.data?.message || 'Erro ao tentar novamente os jobs falhados',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setQueueActionLoading(null);
         }
@@ -197,12 +193,7 @@ export default function SystemHealth() {
             // Refresh health data
             await fetchHealth();
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro',
-                description: err.response?.data?.message || 'Erro ao limpar fila',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setQueueActionLoading(null);
         }
@@ -219,12 +210,7 @@ export default function SystemHealth() {
             // Refresh health data
             await fetchHealth();
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro',
-                description: err.response?.data?.message || 'Erro ao deletar fila',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setQueueActionLoading(null);
         }

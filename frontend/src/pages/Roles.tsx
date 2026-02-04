@@ -9,6 +9,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { MoreHorizontal, Plus, Trash2, Edit, Shield } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
@@ -65,12 +66,8 @@ export default function Roles() {
         try {
             const response = await apiClient.get('/roles');
             setRoles(response.data || []);
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao carregar roles',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -133,12 +130,8 @@ export default function Roles() {
             toast({ title: 'Excluído', description: 'Role excluída com sucesso' });
             fetchRoles();
             setRoleToDelete(null);
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao excluir role',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }

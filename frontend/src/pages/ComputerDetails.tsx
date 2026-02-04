@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap, RefreshCw, Code2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { Progress } from '@/components/ui/progress';
 import {
     AlertDialog,
@@ -312,7 +313,7 @@ export default function ComputerDetails() {
                 };
                 toast({
                     title: titles[command] || 'Solicitação enviada',
-                    description: 'Aguardando resposta do agente...',
+                    description: 'Comando na fila; aguardando resposta do agente...',
                 });
 
                 const cmdId = res.data.id;
@@ -320,8 +321,8 @@ export default function ComputerDetails() {
 
             } else {
                 toast({
-                    title: 'Comando enviado',
-                    description: `O comando foi enviado com sucesso para a fila.`,
+                    title: 'Comando na fila',
+                    description: 'O agente executará quando estiver online.',
                 });
             }
 
@@ -329,12 +330,7 @@ export default function ComputerDetails() {
             setMessageText('');
         } catch (error: unknown) {
             console.error(error);
-            const err = error as any;
-            toast({
-                title: 'Erro',
-                description: err.response?.data?.message || 'Falha ao enviar comando.',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -364,25 +360,25 @@ export default function ComputerDetails() {
                     if (cmd.status === 'completed') {
                         if (type === 'screenshot') {
                             setLastScreenshot(cmd.output);
-                            toast({ title: 'Sucesso', description: 'Dados atualizados.' });
+                            toast({ title: 'Agente respondeu', description: 'Dados atualizados.' });
                         } else if (type === 'ps_list') {
                             try {
                                 setProcesses(JSON.parse(cmd.output));
                             } catch (e) {
                                 console.error("Error parsing process list", e);
                             }
-                            toast({ title: 'Sucesso', description: 'Dados atualizados.' });
+                            toast({ title: 'Agente respondeu', description: 'Dados atualizados.' });
                         } else if (type === 'update_agent') {
-                            toast({ title: 'Sucesso', description: 'O agente foi atualizado ou está em processo de atualização.' });
+                            toast({ title: 'Agente respondeu', description: 'O agente foi atualizado ou está em processo de atualização.' });
                         } else if (type === 'set_hostname') {
-                            toast({ title: 'Sucesso', description: 'Nome do computador alterado com sucesso.' });
+                            toast({ title: 'Agente respondeu', description: 'Nome do computador alterado com sucesso.' });
                             fetchComputer();
                         }
                     } else {
                         const failMsg = (type === 'update_agent' || type === 'set_hostname') && cmd.output
                             ? cmd.output
                             : 'O agente falhou ao executar o comando.';
-                        toast({ title: 'Falha', description: failMsg, variant: 'destructive' });
+                        toast({ title: 'Agente respondeu com falha', description: failMsg, variant: 'destructive' });
                     }
                     if (type === 'screenshot') setLoadingScreenshot(false);
                     if (type === 'ps_list') setLoadingProcesses(false);
@@ -403,7 +399,7 @@ export default function ComputerDetails() {
                     setIsSetHostnameOpen(false);
                     setNewHostnameValue('');
                 }
-                toast({ title: 'Timeout', description: 'O agente demorou muito para responder.', variant: 'destructive' });
+                toast({ title: 'Timeout', description: 'O agente demorou para responder. Verifique se está online.', variant: 'destructive' });
             }
         }, 2000);
     };
@@ -467,9 +463,11 @@ export default function ComputerDetails() {
                 }
             }, 2000);
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             setIsTerminalLoading(false);
-            setTerminalHistory(prev => [...prev, { type: 'error', content: error.message || 'Failed to send command', timestamp: new Date() }]);
+            const msg = (error as { message?: string })?.message ?? 'Failed to send command';
+            setTerminalHistory(prev => [...prev, { type: 'error', content: msg, timestamp: new Date() }]);
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -484,12 +482,7 @@ export default function ComputerDetails() {
             });
         } catch (error: unknown) {
             console.error(error);
-            const err = error as any; // Temporary cast for accessing response
-            toast({
-                title: 'Erro',
-                description: err.response?.data?.message || 'Falha ao rotacionar link público.',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 

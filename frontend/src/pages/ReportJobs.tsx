@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download, RefreshCw, CheckCircle2, XCircle, Clock, Loader2, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     AlertDialog,
@@ -78,22 +79,14 @@ export default function ReportJobs() {
                     setPollingInterval(null);
                 }
                 if (!silent) {
-                    toast({
-                        title: 'Limite de requisições atingido',
-                        description: 'Aguarde alguns segundos antes de atualizar novamente.',
-                        variant: 'destructive',
-                    });
+                    toast({ ...getApiErrorToast(error) });
                 }
                 return;
             }
             
             console.error('Error fetching jobs:', error);
             if (!silent) {
-                toast({
-                    title: 'Erro',
-                    description: error.response?.data?.message || 'Falha ao carregar jobs',
-                    variant: 'destructive',
-                });
+                toast({ ...getApiErrorToast(error) });
             }
         }
     };
@@ -181,12 +174,8 @@ export default function ReportJobs() {
             toast({ title: 'Excluído', description: 'Relatório excluído com sucesso.' });
             setJobToDelete(null);
             await fetchJobs(false);
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao excluir relatório',
-                variant: 'destructive',
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }

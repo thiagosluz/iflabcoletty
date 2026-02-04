@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { Plus, Pencil, Trash2, Settings } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
@@ -81,12 +82,8 @@ export default function AlertRules() {
             setIsOpen(false);
             setEditingRule(null);
             fetchRules();
-        } catch (error: any) {
-            toast({ 
-                title: 'Erro', 
-                description: error.response?.data?.message || 'Falha ao salvar regra.', 
-                variant: 'destructive' 
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -96,7 +93,7 @@ export default function AlertRules() {
             toast({ title: 'Sucesso', description: 'Regra excluída.' });
             fetchRules();
         } catch (error) {
-            toast({ title: 'Erro', description: 'Falha ao excluir regra.', variant: 'destructive' });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 

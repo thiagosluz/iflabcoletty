@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { cn } from "@/lib/utils";
 import {
     Popover,
@@ -105,7 +106,7 @@ export default function Schedules() {
             toast({ title: 'Tarefa executada com sucesso' });
             fetchTasks(); // Refresh to show updated status
         } catch (error) {
-            toast({ title: 'Erro ao executar tarefa', variant: 'destructive' });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setExecutingTaskId(null);
         }
@@ -160,7 +161,7 @@ export default function Schedules() {
             setTasks(Array.isArray(taskData) ? taskData : []);
         } catch (error) {
             console.error('Error fetching tasks:', error);
-            toast({ title: 'Erro ao carregar tarefas', variant: 'destructive' });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -210,11 +211,7 @@ export default function Schedules() {
             setTimeout(() => fetchTasks(), 100);
             resetForm();
         } catch (error) {
-            toast({
-                title: 'Erro ao salvar tarefa',
-                description: 'Verifique os dados e tente novamente.',
-                variant: 'destructive'
-            });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -230,7 +227,7 @@ export default function Schedules() {
             toast({ title: 'Tarefa excluída' });
             fetchTasks();
         } catch (error) {
-            toast({ title: 'Erro ao excluir', variant: 'destructive' });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setTaskToDelete(null);
         }

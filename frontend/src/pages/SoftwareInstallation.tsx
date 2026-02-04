@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Upload, Link, Network, Package, CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
@@ -140,11 +141,7 @@ export default function SoftwareInstallation() {
             setComputers(windowsComputers);
         } catch (error) {
             console.error('Error fetching computers:', error);
-            toast({
-                title: 'Erro ao buscar computadores',
-                description: 'Não foi possível carregar a lista de computadores',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -209,12 +206,7 @@ export default function SoftwareInstallation() {
             fetchInstallations(historyPage, historyPerPage, historySearch);
             setInstallationToDelete(null);
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao excluir',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }
@@ -231,12 +223,7 @@ export default function SoftwareInstallation() {
                 description: `Arquivo ${file.name} enviado com sucesso`,
             });
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao enviar arquivo',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setUploading(false);
         }
@@ -318,12 +305,7 @@ export default function SoftwareInstallation() {
                 fetchInstallations(historyPage, historyPerPage, historySearch);
             }
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao iniciar instalação',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setInstalling(false);
         }

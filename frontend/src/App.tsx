@@ -1,7 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import DashboardLayout from './layouts/DashboardLayout';
-import { Toaster } from './components/ui/toaster'; // Assuming toaster exists or I need to create it
+import { Toaster } from './components/ui/toaster';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import Dashboard from './pages/Dashboard';
 
@@ -28,7 +29,12 @@ import AgentDownloads from './pages/AgentDownloads';
 function App() {
   return (
     <Router>
-      <Routes>
+      <ErrorBoundary
+        title="Algo deu errado"
+        description="Ocorreu um erro inesperado. Recarregue a página para continuar."
+        showReload
+      >
+        <Routes>
         <Route path="/login" element={<Login />} />
 
         {/* Public Routes */}
@@ -58,7 +64,8 @@ function App() {
         </Route>
 
         <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
+        </Routes>
+      </ErrorBoundary>
       <Toaster />
     </Router>
   );

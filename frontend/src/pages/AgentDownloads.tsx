@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { Download, RefreshCw, Loader2, Package, FileCode, Monitor, Server, CheckCircle2, XCircle, Info, Trash2 } from 'lucide-react';
 import apiClient from '@/lib/axios';
 import {
@@ -44,12 +45,7 @@ export default function AgentDownloads() {
             const data = await AgentDownloadService.listFiles();
             setFiles(data);
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao carregar arquivos',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setLoading(false);
         }
@@ -77,12 +73,7 @@ export default function AgentDownloads() {
 
             await fetchFiles();
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao criar pacote do agente',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsBuildingPackage(false);
         }
@@ -106,12 +97,7 @@ export default function AgentDownloads() {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(downloadUrl);
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao baixar arquivo',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -134,12 +120,7 @@ export default function AgentDownloads() {
             setPackageToDelete(null);
             await fetchFiles();
         } catch (error: unknown) {
-            const err = error as { response?: { data?: { message?: string } } };
-            toast({
-                title: 'Erro ao excluir pacote',
-                description: err.response?.data?.message || 'Erro desconhecido',
-                variant: 'destructive',
-            });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import {
     ChevronLeft,
     ChevronRight,
@@ -301,18 +302,14 @@ export default function LabDetails() {
         try {
             await apiClient.post(`/labs/${id}/commands`, { command, parameters: params });
             toast({
-                title: 'Comando enviado',
-                description: `Comando enviado para todos os computadores do laboratório.`,
+                title: 'Comando na fila',
+                description: 'O agente executará quando estiver online nos computadores do laboratório.',
             });
             setIsLabMessageOpen(false);
             setLabMessageText('');
             setConfirmAction(null);
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao enviar comando.',
-                variant: 'destructive',
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -361,9 +358,8 @@ export default function LabDetails() {
                 toast({ title: 'Exportação concluída', description: 'Relatório exportado em PDF.' });
                 setIsExportOpen(false);
             }
-        } catch (error: any) {
-            const msg = error.response?.data?.message || error.message || 'Falha ao exportar relatório.';
-            toast({ title: 'Erro na exportação', description: msg, variant: 'destructive' });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsExporting(false);
         }
@@ -375,8 +371,8 @@ export default function LabDetails() {
             await apiClient.put(`/labs/${id}`, { ...lab, default_wallpaper_url: '' });
             toast({ title: 'Papel de parede removido', description: 'O papel de parede padrão foi excluído.' });
             fetchLabDetails();
-        } catch (error: any) {
-            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao remover.', variant: 'destructive' });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -387,8 +383,8 @@ export default function LabDetails() {
             await apiClient.put(`/labs/${id}`, { default_wallpaper_enabled: next });
             toast({ title: next ? 'Ativado' : 'Desativado', description: next ? 'O agente voltará a aplicar o papel de parede nos computadores.' : 'O agente deixará de aplicar o papel de parede.' });
             fetchLabDetails();
-        } catch (error: any) {
-            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao atualizar.', variant: 'destructive' });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -400,8 +396,8 @@ export default function LabDetails() {
             setIsWallpaperDialogOpen(false);
             setWallpaperEditUrl('');
             fetchLabDetails();
-        } catch (error: any) {
-            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao salvar.', variant: 'destructive' });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -414,8 +410,8 @@ export default function LabDetails() {
             const res = await apiClient.post(`/labs/${id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             setWallpaperEditUrl(res.data.default_wallpaper_url);
             toast({ title: 'Imagem enviada', description: 'Salve para confirmar ou altere a URL.' });
-        } catch (error: any) {
-            toast({ title: 'Erro', description: error.response?.data?.message || 'Falha ao enviar imagem.', variant: 'destructive' });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setUploadingWallpaper(false);
         }

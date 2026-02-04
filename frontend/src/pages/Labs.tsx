@@ -12,6 +12,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { MoreHorizontal, Plus, Search, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, Pencil, List, LayoutGrid } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
@@ -147,8 +148,8 @@ export default function Labs() {
                         formData.append('wallpaper', wallpaperFileToUpload);
                         await apiClient.post(`/labs/${newLab.id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
                         toast({ title: 'Sucesso', description: 'Laboratório criado e papel de parede enviado.' });
-                    } catch (err: any) {
-                        toast({ title: 'Laboratório criado', description: err.response?.data?.message || 'Papel de parede não foi enviado. Você pode enviá-lo ao editar.', variant: 'destructive' });
+                    } catch (err: unknown) {
+                        toast({ ...getApiErrorToast(err) });
                     } finally {
                         setUploadingWallpaper(false);
                         setWallpaperFileToUpload(null);
@@ -162,12 +163,8 @@ export default function Labs() {
             reset();
             setWallpaperFileToUpload(null);
             fetchLabs();
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || (editingLab ? 'Falha ao atualizar laboratório' : 'Falha ao criar laboratório'),
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -314,8 +311,8 @@ export default function Labs() {
                                                             const res = await apiClient.post(`/labs/${editingLab.id}/wallpaper`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
                                                             setValue('default_wallpaper_url', res.data.default_wallpaper_url);
                                                             toast({ title: 'Sucesso', description: 'Imagem enviada. Salve o formulário para confirmar.' });
-                                                        } catch (err: any) {
-                                                            toast({ title: 'Erro', description: err.response?.data?.message || 'Falha ao enviar imagem', variant: 'destructive' });
+                                                        } catch (err: unknown) {
+                                                            toast({ ...getApiErrorToast(err) });
                                                         } finally {
                                                             setUploadingWallpaper(false);
                                                             e.target.value = '';

@@ -12,6 +12,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, List, LayoutGrid } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -195,11 +196,7 @@ export default function Computers() {
             reset();
             fetchComputers(); // Refresh to show new computer immediately
         } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao criar computador',
-                variant: 'destructive'
-            });
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -225,7 +222,7 @@ export default function Computers() {
             
             setComputerToDelete(null);
         } catch (error) {
-            toast({ title: 'Erro', description: 'Falha ao excluir computador', variant: 'destructive' });
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }
@@ -305,36 +302,8 @@ export default function Computers() {
                 description: `${exportComputerCount} QR code(s) exportado(s) em formato ${exportFormat.toUpperCase()}.`,
             });
             setIsExportOpen(false);
-        } catch (error: any) {
-            let errorMessage = 'Falha ao exportar QR codes';
-            
-            // Try to extract error message from different error formats
-            if (error.response) {
-                const contentType = error.response.headers?.['content-type'] || '';
-                if (contentType.includes('application/json')) {
-                    errorMessage = error.response.data?.message || errorMessage;
-                } else if (error.response.data instanceof Blob) {
-                    // Try to parse blob as JSON
-                    try {
-                        const text = await error.response.data.text();
-                        const errorData = JSON.parse(text);
-                        errorMessage = errorData.message || errorMessage;
-                    } catch (e) {
-                        // If it's not JSON, use status text
-                        errorMessage = error.response.statusText || errorMessage;
-                    }
-                } else {
-                    errorMessage = error.response.data?.message || error.response.statusText || errorMessage;
-                }
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-
-            toast({
-                title: 'Erro na exportação',
-                description: errorMessage,
-                variant: 'destructive',
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsExporting(false);
         }

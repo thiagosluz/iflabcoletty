@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { toast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 
 const apiClient = axios.create({
     baseURL: '/api/v1',
@@ -6,7 +8,7 @@ const apiClient = axios.create({
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
-    withCredentials: true, // Important for Sanctum cookie (if using cookies) OR to handle cors correctly
+    withCredentials: true,
 });
 
 // Request interceptor to add token if available
@@ -18,34 +20,44 @@ apiClient.interceptors.request.use((config) => {
     return config;
 });
 
-// Response interceptor to handle errors
+// Debounce network-error toasts so we don't show one per failed request
+const NETWORK_TOAST_COOLDOWN_MS = 4000;
+let lastNetworkToastAt = 0;
+
+// Response interceptor to handle errors and show global toasts
 apiClient.interceptors.response.use(
-    (response) => {
-        // Store rate limit headers for potential use
-        if (response.headers['x-ratelimit-limit']) {
-            // Could store in state if needed
-        }
-        return response;
-    },
+    (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        const status = error.response?.status;
+
+        if (status === 401) {
             localStorage.removeItem('token');
             window.location.href = '/login';
+            return Promise.reject(error);
         }
-        
-        // Handle rate limiting (429 Too Many Requests)
-        if (error.response?.status === 429) {
-            const retryAfter = error.response.headers['retry-after'] || 60;
-            const message = error.response.data?.message || 
-                `Muitas requisições. Tente novamente em ${retryAfter} segundos.`;
-            
-            // You could show a toast notification here
-            console.warn('Rate limit exceeded:', message);
-            
-            // Optionally, you could dispatch a toast notification
-            // toast.error(message);
+
+        if (status === 429) {
+            toast({ ...getApiErrorToast(error) });
+            return Promise.reject(error);
         }
-        
+
+        if (status !== undefined && status >= 500) {
+            toast({ ...getApiErrorToast(error) });
+            return Promise.reject(error);
+        }
+
+        const isNetworkError =
+            error.code === 'ERR_NETWORK' ||
+            error.code === 'ECONNABORTED' ||
+            !error.response;
+        if (isNetworkError) {
+            const now = Date.now();
+            if (now - lastNetworkToastAt >= NETWORK_TOAST_COOLDOWN_MS) {
+                lastNetworkToastAt = now;
+                toast({ ...getApiErrorToast(error) });
+            }
+        }
+
         return Promise.reject(error);
     }
 );

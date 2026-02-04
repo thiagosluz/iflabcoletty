@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Check, X, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     AlertDialog,
@@ -80,12 +81,8 @@ export default function Notifications() {
                 from: data.from || 0,
                 to: data.to || 0,
             });
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao carregar notificações',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -109,12 +106,8 @@ export default function Notifications() {
                 )
             );
             toast({ title: 'Sucesso', description: 'Notificação marcada como lida' });
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao marcar notificação',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -129,12 +122,8 @@ export default function Notifications() {
                 )
             );
             toast({ title: 'Sucesso', description: 'Notificação marcada como não lida' });
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao marcar notificação',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -143,12 +132,8 @@ export default function Notifications() {
             await apiClient.post('/notifications/mark-all-read');
             fetchNotifications();
             toast({ title: 'Sucesso', description: 'Todas as notificações marcadas como lidas' });
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao marcar notificações',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         }
     };
 
@@ -167,12 +152,8 @@ export default function Notifications() {
             } else {
                 fetchNotifications();
             }
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao excluir notificação',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }
@@ -192,12 +173,8 @@ export default function Notifications() {
                 description: data.message || `${selectedNotifications.length} notificação(ões) excluída(s) com sucesso` 
             });
             fetchNotifications();
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao excluir notificações',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }
@@ -214,12 +191,8 @@ export default function Notifications() {
             });
             setIsDeleteAllDialogOpen(false);
             fetchNotifications();
-        } catch (error: any) {
-            toast({
-                title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao excluir notificações',
-                variant: 'destructive'
-            });
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
         } finally {
             setIsDeleting(false);
         }
