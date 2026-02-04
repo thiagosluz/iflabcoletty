@@ -301,10 +301,17 @@ export default function LabDetails() {
         if (!id) return;
         try {
             await apiClient.post(`/labs/${id}/commands`, { command, parameters: params });
-            toast({
-                title: 'Comando na fila',
-                description: 'O agente executará quando estiver online nos computadores do laboratório.',
-            });
+            if (command === 'wol') {
+                toast({
+                    title: 'WoL na fila',
+                    description: 'Para cada PC desligado, outro computador do mesmo laboratório enviará o pacote quando o agente dele verificar a fila.',
+                });
+            } else {
+                toast({
+                    title: 'Comando na fila',
+                    description: 'O agente executará quando estiver online nos computadores do laboratório.',
+                });
+            }
             setIsLabMessageOpen(false);
             setLabMessageText('');
             setConfirmAction(null);

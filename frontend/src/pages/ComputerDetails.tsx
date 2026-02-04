@@ -110,6 +110,7 @@ interface Computer {
     hardware_info: HardwareInfo | null;
     agent_version?: string | null;
     latest_agent_version?: string;
+    wol_mac?: string | null;
     lab: {
         id: number;
         name: string;
@@ -139,6 +140,8 @@ export default function ComputerDetails() {
     const [isMessageOpen, setIsMessageOpen] = useState(false);
     const [isSetHostnameOpen, setIsSetHostnameOpen] = useState(false);
     const [newHostnameValue, setNewHostnameValue] = useState('');
+    const [wolMacEdit, setWolMacEdit] = useState('');
+    const [savingWolMac, setSavingWolMac] = useState(false);
     const { toast } = useToast();
 
     // Supervision State
@@ -157,6 +160,12 @@ export default function ComputerDetails() {
     const [terminalInput, setTerminalInput] = useState('');
     const [terminalHistory, setTerminalHistory] = useState<{ type: 'command' | 'output' | 'error', content: string, timestamp: Date }[]>([]);
     const [isTerminalLoading, setIsTerminalLoading] = useState(false);
+
+    useEffect(() => {
+        if (computer) {
+            setWolMacEdit(computer.wol_mac ?? '');
+        }
+    }, [computer?.id, computer?.wol_mac]);
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
@@ -319,6 +328,21 @@ export default function ComputerDetails() {
                 const cmdId = res.data.id;
                 pollCommandResult(cmdId, command);
 
+            } else if (command === 'wol') {
+                if (res.data.sent_from_server) {
+                    toast({
+                        title: 'WoL enviado',
+                        description: 'WoL enviado diretamente pelo servidor.',
+                    });
+                } else {
+                    const proxyHostname = res.data.proxy_hostname;
+                    toast({
+                        title: 'WoL na fila',
+                        description: proxyHostname
+                            ? `Outro computador do laboratório (${proxyHostname}) enviará o pacote quando o agente dele verificar a fila.`
+                            : 'Outro computador do mesmo laboratório enviará o pacote WoL quando o agente dele verificar a fila.',
+                    });
+                }
             } else {
                 toast({
                     title: 'Comando na fila',
@@ -824,6 +848,44 @@ export default function ComputerDetails() {
                                 </dd>
                             </div>
                         </dl>
+                    </div>
+
+                    {/* MAC para WoL */}
+                    <div className="bg-white shadow rounded-lg p-6">
+                        <h2 className="text-lg font-semibold mb-4">MAC para Wake-on-LAN (WoL)</h2>
+                        <p className="text-sm text-gray-600 mb-3">
+                            Opcional. Se preenchido, será usado para acordar este computador. Caso contrário, usa o primeiro MAC físico detectado pelo agente.
+                        </p>
+                        <div className="flex gap-2 items-center flex-wrap">
+                            <Input
+                                id="wol-mac"
+                                placeholder="XX:XX:XX:XX:XX:XX ou XX-XX-XX-XX-XX-XX"
+                                value={wolMacEdit}
+                                onChange={(e) => setWolMacEdit(e.target.value)}
+                                className="font-mono max-w-[240px]"
+                            />
+                            <Button
+                                variant="default"
+                                size="sm"
+                                disabled={savingWolMac || wolMacEdit === (computer.wol_mac ?? '')}
+                                onClick={async () => {
+                                    setSavingWolMac(true);
+                                    try {
+                                        await apiClient.put(`/computers/${computer.id}`, {
+                                            wol_mac: wolMacEdit.trim() || null,
+                                        });
+                                        toast({ title: 'Salvo', description: 'MAC WoL atualizado.' });
+                                        await fetchComputer();
+                                    } catch (error: unknown) {
+                                        toast({ ...getApiErrorToast(error) });
+                                    } finally {
+                                        setSavingWolMac(false);
+                                    }
+                                }}
+                            >
+                                {savingWolMac ? 'Salvando...' : 'Salvar'}
+                            </Button>
+                        </div>
                     </div>
 
                     {/* QR Code Section */}

@@ -7,8 +7,10 @@ use App\Models\Computer;
 use App\Models\ComputerCommand;
 use App\Models\Lab;
 use App\Models\SoftwareInstallation;
+use App\Services\WolService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class RemoteControlController extends Controller
 {
@@ -33,9 +35,28 @@ class RemoteControlController extends Controller
 
         if ($validated['command'] === 'wol') {
             try {
-                $command = $this->handleWol($computer, auth()->id());
+                $mac = $this->getTargetMacForWol($computer);
+                if (! $mac) {
+                    return response()->json(['message' => 'Computador alvo não possui endereço MAC registrado.'], 422);
+                }
+                if (config('wol.send_from_server')) {
+                    if (WolService::send($mac)) {
+                        Log::info('WoL sent from server to MAC', ['computer_id' => $computer->id, 'hostname' => $computer->hostname]);
 
-                return response()->json($command, 201);
+                        return response()->json([
+                            'sent_from_server' => true,
+                            'message' => 'WoL enviado pelo servidor.',
+                        ], 201);
+                    }
+                }
+                $command = $this->handleWol($computer, auth()->id());
+                $command->load('computer');
+
+                return response()->json([
+                    'command' => $command,
+                    'proxy_computer_id' => $command->computer_id,
+                    'proxy_hostname' => $command->computer->hostname ?? null,
+                ], 201);
             } catch (\Exception $e) {
                 return response()->json(['message' => $e->getMessage()], 422);
             }
@@ -131,6 +152,50 @@ class RemoteControlController extends Controller
         ]);
     }
 
+    /**
+     * Virtual/loopback interface name patterns to exclude when choosing MAC for WoL.
+     */
+    private static function getVirtualInterfacePatterns(): array
+    {
+        return ['lo', 'loopback', 'vboxnet', 'vmnet', 'virbr', 'docker', 'wsl', 'vethernet', 'veth', 'br-'];
+    }
+
+    private function getTargetMacForWol(Computer $target): ?string
+    {
+        if (! empty($target->wol_mac)) {
+            return preg_replace('/[^0-9A-Fa-f]/', '', $target->wol_mac);
+        }
+        if (empty($target->hardware_info['network']) || ! is_array($target->hardware_info['network'])) {
+            return null;
+        }
+        $virtualPatterns = self::getVirtualInterfacePatterns();
+        $physicalMac = null;
+        $firstMac = null;
+        foreach ($target->hardware_info['network'] as $iface) {
+            if (empty($iface['mac'])) {
+                continue;
+            }
+            if ($firstMac === null) {
+                $firstMac = $iface['mac'];
+            }
+            $name = isset($iface['name']) ? strtolower((string) $iface['name']) : '';
+            $isVirtual = false;
+            foreach ($virtualPatterns as $pattern) {
+                if ($name === $pattern || str_starts_with($name, $pattern)) {
+                    $isVirtual = true;
+                    break;
+                }
+            }
+            if (! $isVirtual) {
+                $physicalMac = $iface['mac'];
+                break;
+            }
+        }
+        $mac = $physicalMac ?? $firstMac;
+
+        return $mac ? preg_replace('/[^0-9A-Fa-f]/', '', $mac) : null;
+    }
+
     private function handleWol(Computer $target, $user_id)
     {
         // Find a proxy agent in the same lab that is online (updated in last 5 mins)
@@ -144,17 +209,9 @@ class RemoteControlController extends Controller
             throw new \Exception('Nenhum computador online no laboratório para servir de proxy WoL.');
         }
 
-        // Get Target MAC from hardware_info
-        $mac = null;
-        if (! empty($target->hardware_info['network'])) {
-            foreach ($target->hardware_info['network'] as $iface) {
-                if (! empty($iface['mac'])) {
-                    $mac = $iface['mac'];
-                    break; // Use the first MAC found
-                }
-            }
-        }
+        Log::info('WoL: target computer_id='.$target->id.', hostname='.($target->hostname ?? '').'; proxy computer_id='.$proxy->id.', hostname='.($proxy->hostname ?? ''));
 
+        $mac = $this->getTargetMacForWol($target);
         if (! $mac) {
             throw new \Exception('Computador alvo não possui endereço MAC registrado.');
         }

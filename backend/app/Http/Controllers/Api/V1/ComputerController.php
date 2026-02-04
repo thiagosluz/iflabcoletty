@@ -222,14 +222,31 @@ class ComputerController extends Controller
             'machine_id' => 'sometimes|string|unique:computers,machine_id,'.$computer->id,
             'hardware_info' => 'sometimes|array',
             'agent_version' => 'sometimes|nullable|string',
+            'wol_mac' => 'nullable|string|max:20|regex:/^([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}$/',
         ]);
 
         $computer->update($validated);
 
+        // wol_mac: lê do body JSON (PUT não popula $request no Laravel) e persiste depois do update
+        $content = $request->getContent();
+        if ($content !== '' && $content !== false) {
+            $body = json_decode($content, true);
+            if (is_array($body) && array_key_exists('wol_mac', $body)) {
+                $raw = $body['wol_mac'];
+                $value = (is_string($raw) && trim($raw) !== '') ? trim($raw) : null;
+                if ($value !== null && preg_match('/^([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}$/', $value)) {
+                    $computer->wol_mac = $value;
+                } else {
+                    $computer->wol_mac = null;
+                }
+                $computer->saveQuietly();
+            }
+        }
+
         // Log activity
         $this->logActivity('update', $computer, $oldValues, $computer->toArray());
 
-        return response()->json($computer);
+        return response()->json($computer->fresh());
     }
 
     public function destroy(Computer $computer)

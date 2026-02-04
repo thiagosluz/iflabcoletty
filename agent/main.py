@@ -758,9 +758,16 @@ exit 1
             elif command_type == 'wol':
                 target_mac = params.get('target_mac')
                 if target_mac:
-                    self.send_wol(target_mac)
-                    success = True
-                    output = f"WoL packet sent to {target_mac}"
+                    logger.info("WoL: sending magic packet to MAC %s", target_mac)
+                    try:
+                        self.send_wol(target_mac)
+                        logger.info("WoL: magic packet sent successfully to %s", target_mac)
+                        success = True
+                        output = f"WoL packet sent to {target_mac}"
+                    except Exception as e:
+                        logger.error("WoL: failed to send to %s: %s", target_mac, e)
+                        success = False
+                        output = str(e)
                 else:
                     success = False
                     output = "Missing target_mac for WoL"
@@ -963,6 +970,8 @@ exit 1
             output = str(e)
             success = False
             
+        if command_type == 'wol':
+            logger.info("WoL: updating command %s status to %s", command_id, 'completed' if success else 'failed')
         self.update_command_status(command_id, 'completed' if success else 'failed', output)
 
     def update_command_status(self, command_id, status, output=None):
@@ -970,9 +979,10 @@ exit 1
             url = f"{config.API_BASE_URL}/commands/{command_id}/status"
             payload = {'status': status}
             if output: payload['output'] = output
-            self.session.put(url, json=payload)
+            resp = self.session.put(url, json=payload)
+            resp.raise_for_status()
         except Exception as e:
-            logger.error(f"Failed to update command status: {e}")
+            logger.error("Failed to update command status: %s", e)
 
     def _set_system_hostname(self, new_hostname):
         """Alterar hostname no SO (Windows ou Linux). Requer privilégios de administrador/root."""

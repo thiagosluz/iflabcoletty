@@ -20,6 +20,7 @@ class Computer extends Model
         'position_x',
         'position_y',
         'agent_version',
+        'wol_mac',
     ];
 
     protected $casts = [
