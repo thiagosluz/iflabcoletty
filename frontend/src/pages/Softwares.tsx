@@ -6,7 +6,6 @@ import { ChevronLeft, ChevronRight, Search, Package, Download, List, LayoutGrid 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ExportDialog from '@/components/ExportDialog';
 import SoftwareComputersModal from '@/components/SoftwareComputersModal';
-import { useToast } from '@/components/ui/use-toast';
 
 interface Software {
     id: number;
@@ -146,7 +145,7 @@ export default function Softwares() {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-900">Inventário de Software</h1>
+                <h1 className="text-3xl font-bold tracking-tight">Inventário de Software</h1>
                 <ExportDialog
                     trigger={
                         <Button variant="outline">
@@ -207,18 +206,16 @@ export default function Softwares() {
                 </div>
             </div>
 
-            {/* Loading */}
+            <div className="bg-white shadow rounded-lg p-6">
             {loading && softwares.length === 0 ? (
-                <div className="bg-white shadow rounded-lg p-12">
-                    <div className="flex justify-center items-center h-64">
-                        <div className="text-center">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                            <div className="text-gray-500">Carregando softwares...</div>
-                        </div>
+                <div className="flex justify-center items-center h-64">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                        <div className="text-gray-500">Carregando softwares...</div>
                     </div>
                 </div>
             ) : viewMode === 'list' ? (
-                <div className="border rounded-lg bg-white shadow overflow-hidden">
+                <div className="border rounded-lg overflow-hidden">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -277,7 +274,7 @@ export default function Softwares() {
             ) : (
                 <>
                     {softwares.length > 0 ? (
-                        <div className="bg-white shadow rounded-lg p-6">
+                        <>
                             <div className="flex items-center gap-2 mb-4">
                                 <Package className="h-5 w-5 text-gray-700" />
                                 <h2 className="text-lg font-semibold text-gray-900">
@@ -332,24 +329,21 @@ export default function Softwares() {
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </>
                     ) : (
-                        <div className="bg-white shadow rounded-lg p-12">
-                            <div className="text-center">
-                                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                <p className="text-gray-500">
-                                    {searchTerm ? 'Nenhum software encontrado com sua busca' : 'Nenhum software detectado ainda'}
-                                </p>
-                            </div>
+                        <div className="text-center py-12">
+                            <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                            <p className="text-gray-500">
+                                {searchTerm ? 'Nenhum software encontrado com sua busca' : 'Nenhum software detectado ainda'}
+                            </p>
                         </div>
                     )}
                 </>
             )}
 
-            {/* Pagination */}
-            {pagination && pagination.last_page > 1 && (
-                <div className="bg-white shadow rounded-lg p-4">
-                    <div className="flex items-center justify-between">
+                {/* Pagination */}
+                {pagination && pagination.last_page > 1 && (
+                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
                         <div className="text-sm text-gray-700">
                             Mostrando {pagination.from} a {pagination.to} de {pagination.total} softwares
                         </div>
@@ -399,15 +393,15 @@ export default function Softwares() {
                             </Button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Info when no pagination needed */}
-            {pagination && pagination.last_page === 1 && (
-                <div className="text-sm text-gray-500">
-                    Mostrando {pagination.total} {pagination.total === 1 ? 'software' : 'softwares'}
-                </div>
-            )}
+                {/* Info when no pagination needed */}
+                {pagination && pagination.last_page === 1 && (
+                    <div className="mt-4 pt-4 border-t text-sm text-gray-500">
+                        Mostrando {pagination.total} {pagination.total === 1 ? 'software' : 'softwares'}
+                    </div>
+                )}
+            </div>
 
             <SoftwareComputersModal
                 open={computersModalSoftware != null}

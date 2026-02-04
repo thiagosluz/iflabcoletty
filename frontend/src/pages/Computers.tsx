@@ -536,81 +536,84 @@ export default function Computers() {
                 </div>
             </div>
 
-            <div className="flex gap-4 items-center">
-                <div className="relative w-72">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por hostname ou ID..."
-                        className="pl-8"
-                        value={search}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                    />
-                </div>
-                <Select value={labFilter} onValueChange={setLabFilter}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Filtrar por Laboratório" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos os Laboratórios</SelectItem>
-                        {labs.map(lab => (
-                            <SelectItem key={lab.id} value={String(lab.id)}>{lab.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={(v) => handleStatusFilterChange(v as StatusFilter)}>
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="online">Online</SelectItem>
-                        <SelectItem value="offline">Offline</SelectItem>
-                    </SelectContent>
-                </Select>
-                <div className="flex items-center gap-2">
-                    <Checkbox
-                        id="outdated-filter"
-                        checked={outdatedFilter}
-                        onCheckedChange={(checked) => handleOutdatedFilterChange(checked === true)}
-                    />
-                    <label htmlFor="outdated-filter" className="text-sm cursor-pointer whitespace-nowrap">
-                        Agentes desatualizados
-                    </label>
-                </div>
-                <div className="flex items-center gap-2 bg-white shadow rounded-lg px-4 py-2">
-                    <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
-                    <Select value={perPage.toString()} onValueChange={handlePerPageChange}>
-                        <SelectTrigger className="w-[100px]">
-                            <SelectValue />
+            <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex gap-4 items-center flex-wrap">
+                    <div className="relative w-72">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar por hostname ou ID..."
+                            className="pl-8"
+                            value={search}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                        />
+                    </div>
+                    <Select value={labFilter} onValueChange={setLabFilter}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Filtrar por Laboratório" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="20">20</SelectItem>
-                            <SelectItem value="50">50</SelectItem>
-                            <SelectItem value="100">100</SelectItem>
+                            <SelectItem value="all">Todos os Laboratórios</SelectItem>
+                            {labs.map(lab => (
+                                <SelectItem key={lab.id} value={String(lab.id)}>{lab.name}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
-                </div>
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant={viewMode === 'list' ? 'default' : 'outline'}
-                        size="icon"
-                        onClick={() => setViewMode('list')}
-                        title="Lista"
-                    >
-                        <List className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant={viewMode === 'grid' ? 'default' : 'outline'}
-                        size="icon"
-                        onClick={() => setViewMode('grid')}
-                        title="Grid"
-                    >
-                        <LayoutGrid className="h-4 w-4" />
-                    </Button>
+                    <Select value={statusFilter} onValueChange={(v) => handleStatusFilterChange(v as StatusFilter)}>
+                        <SelectTrigger className="w-[160px]">
+                            <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="online">Online</SelectItem>
+                            <SelectItem value="offline">Offline</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="outdated-filter"
+                            checked={outdatedFilter}
+                            onCheckedChange={(checked) => handleOutdatedFilterChange(checked === true)}
+                        />
+                        <label htmlFor="outdated-filter" className="text-sm cursor-pointer whitespace-nowrap">
+                            Agentes desatualizados
+                        </label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
+                        <Select value={perPage.toString()} onValueChange={handlePerPageChange}>
+                            <SelectTrigger className="w-[100px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="20">20</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant={viewMode === 'list' ? 'default' : 'outline'}
+                            size="icon"
+                            onClick={() => setViewMode('list')}
+                            title="Lista"
+                        >
+                            <List className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'grid' ? 'default' : 'outline'}
+                            size="icon"
+                            onClick={() => setViewMode('grid')}
+                            title="Grid"
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
             </div>
 
+            <div className="bg-white shadow rounded-lg p-6">
             {viewMode === 'list' && (
                 <div className="border rounded-md">
                     <Table>
@@ -754,10 +757,9 @@ export default function Computers() {
                 </>
             )}
 
-            {/* Pagination */}
-            {pagination && pagination.last_page > 1 && (
-                <div className="bg-white shadow rounded-lg p-4">
-                    <div className="flex items-center justify-between">
+                {/* Pagination */}
+                {pagination && pagination.last_page > 1 && (
+                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
                         <div className="text-sm text-gray-700">
                             Mostrando {pagination.from} a {pagination.to} de {pagination.total} computadores
                         </div>
@@ -807,15 +809,15 @@ export default function Computers() {
                             </Button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Info when no pagination needed */}
-            {pagination && pagination.last_page === 1 && (
-                <div className="text-sm text-gray-500">
-                    Mostrando {pagination.total} {pagination.total === 1 ? 'computador' : 'computadores'}
-                </div>
-            )}
+                {/* Info when no pagination needed */}
+                {pagination && pagination.last_page === 1 && (
+                    <div className="mt-4 pt-4 border-t text-sm text-gray-500">
+                        Mostrando {pagination.total} {pagination.total === 1 ? 'computador' : 'computadores'}
+                    </div>
+                )}
+            </div>
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={computerToDelete !== null} onOpenChange={(open) => !open && setComputerToDelete(null)}>

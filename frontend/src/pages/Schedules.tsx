@@ -291,7 +291,7 @@ export default function Schedules() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Automação e Agendamento</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">Automação e Agendamento</h1>
                     <p className="text-gray-500">Gerencie tarefas recorrentes para laboratórios.</p>
                 </div>
                 <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>

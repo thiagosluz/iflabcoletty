@@ -263,6 +263,16 @@ export default function Labs() {
             <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-bold tracking-tight">Laboratórios</h2>
                 <div className="flex gap-2">
+                    <ExportDialog
+                        trigger={
+                            <Button variant="outline">
+                                <Download className="mr-2 h-4 w-4" /> Exportar
+                            </Button>
+                        }
+                        onExport={handleExport}
+                        title="Exportar Laboratórios"
+                        description="Escolha o formato para exportar a lista de laboratórios"
+                    />
                     <Button onClick={() => { setEditingLab(null); reset(); setWallpaperFileToUpload(null); setIsOpen(true); }}>
                         <Plus className="mr-2 h-4 w-4" /> Adicionar Laboratório
                     </Button>
@@ -359,18 +369,19 @@ export default function Labs() {
                 </div>
             </div>
 
-            <div className="flex gap-4 items-center">
-                <div className="relative w-72">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por nome ou descrição..."
-                        className="pl-8"
-                        value={search}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                    />
-                </div>
-                <div className="flex items-center gap-2 bg-white shadow rounded-lg px-4 py-2">
-                    <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
+            <div className="bg-white shadow rounded-lg p-6">
+                <div className="flex gap-4 items-center flex-wrap">
+                    <div className="relative w-72">
+                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar por nome ou descrição..."
+                            className="pl-8"
+                            value={search}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-700 whitespace-nowrap">Itens por página:</label>
                         <Select value={perPage.toString()} onValueChange={handlePerPageChange}>
                             <SelectTrigger className="w-[100px]">
                                 <SelectValue />
@@ -401,18 +412,10 @@ export default function Labs() {
                             <LayoutGrid className="h-4 w-4" />
                         </Button>
                     </div>
-                    <ExportDialog
-                        trigger={
-                            <Button variant="outline">
-                                <Download className="mr-2 h-4 w-4" /> Exportar
-                            </Button>
-                        }
-                        onExport={handleExport}
-                        title="Exportar Laboratórios"
-                        description="Escolha o formato para exportar a lista de laboratórios"
-                    />
+                </div>
             </div>
 
+            <div className="bg-white shadow rounded-lg p-6">
             {viewMode === 'list' && (
                 <div className="border rounded-md">
                     <Table>
@@ -557,10 +560,9 @@ export default function Labs() {
                 </>
             )}
 
-            {/* Pagination */}
-            {pagination && pagination.last_page > 1 && (
-                <div className="bg-white shadow rounded-lg p-4">
-                    <div className="flex items-center justify-between">
+                {/* Pagination */}
+                {pagination && pagination.last_page > 1 && (
+                    <div className="mt-4 pt-4 border-t flex items-center justify-between">
                         <div className="text-sm text-gray-700">
                             Mostrando {pagination.from} a {pagination.to} de {pagination.total} laboratórios
                         </div>
@@ -610,15 +612,15 @@ export default function Labs() {
                             </Button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Info when no pagination needed */}
-            {pagination && pagination.last_page === 1 && (
-                <div className="text-sm text-gray-500">
-                    Mostrando {pagination.total} {pagination.total === 1 ? 'laboratório' : 'laboratórios'}
-                </div>
-            )}
+                {/* Info when no pagination needed */}
+                {pagination && pagination.last_page === 1 && (
+                    <div className="mt-4 pt-4 border-t text-sm text-gray-500">
+                        Mostrando {pagination.total} {pagination.total === 1 ? 'laboratório' : 'laboratórios'}
+                    </div>
+                )}
+            </div>
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={labToDelete !== null} onOpenChange={(open) => !open && setLabToDelete(null)}>
