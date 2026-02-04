@@ -12,7 +12,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, Search, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, Pencil } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, Pencil, List, LayoutGrid } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
 import {
@@ -70,6 +70,7 @@ export default function Labs() {
     const [editingLab, setEditingLab] = useState<Lab | null>(null);
     const [sortBy, setSortBy] = useState<LabSortBy>('name');
     const [sortDir, setSortDir] = useState<SortDir>('asc');
+    const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
     const { toast } = useToast();
 
     const handleSort = (column: LabSortBy) => {
@@ -382,6 +383,24 @@ export default function Labs() {
                             </SelectContent>
                         </Select>
                     </div>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant={viewMode === 'list' ? 'default' : 'outline'}
+                            size="icon"
+                            onClick={() => setViewMode('list')}
+                            title="Lista"
+                        >
+                            <List className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'grid' ? 'default' : 'outline'}
+                            size="icon"
+                            onClick={() => setViewMode('grid')}
+                            title="Grid"
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                    </div>
                     <ExportDialog
                         trigger={
                             <Button variant="outline">
@@ -394,88 +413,149 @@ export default function Labs() {
                     />
             </div>
 
-            <div className="border rounded-md">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('id')}>
-                                    ID
-                                    {sortBy === 'id' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('name')}>
-                                    Nome
-                                    {sortBy === 'name' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('description')}>
-                                    Descrição
-                                    {sortBy === 'description' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('computers_count')}>
-                                    Computadores
-                                    {sortBy === 'computers_count' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('updated_at')}>
-                                    Última Atualização
-                                    {sortBy === 'updated_at' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead className="w-[100px]">Ações</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {labs.map((lab) => (
-                            <TableRow key={lab.id}>
-                                <TableCell className="font-mono text-xs">{lab.id}</TableCell>
-                                <TableCell className="font-medium">{lab.name}</TableCell>
-                                <TableCell>{lab.description}</TableCell>
-                                <TableCell>{lab.computers_count || 0}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground">
-                                    {lab.updated_at ? new Date(lab.updated_at).toLocaleString('pt-BR') : '-'}
-                                </TableCell>
-                                <TableCell>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                                <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                            <DropdownMenuItem onClick={() => navigate(`/admin/labs/${lab.id}`)}>
-                                                Ver Detalhes
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '', default_wallpaper_url: lab.default_wallpaper_url ?? '', default_wallpaper_enabled: lab.default_wallpaper_enabled ?? true }); setWallpaperFileToUpload(null); setIsOpen(true); }}>
-                                                <Pencil className="h-4 w-4 mr-2" />
-                                                Editar
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem 
-                                                onClick={() => setLabToDelete(lab)} 
-                                                className="text-red-600"
-                                            >
-                                                Excluir
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                        {labs.length === 0 && (
+            {viewMode === 'list' && (
+                <div className="border rounded-md">
+                    <Table>
+                        <TableHeader>
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center h-24">Nenhum laboratório encontrado.</TableCell>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('id')}>
+                                        ID
+                                        {sortBy === 'id' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('name')}>
+                                        Nome
+                                        {sortBy === 'name' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('description')}>
+                                        Descrição
+                                        {sortBy === 'description' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('computers_count')}>
+                                        Computadores
+                                        {sortBy === 'computers_count' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('updated_at')}>
+                                        Última Atualização
+                                        {sortBy === 'updated_at' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="w-[100px]">Ações</TableHead>
                             </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
+                        </TableHeader>
+                        <TableBody>
+                            {labs.map((lab) => (
+                                <TableRow key={lab.id}>
+                                    <TableCell className="font-mono text-xs">{lab.id}</TableCell>
+                                    <TableCell className="font-medium">{lab.name}</TableCell>
+                                    <TableCell>{lab.description}</TableCell>
+                                    <TableCell>{lab.computers_count || 0}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                        {lab.updated_at ? new Date(lab.updated_at).toLocaleString('pt-BR') : '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                                <DropdownMenuItem onClick={() => navigate(`/admin/labs/${lab.id}`)}>
+                                                    Ver Detalhes
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '', default_wallpaper_url: lab.default_wallpaper_url ?? '', default_wallpaper_enabled: lab.default_wallpaper_enabled ?? true }); setWallpaperFileToUpload(null); setIsOpen(true); }}>
+                                                    <Pencil className="h-4 w-4 mr-2" />
+                                                    Editar
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem 
+                                                    onClick={() => setLabToDelete(lab)} 
+                                                    className="text-red-600"
+                                                >
+                                                    Excluir
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {labs.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center h-24">Nenhum laboratório encontrado.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+
+            {viewMode === 'grid' && (
+                <>
+                    {labs.length === 0 ? (
+                        <div className="border rounded-md flex items-center justify-center h-24 text-muted-foreground">
+                            Nenhum laboratório encontrado.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {labs.map((lab) => (
+                                <div
+                                    key={lab.id}
+                                    className="border rounded-lg p-4 bg-card hover:shadow-md transition-shadow flex flex-col gap-3"
+                                >
+                                    <div className="font-semibold text-base truncate" title={lab.name}>
+                                        {lab.name}
+                                    </div>
+                                    {lab.description != null && lab.description !== '' && (
+                                        <div className="text-sm text-muted-foreground line-clamp-2" title={lab.description}>
+                                            {lab.description}
+                                        </div>
+                                    )}
+                                    <div className="text-sm text-muted-foreground">
+                                        {lab.computers_count ?? 0} computador(es)
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {lab.updated_at ? new Date(lab.updated_at).toLocaleString('pt-BR') : '-'}
+                                    </div>
+                                    <div className="flex gap-2 mt-auto pt-2 border-t">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1"
+                                            onClick={() => navigate(`/admin/labs/${lab.id}`)}
+                                        >
+                                            Ver Detalhes
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => { setEditingLab(lab); reset({ name: lab.name, description: lab.description ?? '', default_wallpaper_url: lab.default_wallpaper_url ?? '', default_wallpaper_enabled: lab.default_wallpaper_enabled ?? true }); setWallpaperFileToUpload(null); setIsOpen(true); }}
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            onClick={() => setLabToDelete(lab)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
 
             {/* Pagination */}
             {pagination && pagination.last_page > 1 && (

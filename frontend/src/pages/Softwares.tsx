@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Search, Package, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Package, Download, List, LayoutGrid } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ExportDialog from '@/components/ExportDialog';
 import SoftwareComputersModal from '@/components/SoftwareComputersModal';
 import { useToast } from '@/components/ui/use-toast';
@@ -33,6 +34,7 @@ export default function Softwares() {
     const [currentPage, setCurrentPage] = useState(1);
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+    const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
     useEffect(() => {
         fetchSoftwares();
@@ -184,10 +186,28 @@ export default function Softwares() {
                             </SelectContent>
                         </Select>
                     </div>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant={viewMode === 'list' ? 'default' : 'outline'}
+                            size="icon"
+                            onClick={() => setViewMode('list')}
+                            title="Lista"
+                        >
+                            <List className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'grid' ? 'default' : 'outline'}
+                            size="icon"
+                            onClick={() => setViewMode('grid')}
+                            title="Grade"
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
             </div>
 
-            {/* Software Cards */}
+            {/* Loading */}
             {loading && softwares.length === 0 ? (
                 <div className="bg-white shadow rounded-lg p-12">
                     <div className="flex justify-center items-center h-64">
@@ -197,76 +217,133 @@ export default function Softwares() {
                         </div>
                     </div>
                 </div>
-            ) : softwares.length > 0 ? (
-                <div className="bg-white shadow rounded-lg p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Package className="h-5 w-5 text-gray-700" />
-                        <h2 className="text-lg font-semibold text-gray-900">
-                            {pagination && `Total: ${pagination.total} software(s)`}
-                        </h2>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {softwares.map((software) => (
-                            <div
-                                key={software.id}
-                                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-white to-gray-50"
-                            >
-                                <div className="flex items-start justify-between mb-2">
-                                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1">
-                                        {software.name}
-                                    </h3>
-                                    <Package className="h-5 w-5 text-blue-500 flex-shrink-0 ml-2" />
-                                </div>
-                                
-                                {software.version && (
-                                    <div className="mb-2">
-                                        <span className="text-xs text-gray-500">Versão:</span>
-                                        <span className="ml-2 text-sm font-medium text-gray-700">
-                                            {software.version}
-                                        </span>
-                                    </div>
-                                )}
-                                
-                                {software.vendor && (
-                                    <div className="mb-2">
-                                        <span className="text-xs text-gray-500">Fabricante:</span>
-                                        <span className="ml-2 text-sm text-gray-700">
-                                            {software.vendor}
-                                        </span>
-                                    </div>
-                                )}
-
-                                {software.computers_count !== undefined && (
-                                    <div className="mb-2">
-                                        <span className="text-xs text-gray-500">Computadores: </span>
-                                        <Button
-                                            variant="link"
-                                            className="h-auto p-0 ml-1 text-sm font-medium text-blue-600 hover:text-blue-800"
-                                            onClick={() => setComputersModalSoftware({ id: software.id, name: software.name })}
-                                        >
-                                            {software.computers_count} — Ver computadores
-                                        </Button>
-                                    </div>
-                                )}
-                                
-                                <div className="mt-3 pt-3 border-t border-gray-200">
-                                    <span className="text-xs text-gray-500">
-                                        Primeira detecção: {new Date(software.created_at).toLocaleDateString('pt-BR')}
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+            ) : viewMode === 'list' ? (
+                <div className="border rounded-lg bg-white shadow overflow-hidden">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Nome</TableHead>
+                                <TableHead>Versão</TableHead>
+                                <TableHead>Fabricante</TableHead>
+                                <TableHead>Computadores</TableHead>
+                                <TableHead>Primeira detecção</TableHead>
+                                <TableHead className="w-[140px]">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {softwares.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                                        {searchTerm ? 'Nenhum software encontrado com sua busca' : 'Nenhum software detectado ainda'}
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                softwares.map((software) => (
+                                    <TableRow key={software.id}>
+                                        <TableCell className="font-medium">{software.name}</TableCell>
+                                        <TableCell className="text-muted-foreground">{software.version ?? '-'}</TableCell>
+                                        <TableCell className="text-muted-foreground">{software.vendor ?? '-'}</TableCell>
+                                        <TableCell>
+                                            {software.computers_count !== undefined ? (
+                                                <Button
+                                                    variant="link"
+                                                    className="h-auto p-0 text-sm font-medium text-blue-600"
+                                                    onClick={() => setComputersModalSoftware({ id: software.id, name: software.name })}
+                                                >
+                                                    {software.computers_count} — Ver computadores
+                                                </Button>
+                                            ) : (
+                                                '-'
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">
+                                            {new Date(software.created_at).toLocaleDateString('pt-BR')}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setComputersModalSoftware({ id: software.id, name: software.name })}
+                                            >
+                                                Ver computadores
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
                 </div>
             ) : (
-                <div className="bg-white shadow rounded-lg p-12">
-                    <div className="text-center">
-                        <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500">
-                            {searchTerm ? 'Nenhum software encontrado com sua busca' : 'Nenhum software detectado ainda'}
-                        </p>
-                    </div>
-                </div>
+                <>
+                    {softwares.length > 0 ? (
+                        <div className="bg-white shadow rounded-lg p-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <Package className="h-5 w-5 text-gray-700" />
+                                <h2 className="text-lg font-semibold text-gray-900">
+                                    {pagination && `Total: ${pagination.total} software(s)`}
+                                </h2>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {softwares.map((software) => (
+                                    <div
+                                        key={software.id}
+                                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-white to-gray-50"
+                                    >
+                                        <div className="flex items-start justify-between mb-2">
+                                            <h3 className="text-lg font-semibold text-gray-900 line-clamp-2 flex-1">
+                                                {software.name}
+                                            </h3>
+                                            <Package className="h-5 w-5 text-blue-500 flex-shrink-0 ml-2" />
+                                        </div>
+                                        {software.version && (
+                                            <div className="mb-2">
+                                                <span className="text-xs text-gray-500">Versão:</span>
+                                                <span className="ml-2 text-sm font-medium text-gray-700">
+                                                    {software.version}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {software.vendor && (
+                                            <div className="mb-2">
+                                                <span className="text-xs text-gray-500">Fabricante:</span>
+                                                <span className="ml-2 text-sm text-gray-700">
+                                                    {software.vendor}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {software.computers_count !== undefined && (
+                                            <div className="mb-2">
+                                                <span className="text-xs text-gray-500">Computadores: </span>
+                                                <Button
+                                                    variant="link"
+                                                    className="h-auto p-0 ml-1 text-sm font-medium text-blue-600 hover:text-blue-800"
+                                                    onClick={() => setComputersModalSoftware({ id: software.id, name: software.name })}
+                                                >
+                                                    {software.computers_count} — Ver computadores
+                                                </Button>
+                                            </div>
+                                        )}
+                                        <div className="mt-3 pt-3 border-t border-gray-200">
+                                            <span className="text-xs text-gray-500">
+                                                Primeira detecção: {new Date(software.created_at).toLocaleDateString('pt-BR')}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-white shadow rounded-lg p-12">
+                            <div className="text-center">
+                                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                                <p className="text-gray-500">
+                                    {searchTerm ? 'Nenhum software encontrado com sua busca' : 'Nenhum software detectado ainda'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
 
             {/* Pagination */}

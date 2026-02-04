@@ -12,7 +12,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
-import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, QrCode, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, List, LayoutGrid } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
 import ExportDialog from '@/components/ExportDialog';
@@ -94,6 +94,7 @@ export default function Computers() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [sortBy, setSortBy] = useState<ComputerSortBy>('hostname');
     const [sortDir, setSortDir] = useState<SortDir>('asc');
+    const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
     const { toast } = useToast();
 
     const handleSort = (column: ComputerSortBy) => {
@@ -590,93 +591,168 @@ export default function Computers() {
                         </SelectContent>
                     </Select>
                 </div>
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant={viewMode === 'list' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => setViewMode('list')}
+                        title="Lista"
+                    >
+                        <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                        variant={viewMode === 'grid' ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => setViewMode('grid')}
+                        title="Grid"
+                    >
+                        <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
 
-            <div className="border rounded-md">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('hostname')}>
-                                    Hostname
-                                    {sortBy === 'hostname' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('machine_id')}>
-                                    ID da Máquina
-                                    {sortBy === 'machine_id' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('lab')}>
-                                    Laboratório
-                                    {sortBy === 'lab' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('status')}>
-                                    Status
-                                    {sortBy === 'status' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead>
-                                <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('updated_at')}>
-                                    Última Atualização
-                                    {sortBy === 'updated_at' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
-                                </Button>
-                            </TableHead>
-                            <TableHead className="w-[100px]">Ações</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {computers.map((pc) => (
-                            <TableRow key={pc.id}>
-                                <TableCell className="font-medium">{pc.hostname || '-'}</TableCell>
-                                <TableCell className="font-mono text-xs">{pc.machine_id}</TableCell>
-                                <TableCell>{pc.lab?.name}</TableCell>
-                                <TableCell>
+            {viewMode === 'list' && (
+                <div className="border rounded-md">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('hostname')}>
+                                        Hostname
+                                        {sortBy === 'hostname' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('machine_id')}>
+                                        ID da Máquina
+                                        {sortBy === 'machine_id' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('lab')}>
+                                        Laboratório
+                                        {sortBy === 'lab' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('status')}>
+                                        Status
+                                        {sortBy === 'status' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead>
+                                    <Button variant="ghost" className="-ml-3 h-8 font-semibold" onClick={() => handleSort('updated_at')}>
+                                        Última Atualização
+                                        {sortBy === 'updated_at' && (sortDir === 'asc' ? <ChevronUp className="ml-1 h-4 w-4" /> : <ChevronDown className="ml-1 h-4 w-4" />)}
+                                    </Button>
+                                </TableHead>
+                                <TableHead className="w-[100px]">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {computers.map((pc) => (
+                                <TableRow key={pc.id}>
+                                    <TableCell className="font-medium">{pc.hostname || '-'}</TableCell>
+                                    <TableCell className="font-mono text-xs">{pc.machine_id}</TableCell>
+                                    <TableCell>{pc.lab?.name}</TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`h-2.5 w-2.5 rounded-full ${isOnline(pc.updated_at) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            <span className="text-xs text-muted-foreground">
+                                                {isOnline(pc.updated_at) ? 'Online' : 'Offline'}
+                                            </span>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                        {new Date(pc.updated_at).toLocaleString('pt-BR')}
+                                    </TableCell>
+                                    <TableCell>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuLabel>Ações</DropdownMenuLabel>
+                                                <DropdownMenuItem onClick={() => navigate(`/admin/computers/${pc.id}`)}>
+                                                    Ver Detalhes
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem 
+                                                    onClick={() => setComputerToDelete(pc)} 
+                                                    className="text-red-600"
+                                                >
+                                                    Excluir
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {computers.length === 0 && (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center h-24">Nenhum computador encontrado.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+
+            {viewMode === 'grid' && (
+                <>
+                    {computers.length === 0 ? (
+                        <div className="border rounded-md flex items-center justify-center h-24 text-muted-foreground">
+                            Nenhum computador encontrado.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {computers.map((pc) => (
+                                <div
+                                    key={pc.id}
+                                    className="border rounded-lg p-4 bg-card hover:shadow-md transition-shadow flex flex-col gap-3"
+                                >
+                                    <div className="font-semibold text-base truncate" title={pc.hostname || pc.machine_id}>
+                                        {pc.hostname || pc.machine_id || '-'}
+                                    </div>
+                                    {pc.lab?.name && (
+                                        <div className="text-sm text-muted-foreground truncate" title={pc.lab.name}>
+                                            {pc.lab.name}
+                                        </div>
+                                    )}
                                     <div className="flex items-center gap-2">
-                                        <div className={`h-2.5 w-2.5 rounded-full ${isOnline(pc.updated_at) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${isOnline(pc.updated_at) ? 'bg-green-500' : 'bg-gray-300'}`} />
                                         <span className="text-xs text-muted-foreground">
                                             {isOnline(pc.updated_at) ? 'Online' : 'Offline'}
                                         </span>
                                     </div>
-                                </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">
-                                    {new Date(pc.updated_at).toLocaleString('pt-BR')}
-                                </TableCell>
-                                <TableCell>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                                <MoreHorizontal className="h-4 w-4" />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Ações</DropdownMenuLabel>
-                                            <DropdownMenuItem onClick={() => navigate(`/admin/computers/${pc.id}`)}>
-                                                Ver Detalhes
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem 
-                                                onClick={() => setComputerToDelete(pc)} 
-                                                className="text-red-600"
-                                            >
-                                                Excluir
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                        {computers.length === 0 && (
-                            <TableRow>
-                                <TableCell colSpan={6} className="text-center h-24">Nenhum computador encontrado.</TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-            </div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {new Date(pc.updated_at).toLocaleString('pt-BR')}
+                                    </div>
+                                    <div className="flex gap-2 mt-auto pt-2 border-t">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1"
+                                            onClick={() => navigate(`/admin/computers/${pc.id}`)}
+                                        >
+                                            Ver Detalhes
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            onClick={() => setComputerToDelete(pc)}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
 
             {/* Pagination */}
             {pagination && pagination.last_page > 1 && (
