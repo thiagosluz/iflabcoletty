@@ -22,6 +22,7 @@ import {
     Server,
     MoreVertical,
     Power,
+    RefreshCw,
     RotateCw,
     MessageSquare,
     Zap,
@@ -497,6 +498,9 @@ export default function LabDetails() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setConfirmAction({ command: 'restart', title: 'Reiniciar Laboratório', description: 'Isso enviará um comando para reiniciar TODOS os computadores deste laboratório.' })}>
                                 <RotateCw className="mr-2 h-4 w-4" /> Reiniciar Todos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setConfirmAction({ command: 'update_agent', title: 'Atualizar agente em massa', description: 'O comando será enfileirado para todos os computadores deste laboratório. Os agentes online executarão a atualização ao verificar a fila.' })}>
+                                <RefreshCw className="mr-2 h-4 w-4" /> Atualizar agente
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleLabCommand('wol')}>
                                 <Zap className="mr-2 h-4 w-4" /> Acordar Todos (WoL)

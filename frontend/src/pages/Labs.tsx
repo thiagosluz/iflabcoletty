@@ -13,7 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
 import { getApiErrorToast } from '@/lib/apiError';
-import { MoreHorizontal, Plus, Search, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, Pencil, List, LayoutGrid, FileText } from 'lucide-react';
+import { MoreHorizontal, Plus, Search, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, Trash2, Pencil, List, LayoutGrid, FileText, RefreshCw } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import ExportDialog from '@/components/ExportDialog';
 import {
@@ -482,6 +482,22 @@ export default function Labs() {
                                                     <DropdownMenuItem onClick={() => setFileTransferLab(lab)}>
                                                         <FileText className="h-4 w-4 mr-2" />
                                                         Enviar Arquivo
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        onClick={async () => {
+                                                            try {
+                                                                await apiClient.post(`/labs/${lab.id}/commands`, { command: 'update_agent', parameters: {} });
+                                                                toast({
+                                                                    title: 'Comando enviado',
+                                                                    description: `Atualização do agente enviada para o laboratório ${lab.name}. Os agentes online atualizarão ao verificar a fila.`,
+                                                                });
+                                                            } catch (error) {
+                                                                toast({ ...getApiErrorToast(error) });
+                                                            }
+                                                        }}
+                                                    >
+                                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                                        Atualizar agentes
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         onClick={() => setLabToDelete(lab)}

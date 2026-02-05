@@ -13,6 +13,7 @@ class ScheduledTask extends Model
         'target_id',
         'frequency',
         'time',
+        'command_validity_minutes',
         'days_of_week',
         'run_at_date',
         'is_active',

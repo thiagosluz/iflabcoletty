@@ -266,10 +266,16 @@ class RunScheduledTasks extends Command
                     ]);
                     $successCount++;
                 } else {
+                    $parameters = $task->command === 'message' ? ['message' => 'Tarefa agendada executada'] : [];
+                    if ($task->command_validity_minutes !== null) {
+                        $now = Carbon::now($timezone);
+                        $parameters['scheduled_at'] = $now->toIso8601String();
+                        $parameters['expires_at'] = $now->copy()->addMinutes($task->command_validity_minutes)->toIso8601String();
+                    }
                     $computer->commands()->create([
                         'user_id' => $task->user_id,
                         'command' => $task->command,
-                        'parameters' => $task->command === 'message' ? ['message' => 'Tarefa agendada executada'] : [],
+                        'parameters' => $parameters,
                         'status' => 'pending',
                     ]);
                     $successCount++;

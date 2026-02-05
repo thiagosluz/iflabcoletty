@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 import platform
+from datetime import datetime, timezone
 import logging
 import requests
 import socket
@@ -773,6 +774,26 @@ class Agent:
             logger.warning("execute_command: missing command type in cmd keys=%s", list(cmd.keys()))
             return
         logger.info("Executing command %s (ID: %s)", command_type, command_id)
+
+        # Check scheduled command expiration (computer was off at scheduled time)
+        expires_at_str = params.get('expires_at')
+        if expires_at_str:
+            try:
+                # Parse ISO 8601 (may include timezone)
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                else:
+                    expires_at = expires_at.astimezone(timezone.utc)
+                if datetime.now(timezone.utc) > expires_at:
+                    self.update_command_status(
+                        command_id, 'failed',
+                        output='Comando expirado - o computador estava desligado no horário agendado.'
+                    )
+                    logger.info("Command %s expired (expires_at=%s), skipped execution", command_id, expires_at_str)
+                    return
+            except (ValueError, TypeError) as e:
+                logger.warning("Could not parse expires_at %s: %s, proceeding with execution", expires_at_str, e)
 
         try:
             self.update_command_status(command_id, 'processing')

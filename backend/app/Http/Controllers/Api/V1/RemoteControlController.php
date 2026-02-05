@@ -31,7 +31,18 @@ class RemoteControlController extends Controller
             'parameters' => 'nullable|array',
             'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
             'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
+            'parameters.cmd_line' => 'nullable|string|max:10000',
+            'parameters.command' => 'nullable|string|max:10000',
         ]);
+
+        if ($validated['command'] === 'terminal') {
+            $p = $validated['parameters'] ?? [];
+            $text = $p['cmd_line'] ?? $p['command'] ?? '';
+            if (trim((string) $text) === '') {
+                return response()->json(['message' => 'Comando terminal: informe o texto em parameters.cmd_line ou parameters.command.'], 422);
+            }
+            $validated['parameters'] = array_merge($p, ['cmd_line' => $text]);
+        }
 
         if ($validated['command'] === 'wol') {
             try {
@@ -79,11 +90,22 @@ class RemoteControlController extends Controller
         $validated = $request->validate([
             'computer_ids' => 'required|array',
             'computer_ids.*' => 'exists:computers,id',
-            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,set_hostname',
+            'command' => 'required|string|in:shutdown,restart,lock,logoff,message,wol,screenshot,ps_list,ps_kill,terminal,install_software,update_agent,set_hostname',
             'parameters' => 'nullable|array',
             'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
             'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
+            'parameters.cmd_line' => 'nullable|string|max:10000',
+            'parameters.command' => 'nullable|string|max:10000',
         ]);
+
+        if ($validated['command'] === 'terminal') {
+            $p = $validated['parameters'] ?? [];
+            $text = $p['cmd_line'] ?? $p['command'] ?? '';
+            if (trim((string) $text) === '') {
+                return response()->json(['message' => 'Comando terminal: informe o texto em parameters.cmd_line ou parameters.command.'], 422);
+            }
+            $validated['parameters'] = array_merge($p, ['cmd_line' => $text]);
+        }
 
         $computers = Computer::whereIn('id', $validated['computer_ids'])->get();
         $count = 0;
@@ -122,7 +144,18 @@ class RemoteControlController extends Controller
             'parameters' => 'nullable|array',
             'parameters.new_hostname' => 'required_if:command,set_hostname|string|max:63|regex:/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/',
             'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
+            'parameters.cmd_line' => 'nullable|string|max:10000',
+            'parameters.command' => 'nullable|string|max:10000',
         ]);
+
+        if ($validated['command'] === 'terminal') {
+            $p = $validated['parameters'] ?? [];
+            $text = $p['cmd_line'] ?? $p['command'] ?? '';
+            if (trim((string) $text) === '') {
+                return response()->json(['message' => 'Comando terminal: informe o texto em parameters.cmd_line ou parameters.command.'], 422);
+            }
+            $validated['parameters'] = array_merge($p, ['cmd_line' => $text]);
+        }
 
         $computers = $lab->computers;
         $count = 0;

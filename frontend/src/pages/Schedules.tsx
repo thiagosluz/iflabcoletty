@@ -66,6 +66,7 @@ interface ScheduledTask {
     target_id: number;
     frequency: 'daily' | 'weekly' | 'monthly' | 'once';
     time: string;
+    command_validity_minutes: number | null;
     days_of_week: number[] | null;
     run_at_date: string | null;
     is_active: boolean;
@@ -134,6 +135,7 @@ export default function Schedules() {
         target_id: '',
         frequency: 'daily',
         time: '22:00',
+        command_validity_minutes: null as number | null,
         days_of_week: [] as number[],
         run_at_date: '',
         is_active: true
@@ -242,6 +244,7 @@ export default function Schedules() {
             target_id: '',
             frequency: 'daily',
             time: '22:00',
+            command_validity_minutes: null,
             days_of_week: [],
             run_at_date: '',
             is_active: true
@@ -354,6 +357,29 @@ export default function Schedules() {
                                 value={formData.time}
                                 onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                             />
+                        </div>
+
+                        <div className="grid gap-2">
+                            <Label htmlFor="validity">Validade do comando</Label>
+                            <Select
+                                value={formData.command_validity_minutes === null ? 'none' : String(formData.command_validity_minutes)}
+                                onValueChange={(val) => setFormData({ ...formData, command_validity_minutes: val === 'none' ? null : parseInt(val, 10) })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione a validade" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sem validade</SelectItem>
+                                    <SelectItem value="5">5 minutos</SelectItem>
+                                    <SelectItem value="10">10 minutos</SelectItem>
+                                    <SelectItem value="15">15 minutos</SelectItem>
+                                    <SelectItem value="30">30 minutos</SelectItem>
+                                    <SelectItem value="60">60 minutos</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Se o computador estiver desligado no horário agendado, o comando não será executado ao ligar depois desse prazo.
+                            </p>
                         </div>
 
                         <div className="grid gap-2">
@@ -511,6 +537,7 @@ export default function Schedules() {
                             <TableHead>Alvo</TableHead>
                             <TableHead>Frequência</TableHead>
                             <TableHead>Horário</TableHead>
+                            <TableHead>Validade</TableHead>
                             <TableHead>Última Execução</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
@@ -519,7 +546,7 @@ export default function Schedules() {
                     <TableBody>
                         {tasks.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                                     Nenhuma tarefa agendada encontrada.
                                 </TableCell>
                             </TableRow>
@@ -540,6 +567,9 @@ export default function Schedules() {
                                         {getFrequencyLabel(task.frequency, task.days_of_week, task.run_at_date)}
                                     </TableCell>
                                     <TableCell className="font-mono">{task.time.substring(0, 5)}</TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                        {task.command_validity_minutes != null ? `${task.command_validity_minutes} min` : 'Sem validade'}
+                                    </TableCell>
                                     <TableCell className="text-sm text-gray-500">
                                         {task.last_run_at ? new Date(task.last_run_at).toLocaleString('pt-BR') : '-'}
                                     </TableCell>

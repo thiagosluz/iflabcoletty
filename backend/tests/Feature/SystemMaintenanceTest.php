@@ -83,9 +83,14 @@ class SystemMaintenanceTest extends TestCase
     {
         $user = $this->actingAsUser();
 
-        // Warning: This clears the queue. In a test environment with redis it might be okay.
         $response = $this->postJson('/api/v1/system/queue/clear', ['connection' => 'redis', 'queue' => 'default'], $this->getAuthHeaders($user));
 
-        $response->assertStatus(200);
+        // Endpoint returns 400 when app queue driver is not Redis (e.g. sync in phpunit/CI)
+        if (config('queue.default') !== 'redis') {
+            $response->assertStatus(400)
+                ->assertJsonFragment(['message' => 'Limpeza de fila só funciona com Redis. Conexão atual: '.config('queue.default')]);
+        } else {
+            $response->assertStatus(200);
+        }
     }
 }
