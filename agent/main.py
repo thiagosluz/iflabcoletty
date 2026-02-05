@@ -909,7 +909,7 @@ exit 1
                     output = "Missing PID parameter"
             
             elif command_type == 'terminal':
-                cmd_text = params.get('command')
+                cmd_text = params.get('command') or params.get('cmd_line')
                 if cmd_text:
                     # Be careful with shell=True!
                     result = subprocess.run(cmd_text, shell=True, capture_output=True, text=True, timeout=30)
@@ -921,34 +921,6 @@ exit 1
             
             elif command_type == 'receive_file':
                 success, output = self.receive_file(params)
-
-            # --- Update status ---
-            status = 'completed' if success else 'failed'
-                cmd_line = params.get('cmd_line')
-                if cmd_line:
-                    try:
-                        # Execute command with shell=True for flexibility
-                        result = subprocess.run(cmd_line, shell=True, capture_output=True, text=True, timeout=30)
-                        
-                        # Combine stdout and stderr
-                        output = result.stdout
-                        if result.stderr:
-                            output += f"\n[STDERR]\n{result.stderr}"
-                            
-                        # If output is empty but command succeeded
-                        if not output and result.returncode == 0:
-                            output = "[Command executed successfully with no output]"
-                            
-                        success = True # Even if stderr exists, execution itself was successful in running
-                    except subprocess.TimeoutExpired:
-                        output = "Command timed out after 30 seconds."
-                        success = False
-                    except Exception as e:
-                        output = str(e)
-                        success = False
-                else:
-                    output = "Missing cmd_line parameter"
-                    success = False
 
             elif command_type == 'install_software':
                 method = params.get('method')  # 'upload', 'url', 'network'
