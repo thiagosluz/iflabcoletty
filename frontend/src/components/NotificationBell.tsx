@@ -20,7 +20,7 @@ interface Notification {
     message: string;
     read: boolean;
     created_at: string;
-    data?: Record<string, any>;
+    data?: Record<string, unknown>;
 }
 
 export default function NotificationBell() {
@@ -48,9 +48,9 @@ export default function NotificationBell() {
         }
     }, []);
 
-    // Fetch unread count on mount
+    // Fetch unread count on mount (defer to satisfy react-hooks/set-state-in-effect)
     useEffect(() => {
-        void fetchUnreadCount();
+        queueMicrotask(() => { void fetchUnreadCount(); });
     }, [fetchUnreadCount]);
 
     useEffect(() => {
@@ -61,12 +61,22 @@ export default function NotificationBell() {
             return;
         }
 
-        let userChannel: any = null;
-        let notificationsChannel: any = null;
+        let userChannel: ReturnType<typeof echo.private> | null = null;
+        let notificationsChannel: ReturnType<typeof echo.private> | null = null;
         let userId: number | null = null;
 
-        // Helper function to handle notification received
-        const handleNotificationReceived = (eventData: any, source: string) => {
+        interface NotificationEventData {
+            id: number;
+            type: string;
+            title: string;
+            message: string;
+            read?: boolean;
+            created_at: string;
+            data?: Record<string, unknown>;
+            user_id?: number;
+        }
+
+        const handleNotificationReceived = (eventData: NotificationEventData, source: string) => {
             console.log(`Notification received on ${source}:`, eventData);
             
             // Filter notifications by user_id if available
@@ -135,19 +145,19 @@ export default function NotificationBell() {
                             console.log('NotificationBell: Subscribed to user channel:', `user.${userId}`);
                         });
 
-                        userChannel.error((error: any) => {
+                        userChannel.error((error: unknown) => {
                             console.error('NotificationBell: Error subscribing to user channel:', error);
                             console.error('NotificationBell: Error details:', JSON.stringify(error, null, 2));
                         });
 
                         // Try both event name formats
                         // Format 1: with dot prefix (Laravel Echo namespace)
-                        userChannel.listen('.notification.created', (eventData: any) => {
+                        userChannel.listen('.notification.created', (eventData: NotificationEventData) => {
                             handleNotificationReceived(eventData, 'user channel (dot format)');
                         });
 
                         // Format 2: without dot prefix (direct event name)
-                        userChannel.listen('notification.created', (eventData: any) => {
+                        userChannel.listen('notification.created', (eventData: NotificationEventData) => {
                             handleNotificationReceived(eventData, 'user channel (direct format)');
                         });
 
@@ -156,10 +166,10 @@ export default function NotificationBell() {
                         appUserChannel.subscribed(() => {
                             console.log('NotificationBell: Subscribed to App.Models.User channel:', `App.Models.User.${userId}`);
                         });
-                        appUserChannel.listen('.notification.created', (eventData: any) => {
+                        appUserChannel.listen('.notification.created', (eventData: NotificationEventData) => {
                             handleNotificationReceived(eventData, 'App.Models.User channel');
                         });
-                        appUserChannel.listen('notification.created', (eventData: any) => {
+                        appUserChannel.listen('notification.created', (eventData: NotificationEventData) => {
                             handleNotificationReceived(eventData, 'App.Models.User channel (direct)');
                         });
 
@@ -170,16 +180,16 @@ export default function NotificationBell() {
                             console.log('NotificationBell: Subscribed to notifications channel');
                         });
 
-                        notificationsChannel.error((error: any) => {
+                        notificationsChannel.error((error: unknown) => {
                             console.error('NotificationBell: Error subscribing to notifications channel:', error);
                             console.error('NotificationBell: Error details:', JSON.stringify(error, null, 2));
                         });
 
-                        notificationsChannel.listen('.notification.created', (eventData: any) => {
+                        notificationsChannel.listen('.notification.created', (eventData: NotificationEventData) => {
                             handleNotificationReceived(eventData, 'notifications channel (dot format)');
                         });
 
-                        notificationsChannel.listen('notification.created', (eventData: any) => {
+                        notificationsChannel.listen('notification.created', (eventData: NotificationEventData) => {
                             handleNotificationReceived(eventData, 'notifications channel (direct format)');
                         });
                     } catch (error) {
@@ -227,9 +237,8 @@ export default function NotificationBell() {
     }, []); // Empty dependency array - only run once on mount
 
     useEffect(() => {
-        if (isOpen) {
-            void fetchNotifications();
-        }
+        if (!isOpen) return;
+        queueMicrotask(() => { void fetchNotifications(); });
     }, [isOpen, fetchNotifications]);
 
     const handleMarkAsRead = async (notification: Notification) => {

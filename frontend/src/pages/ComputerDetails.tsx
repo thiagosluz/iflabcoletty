@@ -76,7 +76,7 @@ interface ActivityLog {
     id: number;
     type: string;
     description: string;
-    payload: any;
+    payload: unknown;
     created_at: string;
 }
 
@@ -86,8 +86,8 @@ interface ComputerMetric {
     memory_usage_percent: number;
     memory_total_gb: number;
     memory_free_gb: number;
-    disk_usage: any[];
-    network_stats: any;
+    disk_usage: Array<{ mount_point?: string; used_gb?: number; total_gb?: number; usage_percent?: number }>;
+    network_stats: unknown;
     uptime_seconds: number;
     processes_count: number;
     recorded_at: string;
@@ -147,7 +147,7 @@ export default function ComputerDetails() {
     // Supervision State
     const [lastScreenshot, setLastScreenshot] = useState<string | null>(null);
     const [loadingScreenshot, setLoadingScreenshot] = useState(false);
-    const [processes, setProcesses] = useState<any[]>([]);
+    const [processes, setProcesses] = useState<Array<Record<string, unknown>>>([]);
     const [loadingProcesses, setLoadingProcesses] = useState(false);
     const [autoRefreshScreen, setAutoRefreshScreen] = useState(false);
 
@@ -165,35 +165,39 @@ export default function ComputerDetails() {
         if (computer) {
             setWolMacEdit(computer.wol_mac ?? '');
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync wol_mac from computer only when id/wol_mac change
     }, [computer?.id, computer?.wol_mac]);
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (autoRefreshScreen && id) {
-            fetchScreenshot(); // Initial fetch
+            fetchScreenshot();
             interval = setInterval(fetchScreenshot, 5000);
         }
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- id and autoRefreshScreen drive this; fetchScreenshot is stable
     }, [autoRefreshScreen, id]);
 
     useEffect(() => {
         fetchComputer();
         fetchMetrics();
-        // Refresh metrics every 30s
         const interval = setInterval(fetchMetrics, 30000);
         return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when route id changes only
     }, [id]);
 
     useEffect(() => {
         if (computer) {
             fetchSoftwares();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination and search drive refetch elsewhere
     }, [computer, softwareCurrentPage, softwarePerPage, softwareSearch]);
 
     useEffect(() => {
         if (computer) {
             fetchActivities();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination drives refetch
     }, [computer, activityCurrentPage, activityPerPage]);
 
     const fetchComputer = async () => {
@@ -308,7 +312,7 @@ export default function ComputerDetails() {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
-    const handleCommand = async (command: string, params?: any) => {
+    const handleCommand = async (command: string, params?: unknown) => {
         if (!id) return;
         try {
             // For immediate return commands like screenshot/ps_list, we might need to poll for status
@@ -377,7 +381,7 @@ export default function ComputerDetails() {
                 // Note: The correct way would be to GET /api/v1/commands/{id}, but we didn't add that to routes.
                 // Let's use the list of commands for the computer and filter by ID since we are in the context of the computer.
                 const res = await apiClient.get(`/computers/${id}/commands`);
-                const cmd = res.data.data.find((c: any) => c.id === commandId);
+                const cmd = res.data.data.find((c: { id: number }) => c.id === commandId);
 
                 if (cmd && (cmd.status === 'completed' || cmd.status === 'failed')) {
                     clearInterval(interval);
@@ -465,7 +469,7 @@ export default function ComputerDetails() {
                 attempts++;
                 try {
                     const res = await apiClient.get(`/computers/${id}/commands`);
-                    const commandObj = res.data.data.find((c: any) => c.id === cmdId);
+                    const commandObj = res.data.data.find((c: { id: number }) => c.id === cmdId);
 
                     if (commandObj && (commandObj.status === 'completed' || commandObj.status === 'failed')) {
                         clearInterval(interval);
@@ -796,7 +800,7 @@ export default function ComputerDetails() {
                         <div className="mt-6">
                             <h3 className="text-sm font-medium text-gray-700 mb-3">Armazenamento</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {latestMetric.disk_usage.map((disk: any, idx: number) => (
+                                {latestMetric.disk_usage.map((disk: { mount?: string; percent?: number; free_gb?: number; total_gb?: number }, idx: number) => (
                                     <div key={idx} className="bg-gray-50 rounded-md p-3 border border-gray-100 flex items-center gap-4">
                                         <HardDrive className="h-8 w-8 text-gray-400" />
                                         <div className="flex-1">
@@ -987,7 +991,7 @@ export default function ComputerDetails() {
                                                         title: 'Download iniciado!',
                                                         description: 'O QR code foi baixado com sucesso.',
                                                     });
-                                                } catch (error) {
+                                                } catch {
                                                     toast({
                                                         title: 'Erro',
                                                         description: 'Não foi possível baixar o QR code.',

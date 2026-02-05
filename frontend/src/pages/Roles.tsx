@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -62,33 +62,33 @@ export default function Roles() {
 
     const selectedPermissions = watch('permissions') || [];
 
-    const fetchRoles = async () => {
+    const fetchPermissions = useCallback(async () => {
+        try {
+            const response = await apiClient.get('/permissions');
+            setPermissions(response.data || []);
+        } catch (error: unknown) {
+            console.error('Erro ao carregar permissions:', error);
+        }
+    }, []);
+
+    const fetchRoles = useCallback(async () => {
         try {
             const response = await apiClient.get('/roles');
             setRoles(response.data || []);
         } catch (error: unknown) {
             toast({ ...getApiErrorToast(error) });
         }
-    };
-
-    const fetchPermissions = async () => {
-        try {
-            const response = await apiClient.get('/permissions');
-            setPermissions(response.data || []);
-        } catch (error: any) {
-            console.error('Erro ao carregar permissions:', error);
-        }
-    };
+    }, [toast]);
 
     useEffect(() => {
         fetchRoles();
         fetchPermissions();
-    }, []);
+    }, [fetchRoles, fetchPermissions]);
 
     const onSubmit = async (data: RoleFormData) => {
         try {
             // Remove permissions if empty array
-            const payload: any = { ...data };
+            const payload: Record<string, unknown> = { ...data };
             if (!payload.permissions || payload.permissions.length === 0) {
                 delete payload.permissions;
             }
@@ -105,10 +105,11 @@ export default function Roles() {
             setEditingRole(null);
             reset();
             fetchRoles();
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const ax = error as { response?: { data?: { message?: string } } };
             toast({
                 title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao salvar role',
+                description: ax.response?.data?.message ?? 'Falha ao salvar role',
                 variant: 'destructive'
             });
         }

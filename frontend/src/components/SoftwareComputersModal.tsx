@@ -42,13 +42,17 @@ export default function SoftwareComputersModal({
 
     useEffect(() => {
         if (!open || softwareId == null) {
-            setComputers([]);
-            setError(null);
+            queueMicrotask(() => {
+                setComputers([]);
+                setError(null);
+            });
             return;
         }
         let cancelled = false;
-        setLoading(true);
-        setError(null);
+        queueMicrotask(() => {
+            setLoading(true);
+            setError(null);
+        });
         apiClient
             .get(`/softwares/${softwareId}`)
             .then((res) => {

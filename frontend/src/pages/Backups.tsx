@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -73,20 +73,14 @@ export default function Backups() {
     const [isRestoring, setIsRestoring] = useState<number | null>(null);
     const { toast } = useToast();
 
-    const fetchBackups = async () => {
+    const fetchBackups = useCallback(async () => {
         try {
             const params = new URLSearchParams();
             params.append('page', currentPage.toString());
             params.append('per_page', perPage.toString());
-            if (statusFilter !== 'all') {
-                params.append('status', statusFilter);
-            }
-            if (typeFilter !== 'all') {
-                params.append('type', typeFilter);
-            }
-            if (search) {
-                params.append('search', search);
-            }
+            if (statusFilter !== 'all') params.append('status', statusFilter);
+            if (typeFilter !== 'all') params.append('type', typeFilter);
+            if (search) params.append('search', search);
 
             const response = await apiClient.get(`/backups?${params.toString()}`);
             setBackups(response.data.data || []);
@@ -102,24 +96,23 @@ export default function Backups() {
             console.error('Error fetching backups:', error);
             toast({ ...getApiErrorToast(error) });
         }
-    };
+    }, [currentPage, perPage, statusFilter, typeFilter, search, toast]);
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         try {
             const response = await apiClient.get('/backups/stats');
             setStats(response.data);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error fetching stats:', error);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchBackups();
         fetchStats();
-    }, [currentPage, perPage, statusFilter, typeFilter]);
+    }, [fetchBackups, fetchStats]);
 
     useEffect(() => {
-        // Debounce search
         const timer = setTimeout(() => {
             if (currentPage === 1) {
                 fetchBackups();
@@ -127,31 +120,24 @@ export default function Backups() {
                 setCurrentPage(1);
             }
         }, 500);
-
         return () => clearTimeout(timer);
-    }, [search]);
+    }, [search, currentPage, fetchBackups]);
 
-    // Poll for pending backups status updates
     useEffect(() => {
         const hasPendingBackups = backups.some(b => b.status === 'pending');
-        
-        if (!hasPendingBackups) {
-            return; // No need to poll if there are no pending backups
-        }
-
+        if (!hasPendingBackups) return;
         const interval = setInterval(() => {
             fetchBackups();
             fetchStats();
-        }, 5000); // Poll every 5 seconds
-
+        }, 5000);
         return () => clearInterval(interval);
-    }, [backups]);
+    }, [backups, fetchBackups, fetchStats]);
 
     const handleCreateBackup = async () => {
         try {
             setIsCreating(true);
-            const response = await apiClient.post('/backups', { type: 'database' });
-            
+            await apiClient.post('/backups', { type: 'database' });
+
             toast({
                 title: 'Backup iniciado',
                 description: 'O backup está sendo criado...',
@@ -215,10 +201,11 @@ export default function Backups() {
 
             fetchBackups();
             fetchStats();
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const ax = error as { response?: { data?: { message?: string } } };
             toast({
                 title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao excluir backup',
+                description: ax.response?.data?.message ?? 'Falha ao excluir backup',
                 variant: 'destructive',
             });
         } finally {

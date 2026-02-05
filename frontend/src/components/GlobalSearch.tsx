@@ -12,10 +12,22 @@ import {
 import { Search } from "lucide-react"
 import apiClient from "@/lib/axios"
 
+interface SearchComputer { id: number; hostname?: string; machine_id?: string; lab?: { name: string } }
+interface SearchLab { id: number; name: string }
+interface SearchSoftware { id: number; name: string; version?: string }
+interface SearchResults {
+  computers: SearchComputer[];
+  labs: SearchLab[];
+  softwares: SearchSoftware[];
+  users: unknown[];
+}
+
+const emptyResults: SearchResults = { computers: [], labs: [], softwares: [], users: [] }
+
 export function GlobalSearch() {
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
-  const [results, setResults] = React.useState<any>({ computers: [], labs: [], softwares: [], users: [] })
+  const [results, setResults] = React.useState<SearchResults>(emptyResults)
   const navigate = useNavigate()
 
   React.useEffect(() => {
@@ -31,14 +43,14 @@ export function GlobalSearch() {
 
   React.useEffect(() => {
     if (query.length < 2) {
-      setResults({ computers: [], labs: [], softwares: [], users: [] })
+      setResults(emptyResults)
       return
     }
 
     const timer = setTimeout(async () => {
       try {
-        const { data } = await apiClient.get(`/search?q=${query}`)
-        setResults(data)
+        const { data } = await apiClient.get<SearchResults>(`/search?q=${query}`)
+        setResults(data ?? emptyResults)
       } catch (e) {
         console.error(e)
       }
@@ -58,7 +70,7 @@ export function GlobalSearch() {
         onClick={() => {
             setOpen(true);
             setQuery("");
-            setResults({ computers: [], labs: [], softwares: [], users: [] });
+            setResults(emptyResults);
         }}
         className="inline-flex items-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2 w-full justify-start text-sm text-muted-foreground sm:pr-12 md:w-40 lg:w-64 relative"
       >
@@ -76,7 +88,7 @@ export function GlobalSearch() {
           
           {results.computers.length > 0 && (
             <CommandGroup heading="Computadores">
-              {results.computers.map((pc: any) => (
+              {results.computers.map((pc: SearchComputer) => (
                 <CommandItem key={pc.id} onSelect={() => runCommand(() => navigate(`/admin/computers/${pc.id}`))}>
                   <div className="flex flex-col">
                     <span>{pc.hostname || pc.machine_id}</span>
@@ -91,7 +103,7 @@ export function GlobalSearch() {
             <>
               <CommandSeparator />
               <CommandGroup heading="Laboratórios">
-                {results.labs.map((lab: any) => (
+                {results.labs.map((lab: SearchLab) => (
                   <CommandItem key={lab.id} onSelect={() => runCommand(() => navigate(`/admin/labs/${lab.id}`))}>
                     <span>{lab.name}</span>
                   </CommandItem>
@@ -104,7 +116,7 @@ export function GlobalSearch() {
             <>
               <CommandSeparator />
               <CommandGroup heading="Softwares">
-                {results.softwares.map((sw: any) => (
+                {results.softwares.map((sw: SearchSoftware) => (
                   <CommandItem key={sw.id} onSelect={() => runCommand(() => navigate(`/admin/softwares?search=${sw.name}`))}>
                     <div className="flex flex-col">
                         <span>{sw.name}</span>

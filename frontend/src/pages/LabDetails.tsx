@@ -181,21 +181,18 @@ export default function LabDetails() {
     const { toast } = useToast();
 
     useEffect(() => {
-        if (id) {
-            fetchLabDetails();
-        }
+        if (id) fetchLabDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when id changes only
     }, [id]);
 
     useEffect(() => {
-        if (id) {
-            fetchComputers();
-        }
+        if (id) fetchComputers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination/filters drive refetch
     }, [id, computerCurrentPage, computerPerPage, computerSearch, computerStatusFilter, computerSortBy, computerSortDir]);
 
     useEffect(() => {
-        if (id) {
-            fetchSoftwares();
-        }
+        if (id) fetchSoftwares();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination/search drive refetch
     }, [id, softwareCurrentPage, softwarePerPage, softwareSearch]);
 
     const fetchLabDetails = async () => {
@@ -297,7 +294,7 @@ export default function LabDetails() {
         }
     };
 
-    const handleLabCommand = async (command: string, params: any = {}) => {
+    const handleLabCommand = async (command: string, params: Record<string, unknown> = {}) => {
         if (!id) return;
         try {
             await apiClient.post(`/labs/${id}/commands`, { command, parameters: params });

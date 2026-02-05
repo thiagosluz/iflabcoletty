@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Monitor, Activity, Server, Cpu, MemoryStick, HardDrive, Package } from 'lucide-react';
+import { Monitor, Activity, Server, Cpu, MemoryStick, Package } from 'lucide-react';
 import echo from '@/lib/echo';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import {
     Select,
     SelectContent,
@@ -70,15 +70,11 @@ export default function Dashboard() {
     const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d'>('24h');
     const navigate = useNavigate();
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             const params: Record<string, string | number> = {};
-            if (selectedLab !== 'all') {
-                params.lab_id = selectedLab;
-            }
-            const hours =
-                timeRange === '1h' ? 1 :
-                timeRange === '7d' ? 24 * 7 : 24;
+            if (selectedLab !== 'all') params.lab_id = selectedLab;
+            const hours = timeRange === '1h' ? 1 : timeRange === '7d' ? 24 * 7 : 24;
             params.hours = hours;
 
             const [statsRes, historyRes] = await Promise.all([
@@ -86,10 +82,11 @@ export default function Dashboard() {
                 apiClient.get('/dashboard/history', { params })
             ]);
             setStats(statsRes.data);
-            setHistory(historyRes.data.map((h: any) => ({
+            interface HistoryPoint { avg_cpu?: string | number; avg_memory?: string | number; hour: string }
+            setHistory(historyRes.data.map((h: HistoryPoint) => ({
                 ...h,
-                avg_cpu: parseFloat(h.avg_cpu),
-                avg_memory: parseFloat(h.avg_memory),
+                avg_cpu: parseFloat(String(h.avg_cpu ?? 0)),
+                avg_memory: parseFloat(String(h.avg_memory ?? 0)),
                 hour: new Date(h.hour).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             })));
         } catch (error) {
@@ -97,7 +94,7 @@ export default function Dashboard() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedLab, timeRange]);
 
     useEffect(() => {
         const fetchLabs = async () => {
@@ -109,30 +106,21 @@ export default function Dashboard() {
                 console.error('Falha ao buscar laboratórios', e);
             }
         };
-
         fetchLabs();
         fetchData();
-
-        // Listen for real-time updates via WebSocket
         const token = localStorage.getItem('token');
         if (token) {
             const dashboardChannel = echo.private('dashboard');
-            
             dashboardChannel.listen('.computer.status.changed', () => fetchData());
             dashboardChannel.listen('.software.installed', () => fetchData());
             dashboardChannel.listen('.hardware.alert', () => fetchData());
-
-            return () => {
-                echo.leave('dashboard');
-            };
+            return () => { echo.leave('dashboard'); };
         }
-    }, []);
+    }, [fetchData]);
 
-    // Refetch when filters change
     useEffect(() => {
         fetchData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedLab, timeRange]);
+    }, [fetchData]);
 
     if (loading || !stats) {
         return (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
@@ -96,7 +96,7 @@ export default function Labs() {
     const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
     const [wallpaperFileToUpload, setWallpaperFileToUpload] = useState<File | null>(null);
 
-    const fetchLabs = async () => {
+    const fetchLabs = useCallback(async () => {
         try {
             const params = new URLSearchParams();
             params.append('page', currentPage.toString());
@@ -118,11 +118,11 @@ export default function Labs() {
         } catch (error) {
             console.error(error);
         }
-    };
+    }, [search, currentPage, perPage, sortBy, sortDir]);
 
     useEffect(() => {
         fetchLabs();
-    }, [search, currentPage, perPage, sortBy, sortDir]);
+    }, [fetchLabs]);
 
     const handlePerPageChange = (value: string) => {
         setPerPage(parseInt(value));
@@ -189,7 +189,7 @@ export default function Labs() {
             }
             
             setLabToDelete(null);
-        } catch (error) {
+        } catch {
             toast({ title: 'Erro', description: 'Falha ao excluir laboratório', variant: 'destructive' });
         } finally {
             setIsDeleting(false);
@@ -229,7 +229,7 @@ export default function Labs() {
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
-        } catch (error: any) {
+        } catch (error: unknown) {
             let errorMessage = 'Falha ao exportar laboratórios';
             
             if (error.response) {
@@ -241,7 +241,7 @@ export default function Labs() {
                         const text = await error.response.data.text();
                         const errorData = JSON.parse(text);
                         errorMessage = errorData.message || errorMessage;
-                    } catch (e) {
+                    } catch {
                         errorMessage = error.response.statusText || errorMessage;
                     }
                 } else {

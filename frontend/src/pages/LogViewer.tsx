@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import LogViewerService, { LogFile, LogContent } from '@/services/LogViewerService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,23 +52,19 @@ export default function LogViewer() {
         return () => clearInterval(interval);
     }, [autoRefresh, selectedFile]);
 
-    const fetchFiles = async () => {
+    const fetchFiles = useCallback(async () => {
         try {
             setLoadingFiles(true);
             setError(null);
             const data = await LogViewerService.getFiles();
             setFiles(data);
-            if (data.length > 0 && !selectedFile) {
-                // Optionally select the first file, or let user select
-                // setSelectedFile(data[0].filename); 
-            }
         } catch (err) {
             setError('Failed to load log files.');
             console.error(err);
         } finally {
             setLoadingFiles(false);
         }
-    };
+    }, []);
 
     const fetchContent = async (filename: string, silent = false) => {
         try {
@@ -86,7 +82,7 @@ export default function LogViewer() {
 
     useEffect(() => {
         fetchFiles();
-    }, []);
+    }, [fetchFiles]);
 
     useEffect(() => {
         if (selectedFile) {
@@ -160,7 +156,7 @@ export default function LogViewer() {
                                     className="h-8 pl-8 text-xs"
                                 />
                             </div>
-                            <Select value={fileSort} onValueChange={(v: any) => setFileSort(v)}>
+                            <Select value={fileSort} onValueChange={(v: string) => setFileSort(v)}>
                                 <SelectTrigger className="h-8 text-xs">
                                     <SelectValue placeholder="Ordenar por" />
                                 </SelectTrigger>

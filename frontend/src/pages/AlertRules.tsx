@@ -10,10 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { getApiErrorToast } from '@/lib/apiError';
-import { Plus, Pencil, Trash2, Settings } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 interface Lab {
@@ -28,7 +27,7 @@ export default function AlertRules() {
     const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
     const { toast } = useToast();
 
-    const { register, control, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<Partial<AlertRule>>();
+    const { register, control, handleSubmit, reset, watch, formState: { errors } } = useForm<Partial<AlertRule>>();
     const watchType = watch('type');
 
     useEffect(() => {
@@ -48,6 +47,7 @@ export default function AlertRules() {
                 notification_channels: ['database'],
             });
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset from useForm is stable; omit to avoid unnecessary syncs
     }, [editingRule, isOpen]);
 
     const fetchRules = async () => {
@@ -63,7 +63,9 @@ export default function AlertRules() {
         try {
             const { data } = await apiClient.get('/labs');
             setLabs(data.data || []);
-        } catch (error) { }
+        } catch {
+            // ignore
+        }
     };
 
     const onSubmit = async (data: Partial<AlertRule>) => {

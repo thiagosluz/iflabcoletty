@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Alert } from '@/types/alerts';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle2, AlertTriangle, AlertCircle, Info, Filter, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, AlertCircle, Info, RefreshCw, Filter } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { getApiErrorToast } from '@/lib/apiError';
 
@@ -21,7 +21,7 @@ export default function Alerts() {
     });
     const { toast } = useToast();
 
-    const fetchAlerts = async () => {
+    const fetchAlerts = useCallback(async () => {
         setLoading(true);
         try {
             const params = new URLSearchParams();
@@ -30,8 +30,6 @@ export default function Alerts() {
 
             const { data } = await apiClient.get(`/alerts?${params.toString()}`);
             setAlerts(data.data || []);
-            
-            // Also fetch stats
             const statsRes = await apiClient.get('/alerts/stats');
             setStats(statsRes.data);
         } catch (error) {
@@ -39,13 +37,13 @@ export default function Alerts() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filterStatus, filterSeverity]);
 
     useEffect(() => {
         fetchAlerts();
-        const interval = setInterval(fetchAlerts, 30000); // Auto refresh every 30s
+        const interval = setInterval(fetchAlerts, 30000);
         return () => clearInterval(interval);
-    }, [filterStatus, filterSeverity]);
+    }, [fetchAlerts]);
 
     const handleResolve = async (alert: Alert) => {
         try {
@@ -62,14 +60,6 @@ export default function Alerts() {
             case 'critical': return <AlertCircle className="h-4 w-4 text-red-500" />;
             case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
             default: return <Info className="h-4 w-4 text-blue-500" />;
-        }
-    };
-
-    const getSeverityBadge = (severity: string) => {
-        switch (severity) {
-            case 'critical': return <Badge variant="destructive">Crítico</Badge>;
-            case 'warning': return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Alerta</Badge>;
-            default: return <Badge variant="outline">Info</Badge>;
         }
     };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -31,7 +31,7 @@ interface ReportJob {
     completed_at: string | null;
     failed_at: string | null;
     created_at: string;
-    filters: Record<string, any>;
+    filters: Record<string, unknown>;
 }
 
 interface PaginationMeta {
@@ -53,12 +53,11 @@ export default function ReportJobs() {
     const [isDeleting, setIsDeleting] = useState(false);
     const { toast } = useToast();
 
-    const fetchJobs = async (silent = false) => {
+    const fetchJobs = useCallback(async (silent = false) => {
         try {
             const params = new URLSearchParams();
             params.append('page', currentPage.toString());
             params.append('per_page', perPage.toString());
-
             const response = await apiClient.get(`/reports/jobs?${params.toString()}`);
             setJobs(response.data.data || []);
             setPagination({
@@ -69,55 +68,41 @@ export default function ReportJobs() {
                 from: response.data.from || 0,
                 to: response.data.to || 0,
             });
-        } catch (error: any) {
-            // Don't show toast for rate limit errors during polling
-            if (error.response?.status === 429) {
-                console.warn('Rate limit reached, will retry later');
-                // Stop polling if rate limited
+        } catch (error: unknown) {
+            const ax = error as { response?: { status?: number } };
+            if (ax.response?.status === 429) {
                 if (pollingInterval) {
                     clearInterval(pollingInterval);
                     setPollingInterval(null);
                 }
-                if (!silent) {
-                    toast({ ...getApiErrorToast(error) });
-                }
+                if (!silent) toast({ ...getApiErrorToast(error) });
                 return;
             }
-            
             console.error('Error fetching jobs:', error);
-            if (!silent) {
-                toast({ ...getApiErrorToast(error) });
-            }
+            if (!silent) toast({ ...getApiErrorToast(error) });
         }
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pollingInterval omitted to avoid stale closure loop
+    }, [currentPage, perPage, toast]);
 
     useEffect(() => {
         fetchJobs();
-    }, [currentPage, perPage]);
+    }, [fetchJobs]);
 
-    // Poll for pending/processing jobs
     useEffect(() => {
         const hasActiveJobs = jobs.some(job => job.status === 'pending' || job.status === 'processing');
-        
-        // Clear any existing interval first
         if (pollingInterval) {
             clearInterval(pollingInterval);
             setPollingInterval(null);
         }
-        
         if (hasActiveJobs) {
-            const interval = setInterval(() => {
-                fetchJobs(true); // Silent mode for polling to avoid toast spam
-            }, 10000); // Poll every 10 seconds to avoid rate limiting (60 req/min = 1 req/sec max)
+            const interval = setInterval(() => fetchJobs(true), 10000);
             setPollingInterval(interval);
         }
-
         return () => {
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-            }
+            if (pollingInterval) clearInterval(pollingInterval);
         };
-    }, [jobs]); // Only depend on jobs, not pollingInterval
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pollingInterval intentionally omitted to avoid re-run loop
+    }, [jobs, fetchJobs]);
 
     const handleDownload = async (job: ReportJob) => {
         if (!job.download_url) {
@@ -157,10 +142,11 @@ export default function ReportJobs() {
                 title: 'Download iniciado',
                 description: 'Arquivo sendo baixado...',
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const ax = error as { response?: { data?: { message?: string } } };
             toast({
                 title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao baixar arquivo',
+                description: ax.response?.data?.message ?? 'Falha ao baixar arquivo',
                 variant: 'destructive',
             });
         }

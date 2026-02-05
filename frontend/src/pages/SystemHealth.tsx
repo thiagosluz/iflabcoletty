@@ -139,30 +139,11 @@ export default function SystemHealth() {
         return () => clearInterval(interval);
     }, []);
 
-    const formatBytes = (bytes: number): string => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-
     const getStatusBadge = (connected: boolean) => {
         if (connected) {
             return <Badge variant="default" className="bg-green-500"><CheckCircle2 className="h-3 w-3 mr-1" /> Online</Badge>;
         }
         return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" /> Offline</Badge>;
-    };
-
-    const getAlertVariant = (level: string) => {
-        switch (level) {
-            case 'critical':
-                return 'destructive';
-            case 'warning':
-                return 'default';
-            default:
-                return 'default';
-        }
     };
 
     const handleRetryFailedJobs = async () => {

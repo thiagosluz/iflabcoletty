@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Search, Filter, Calendar, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Trash2 } from 'lucide-react';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -28,8 +28,8 @@ interface AuditLog {
     resource_id: number | null;
     ip_address: string | null;
     user_agent: string | null;
-    old_values: Record<string, any> | null;
-    new_values: Record<string, any> | null;
+    old_values: Record<string, unknown> | null;
+    new_values: Record<string, unknown> | null;
     description: string | null;
     created_at: string;
     user?: {
@@ -66,20 +66,16 @@ export default function AuditLogs() {
     const [search, setSearch] = useState('');
     const [actionFilter, setActionFilter] = useState<string>('all');
     const [resourceTypeFilter, setResourceTypeFilter] = useState<string>('all');
-    const [userIdFilter, setUserIdFilter] = useState<string>('all');
+    const [userIdFilter] = useState<string>('all');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
 
     const debouncedSearch = useDebounce(search, 500);
 
-    useEffect(() => {
-        fetchLogs();
-    }, [currentPage, perPage, debouncedSearch, actionFilter, resourceTypeFilter, userIdFilter, dateFrom, dateTo]);
-
-    const fetchLogs = async () => {
+    const fetchLogs = useCallback(async () => {
         try {
             setLoading(true);
-            const params: Record<string, any> = {
+            const params: Record<string, string | number> = {
                 page: currentPage,
                 per_page: perPage,
             };
@@ -106,7 +102,11 @@ export default function AuditLogs() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentPage, perPage, debouncedSearch, actionFilter, resourceTypeFilter, userIdFilter, dateFrom, dateTo]);
+
+    useEffect(() => {
+        fetchLogs();
+    }, [fetchLogs]);
 
     const handleDeleteAll = async () => {
         try {

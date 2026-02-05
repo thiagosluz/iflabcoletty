@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '@/lib/axios';
 import { isComputerOnline } from '@/lib/utils';
@@ -26,7 +26,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
 interface Lab {
@@ -117,10 +116,12 @@ export default function Computers() {
             // Fetch all labs for the filter dropdown (no pagination needed here)
             const { data } = await apiClient.get('/labs?per_page=1000');
             setLabs(data.data || data || []);
-        } catch (e) { }
+        } catch {
+            // ignore
+        }
     };
 
-    const fetchComputers = async () => {
+    const fetchComputers = useCallback(async () => {
         try {
             const params = new URLSearchParams();
             params.append('page', currentPage.toString());
@@ -146,7 +147,7 @@ export default function Computers() {
         } catch (error) {
             console.error(error);
         }
-    };
+    }, [search, labFilter, statusFilter, outdatedFilter, currentPage, perPage, sortBy, sortDir]);
 
     useEffect(() => {
         fetchLabs();
@@ -154,7 +155,7 @@ export default function Computers() {
 
     useEffect(() => {
         fetchComputers();
-    }, [search, labFilter, statusFilter, outdatedFilter, currentPage, perPage, sortBy, sortDir]);
+    }, [fetchComputers]);
 
     const handleSearchChange = (value: string) => {
         setSearch(value);
@@ -195,7 +196,7 @@ export default function Computers() {
             setIsOpen(false);
             reset();
             fetchComputers(); // Refresh to show new computer immediately
-        } catch (error: any) {
+        } catch (error: unknown) {
             toast({ ...getApiErrorToast(error) });
         }
     };
@@ -228,22 +229,19 @@ export default function Computers() {
         }
     };
 
-    const fetchExportComputerCount = async () => {
+    const fetchExportComputerCount = useCallback(async () => {
         try {
             const params = new URLSearchParams();
-            params.append('per_page', '1000'); // Get all for counting
-            if (exportLabId !== 'all') {
-                params.append('lab_id', exportLabId);
-            }
+            params.append('per_page', '1000');
+            if (exportLabId !== 'all') params.append('lab_id', exportLabId);
             const { data } = await apiClient.get(`/computers?${params.toString()}`);
             const computers = data.data || [];
-            // Filter computers that have public_hash
             const computersWithHash = computers.filter((pc: Computer) => pc.public_hash);
             setExportComputerCount(computersWithHash.length);
-        } catch (error) {
+        } catch {
             setExportComputerCount(null);
         }
-    };
+    }, [exportLabId]);
 
     useEffect(() => {
         if (isExportOpen) {
@@ -251,7 +249,7 @@ export default function Computers() {
         } else {
             setExportComputerCount(null);
         }
-    }, [isExportOpen, exportLabId]);
+    }, [isExportOpen, exportLabId, fetchExportComputerCount]);
 
     const handleExportQRCodes = async () => {
         // Validate before export
@@ -266,7 +264,7 @@ export default function Computers() {
 
         try {
             setIsExporting(true);
-            const payload: any = {
+            const payload: Record<string, string | number | undefined> = {
                 format: exportFormat,
                 base_url: typeof window !== 'undefined' ? window.location.origin : undefined,
             };
@@ -311,7 +309,7 @@ export default function Computers() {
 
     const handleExportReport = async (format: 'pdf' | 'csv' | 'xlsx', async = true) => {
         try {
-            const params: any = {
+            const params: Record<string, string | number | boolean> = {
                 format,
                 async,
             };
@@ -352,28 +350,35 @@ export default function Computers() {
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
-        } catch (error: any) {
+        } catch (error: unknown) {
             let errorMessage = 'Falha ao exportar computadores';
-            
-            if (error.response) {
-                const contentType = error.response.headers?.['content-type'] || '';
+            const ax = error as {
+                response?: {
+                    headers?: Record<string, string>;
+                    data?: { message?: string } | Blob;
+                    statusText?: string;
+                };
+                message?: string;
+            };
+            if (ax.response) {
+                const contentType = ax.response.headers?.['content-type'] ?? '';
                 if (contentType.includes('application/json')) {
-                    errorMessage = error.response.data?.message || errorMessage;
-                } else if (error.response.data instanceof Blob) {
+                    errorMessage = (ax.response.data as { message?: string })?.message ?? errorMessage;
+                } else if (ax.response.data instanceof Blob) {
                     try {
-                        const text = await error.response.data.text();
-                        const errorData = JSON.parse(text);
-                        errorMessage = errorData.message || errorMessage;
-                    } catch (e) {
-                        errorMessage = error.response.statusText || errorMessage;
+                        const text = await ax.response.data.text();
+                        const errorData = JSON.parse(text) as { message?: string };
+                        errorMessage = errorData.message ?? errorMessage;
+                    } catch {
+                        errorMessage = ax.response.statusText ?? errorMessage;
                     }
                 } else {
-                    errorMessage = error.response.data?.message || error.response.statusText || errorMessage;
+                    const data = ax.response.data as { message?: string } | undefined;
+                    errorMessage = data?.message ?? ax.response.statusText ?? errorMessage;
                 }
-            } else if (error.message) {
-                errorMessage = error.message;
+            } else if (ax.message) {
+                errorMessage = ax.message;
             }
-
             throw new Error(errorMessage);
         }
     };

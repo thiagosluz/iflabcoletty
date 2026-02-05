@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, Check, X, Trash2 } from 'lucide-react';
@@ -29,7 +28,7 @@ interface Notification {
     read: boolean;
     read_at: string | null;
     created_at: string;
-    data?: Record<string, any>;
+    data?: Record<string, unknown>;
 }
 
 interface PaginationMeta {
@@ -56,20 +55,14 @@ export default function Notifications() {
     const [isDeleting, setIsDeleting] = useState(false);
     const { toast } = useToast();
 
-    const fetchNotifications = async () => {
+    const fetchNotifications = useCallback(async () => {
         try {
-            const params: Record<string, any> = {
+            const params: Record<string, string | number | boolean> = {
                 page: currentPage,
                 per_page: perPage,
             };
-
-            if (readFilter !== 'all') {
-                params.read = readFilter === 'read';
-            }
-
-            if (typeFilter !== 'all') {
-                params.type = typeFilter;
-            }
+            if (readFilter !== 'all') params.read = readFilter === 'read';
+            if (typeFilter !== 'all') params.type = typeFilter;
 
             const { data } = await apiClient.get('/notifications', { params });
             setNotifications(data.data || []);
@@ -84,11 +77,11 @@ export default function Notifications() {
         } catch (error: unknown) {
             toast({ ...getApiErrorToast(error) });
         }
-    };
+    }, [currentPage, perPage, readFilter, typeFilter, toast]);
 
     useEffect(() => {
         fetchNotifications();
-    }, [currentPage, perPage, readFilter, typeFilter]);
+    }, [fetchNotifications]);
 
     const handlePerPageChange = (value: string) => {
         setPerPage(parseInt(value));

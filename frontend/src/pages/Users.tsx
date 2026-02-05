@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,7 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/components/ui/use-toast';
 import { getApiErrorToast } from '@/lib/apiError';
-import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Trash2, Edit, Shield } from 'lucide-react';
+import { MoreHorizontal, Plus, ChevronLeft, ChevronRight, Trash2, Edit } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
     AlertDialog,
@@ -78,14 +78,12 @@ export default function Users() {
 
     const selectedRoles = watch('roles') || [];
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         try {
             const params = new URLSearchParams();
             params.append('page', currentPage.toString());
             params.append('per_page', perPage.toString());
-            if (search) {
-                params.append('search', search);
-            }
+            if (search) params.append('search', search);
 
             const response = await apiClient.get(`/users?${params.toString()}`);
             setUsers(response.data.data || []);
@@ -97,28 +95,29 @@ export default function Users() {
                 from: response.data.from || 0,
                 to: response.data.to || 0,
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const ax = error as { response?: { data?: { message?: string } } };
             toast({
                 title: 'Erro',
-                description: error.response?.data?.message || 'Falha ao carregar usuários',
+                description: ax.response?.data?.message ?? 'Falha ao carregar usuários',
                 variant: 'destructive'
             });
         }
-    };
+    }, [currentPage, perPage, search, toast]);
 
-    const fetchRoles = async () => {
+    const fetchRoles = useCallback(async () => {
         try {
             const response = await apiClient.get('/roles');
             setRoles(response.data || []);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro ao carregar roles:', error);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchUsers();
         fetchRoles();
-    }, [currentPage, perPage, search]);
+    }, [fetchUsers, fetchRoles]);
 
     const handlePerPageChange = (value: string) => {
         setPerPage(parseInt(value));
@@ -133,7 +132,7 @@ export default function Users() {
     const onSubmit = async (data: UserFormData) => {
         try {
             // Remove password if empty (for updates)
-            const payload: any = { ...data };
+            const payload: Record<string, unknown> = { ...data };
             if (editingUser && (!payload.password || payload.password === '')) {
                 delete payload.password;
             }

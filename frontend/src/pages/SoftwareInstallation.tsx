@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import apiClient from '@/lib/axios';
-import SoftwareInstallationService, { SoftwareInstallation, CreateInstallationRequest } from '@/services/SoftwareInstallationService';
+import SoftwareInstallationService, { type SoftwareInstallation as SoftwareInstallationModel, CreateInstallationRequest } from '@/services/SoftwareInstallationService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,7 +75,7 @@ export default function SoftwareInstallation() {
     const [rebootAfter, setRebootAfter] = useState(false);
     const [installerUrl, setInstallerUrl] = useState('');
     const [networkPath, setNetworkPath] = useState('');
-    const [installations, setInstallations] = useState<SoftwareInstallation[]>([]);
+    const [installations, setInstallations] = useState<SoftwareInstallationModel[]>([]);
     const [showHistory, setShowHistory] = useState(false);
     const [expandedOutputId, setExpandedOutputId] = useState<number | null>(null);
     const [historySearch, setHistorySearch] = useState('');
@@ -89,16 +89,14 @@ export default function SoftwareInstallation() {
     useEffect(() => {
         fetchLabs();
         fetchInstallations();
-        fetchComputers(); // Initial load
+        fetchComputers();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetches defined below
     }, []);
 
     useEffect(() => {
-        // Debounce search to avoid too many requests
-        const timeoutId = setTimeout(() => {
-            fetchComputers();
-        }, searchTerm ? 500 : 0);
-
+        const timeoutId = setTimeout(() => fetchComputers(), searchTerm ? 500 : 0);
         return () => clearTimeout(timeoutId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- debounced by design
     }, [labFilter, searchTerm]);
 
     const fetchComputers = async () => {
@@ -112,18 +110,18 @@ export default function SoftwareInstallation() {
             if (searchTerm) {
                 params.search = searchTerm;
             }
-            
+
             const response = await apiClient.get('/computers', { params });
             // Handle paginated response - Laravel returns { data: [...], current_page, etc }
             const data = Array.isArray(response.data) ? response.data : (response.data?.data || []);
-            
+
             // Filter only Windows computers
             const windowsComputers = data.filter((computer: Computer) => {
                 // Check if hardware_info exists and has os information
                 if (!computer.hardware_info) {
                     return false;
                 }
-                
+
                 // Handle both object and parsed JSON cases
                 let hardwareInfo = computer.hardware_info;
                 if (typeof hardwareInfo === 'string') {
@@ -133,11 +131,11 @@ export default function SoftwareInstallation() {
                         return false;
                     }
                 }
-                
+
                 const osSystem = hardwareInfo?.os?.system;
                 return osSystem === 'Windows';
             });
-            
+
             setComputers(windowsComputers);
         } catch (error) {
             console.error('Error fetching computers:', error);
@@ -159,9 +157,9 @@ export default function SoftwareInstallation() {
             const params: { per_page?: number; search?: string; page?: number } = { per_page: perPage };
             if (search) params.search = search;
             if (page > 1) params.page = page;
-            
+
             const response = await SoftwareInstallationService.getInstallations(params);
-            const list = Array.isArray(response.data) ? response.data : (response.data?.data ?? []);
+            const list = response.data;
             setInstallations(list);
             setHistoryTotal(response.total || list.length);
             setHistoryLastPage(response.last_page || 1);
@@ -188,7 +186,7 @@ export default function SoftwareInstallation() {
             setHistorySearch('');
             fetchInstallations(1, historyPerPage, '');
         }
-    }, [showHistory]);
+    }, [showHistory, historyPerPage, fetchInstallations]);
 
     const handleHistorySearch = useCallback(() => {
         setHistoryPage(1);
@@ -290,7 +288,7 @@ export default function SoftwareInstallation() {
                 title: 'Instalação iniciada',
                 description: response.message,
             });
-            
+
             // Reset form
             setSelectedComputers([]);
             setFileId(null);
@@ -299,7 +297,7 @@ export default function SoftwareInstallation() {
             setNetworkPath('');
             setSoftwareName('');
             setInstallArgs('');
-            
+
             // Refresh installations if history modal is open
             if (showHistory) {
                 fetchInstallations(historyPage, historyPerPage, historySearch);
@@ -340,7 +338,7 @@ export default function SoftwareInstallation() {
         }
     };
 
-    const getProgressMessage = (installation: SoftwareInstallation): string => {
+    const getProgressMessage = (installation: SoftwareInstallationModel): string => {
         if (installation.status === 'pending') return 'Aguardando agente...';
         const text = (installation.output || installation.error_message || '').trim();
         if (!text) return installation.status === 'processing' ? 'Em andamento...' : '';
@@ -435,7 +433,7 @@ export default function SoftwareInstallation() {
                         <div className="border rounded-md max-h-96 overflow-y-auto">
                             {filteredComputers.length === 0 ? (
                                 <div className="p-4 text-center text-sm text-muted-foreground">
-                                    {searchTerm 
+                                    {searchTerm
                                         ? `Nenhum computador Windows encontrado para "${searchTerm}"`
                                         : 'Nenhum computador Windows encontrado'}
                                 </div>

@@ -70,27 +70,20 @@ export default function PublicComputerView() {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
     useEffect(() => {
-        if (hash) {
-            fetchComputer();
-        }
+        if (hash) fetchComputer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when hash changes only
     }, [hash]);
 
     useEffect(() => {
-        if (hash) {
-            // Reset to page 1 when search changes
-            setCurrentPage(1);
-        }
+        if (hash) setCurrentPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset page when search changes
     }, [softwareSearch]);
 
     useEffect(() => {
-        if (hash) {
-            // Debounce search to avoid too many requests
-            const timeoutId = setTimeout(() => {
-                fetchSoftwares(currentPage);
-            }, 500); // Wait 500ms after user stops typing or page changes
-
-            return () => clearTimeout(timeoutId);
-        }
+        if (!hash) return;
+        const timeoutId = setTimeout(() => fetchSoftwares(currentPage), 500);
+        return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounced by design
     }, [hash, softwareSearch, currentPage]);
 
     const fetchComputer = async () => {

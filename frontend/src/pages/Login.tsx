@@ -40,12 +40,13 @@ export default function Login() {
             const response = await apiClient.post('/login', data);
             login(response.data.token, response.data.user);
             navigate('/admin/dashboard');
-        } catch (err: any) {
-            if (err.response?.status === 429) {
-                const retryAfter = err.response.headers['retry-after'] || 60;
+        } catch (err: unknown) {
+            const ax = err as { response?: { status?: number; headers?: Record<string, string>; data?: { message?: string } } };
+            if (ax.response?.status === 429) {
+                const retryAfter = ax.response.headers?.['retry-after'] ?? 60;
                 setError(`Muitas tentativas de login. Aguarde ${retryAfter} segundos antes de tentar novamente.`);
             } else {
-                setError(err.response?.data?.message || 'Falha no login. Verifique suas credenciais.');
+                setError(ax.response?.data?.message ?? 'Falha no login. Verifique suas credenciais.');
             }
         }
     };

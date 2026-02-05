@@ -143,6 +143,7 @@ export default function Schedules() {
         fetchTasks();
         fetchLabs();
         fetchComputers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetches defined below
     }, []);
 
     // Debounce search for computers
@@ -428,7 +429,7 @@ export default function Schedules() {
                             <Label htmlFor="frequency">Frequência</Label>
                             <Select
                                 value={formData.frequency}
-                                onValueChange={(val: any) => setFormData({ ...formData, frequency: val })}
+                                onValueChange={(val: string) => setFormData({ ...formData, frequency: val })}
                             >
                                 <SelectTrigger>
                                     <SelectValue />

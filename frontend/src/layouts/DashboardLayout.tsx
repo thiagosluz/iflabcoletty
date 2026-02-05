@@ -42,7 +42,9 @@ export default function DashboardLayout() {
             const next = !c;
             try {
                 localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
-            } catch {}
+            } catch {
+                // ignore localStorage errors (e.g. private mode)
+            }
             return next;
         });
     };

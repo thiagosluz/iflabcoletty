@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AgentDownloadService, {
     AgentFilesResponse,
     AgentPackage,
@@ -35,11 +35,7 @@ export default function AgentDownloads() {
     const [packageToDelete, setPackageToDelete] = useState<AgentPackage | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    useEffect(() => {
-        fetchFiles();
-    }, []);
-
-    const fetchFiles = async () => {
+    const fetchFiles = useCallback(async () => {
         try {
             setLoading(true);
             const data = await AgentDownloadService.listFiles();
@@ -49,7 +45,11 @@ export default function AgentDownloads() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
+
+    useEffect(() => {
+        fetchFiles();
+    }, [fetchFiles]);
 
     const handleBuildPackage = async () => {
         try {
