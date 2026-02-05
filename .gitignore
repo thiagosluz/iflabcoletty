@@ -10,6 +10,7 @@ agent/.agent_identity
 # Agent - build PyInstaller
 agent/build/
 agent/dist/
+agent/backups/
 
 # Opcional: VERSION é gerado no CI a partir da tag
 agent/VERSION

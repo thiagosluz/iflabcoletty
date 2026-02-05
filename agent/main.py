@@ -507,20 +507,32 @@ class Agent:
 
     def check_commands(self):
         """Check for pending remote commands."""
-        if not self.computer_db_id: return
-        
+        if not self.computer_db_id:
+            return
         try:
             url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/commands/pending"
-            response = self.session.get(url)
-            # 404 means no route or computer not found, ignore to avoid log spam if feature not ready
-            if response.status_code == 404: return
+            response = self.session.get(url, timeout=30)
+            if response.status_code == 404:
+                return
             response.raise_for_status()
-            
-            commands = response.json()
+            data = response.json()
+            commands = data if isinstance(data, list) else data.get("data", data.get("commands", []))
+            if not isinstance(commands, list):
+                logger.warning("check_commands: unexpected response format (not a list): %s", type(commands))
+                return
+            if commands:
+                logger.info("Pending commands: %s", len(commands))
             for cmd in commands:
+                if not isinstance(cmd, dict):
+                    logger.warning("check_commands: skipping non-dict command: %s", type(cmd))
+                    continue
+                cid = cmd.get("id")
+                ctype = cmd.get("command", "?")
+                logger.info("Processing command id=%s type=%s", cid, ctype)
                 self.execute_command(cmd)
         except Exception as e:
-            logger.error(f"Error checking commands: {e}")
+            logger.error("Error checking commands: %s", e)
+            logger.exception("check_commands failed")
 
     def send_wol(self, mac_address):
         """Send Wake-on-LAN magic packet."""
@@ -588,48 +600,80 @@ class Agent:
 
     def receive_file(self, params):
         """Handle file reception (download or copy)."""
+        params = (params or {}) if isinstance(params, dict) else {}
+        logger.info(
+            "receive_file started: platform=%s, params_keys=%s",
+            platform.system(),
+            list(params.keys()),
+        )
         try:
             filename = params.get('filename')
             source_type = params.get('source_type')
-            url = params.get('url') # URL or Path
+            url = params.get('url')
             auth_required = params.get('auth_required', False)
-            # destination_folder is currently ignored in favor of hardcoded paths for safety/consistency
-            
-            # Determine destination path
+
+            # Resolve relative URL (e.g. Laravel route() without APP_URL)
+            if url and isinstance(url, str) and url.startswith('/'):
+                base = (config.API_BASE_URL or '').rstrip('/').replace('/api/v1', '').rstrip('/') or 'http://localhost'
+                url = base + url
+                logger.info("Resolved relative URL to %s", url[:80] + "..." if len(url) > 80 else url)
+            # If backend sent localhost/127.0.0.1 but agent runs on another machine, use host from API_BASE_URL
+            if url and isinstance(url, str) and ('http://localhost' in url or 'https://localhost' in url or 'http://127.0.0.1' in url):
+                try:
+                    from urllib.parse import urlparse
+                    api_host = urlparse(config.API_BASE_URL or '').netloc or urlparse(str(url)).netloc
+                    if api_host and api_host not in ('localhost', '127.0.0.1'):
+                        parsed = urlparse(str(url))
+                        url = f"{parsed.scheme}://{api_host}{parsed.path}" + (f"?{parsed.query}" if parsed.query else "")
+                        logger.info("Replaced localhost with API host: %s", url[:80] + "..." if len(url) > 80 else url)
+                except Exception as e:
+                    logger.warning("Could not replace localhost in URL: %s", e)
+
+            if not url and source_type != 'upload':
+                logger.warning("receive_file: missing url in params")
+                return False, "Error: missing url in transfer parameters"
+
+            # Determine destination path (ASCII on Windows to avoid encoding issues)
+            base_dir = None
             if platform.system() == 'Windows':
-                # Public Desktop (Visible to all users)
-                public_desktop = Path(os.environ.get('PUBLIC', 'C:\\Users\\Public')) / 'Desktop'
-                base_dir = public_desktop / 'Recebidos do Laboratório'
+                candidates = [
+                    Path(os.environ.get('PUBLIC', 'C:\\Users\\Public')) / 'Desktop' / 'LabReceived',
+                    Path(os.environ.get('TEMP') or os.environ.get('TMP') or 'C:\\Temp') / 'Received',
+                    self.agent_dir / 'Received',
+                ]
+                for candidate in candidates:
+                    try:
+                        candidate.mkdir(parents=True, exist_ok=True)
+                        test_file = candidate / '.write_test'
+                        test_file.touch()
+                        test_file.unlink()
+                        base_dir = candidate
+                        logger.info("receive_file: Windows using base_dir=%s", base_dir)
+                        break
+                    except Exception as e:
+                        logger.warning("receive_file: Windows candidate %s failed: %s", candidate, e)
+                if base_dir is None:
+                    return False, "Error: no writable destination on Windows (tried Public Desktop, TEMP, agent dir)"
             else:
-                # Linux: Use /tmp/Received or User Desktop if possible
-                # Trying to find a more visible location than /tmp
                 home = Path.home()
                 if home.name == 'root' and os.environ.get('SUDO_USER'):
-                     # If running as sudo, try to get actual user home
-                     home = Path('/home') / os.environ.get('SUDO_USER')
-                
-                # Check if we can write to home/Desktop
+                    home = Path('/home') / os.environ.get('SUDO_USER')
                 desktop = home / 'Desktop'
                 if desktop.exists():
-                     base_dir = desktop / 'Recebidos'
-                else:
-                     base_dir = Path('/tmp/Received')
-            
-            try:
-                base_dir.mkdir(parents=True, exist_ok=True)
-                # Verify we can write to it
-                test_file = base_dir / '.write_test'
-                test_file.touch()
-                test_file.unlink()
-            except Exception as e:
-                logger.error(f"Cannot write to destination {base_dir}: {e}")
-                # Fallback to tmp
-                if platform.system() == 'Windows':
-                    base_dir = Path('C:\\Temp\\Received')
+                    base_dir = desktop / 'Recebidos'
                 else:
                     base_dir = Path('/tmp/Received')
-                base_dir.mkdir(parents=True, exist_ok=True)
-            
+                try:
+                    base_dir.mkdir(parents=True, exist_ok=True)
+                    test_file = base_dir / '.write_test'
+                    test_file.touch()
+                    test_file.unlink()
+                except Exception as e:
+                    logger.error("Cannot write to destination %s: %s", base_dir, e)
+                    base_dir = Path('/tmp/Received')
+                    base_dir.mkdir(parents=True, exist_ok=True)
+                logger.info("receive_file: destination base_dir=%s", base_dir)
+
             if not filename:
                 if source_type == 'upload' and url:
                     # Generic name
@@ -646,30 +690,53 @@ class Agent:
             logger.info(f"Receiving file '{filename}' from {url}")
             logger.info(f"Saving to: {dest_path}")
             
-            if source_type == 'upload' or (url and url.startswith(('http:', 'https:'))):
-                # HTTP Download
-                headers = {}
-                if auth_required and self.token:
-                    headers['Authorization'] = f"Bearer {self.token}"
-                
-                logger.debug(f"Starting download...")
-                with self.session.get(url, headers=headers, stream=True, timeout=600) as r:
+            if source_type == 'upload' or (url and str(url).startswith(('http:', 'https:'))):
+                if not url:
+                    logger.error("receive_file: upload source_type but url is missing")
+                    return False, "Error: url is required for download"
+                url_str = str(url)
+                if auth_required:
+                    if not self.token and not self.login():
+                        logger.error("receive_file: auth_required but login failed, cannot download")
+                        return False, "Error: authentication required but login failed"
+                    logger.info("receive_file: using auth (token present)")
+                headers = {'Authorization': f"Bearer {self.token}"} if auth_required and self.token else {}
+                logger.info("Starting HTTP download from %s", url_str[:80] + "..." if len(url_str) > 80 else url_str)
+                try:
+                    r = self.session.get(url_str, headers=headers, stream=True, timeout=600)
+                    logger.info("receive_file: HTTP response status=%s", r.status_code)
                     r.raise_for_status()
-                    total_size = int(r.headers.get('content-length', 0))
-                    downloaded = 0
-                    
-                    with open(dest_path, 'wb') as f:
+                except Exception as req_err:
+                    logger.error("receive_file: HTTP request failed: %s", req_err)
+                    logger.exception("receive_file request failed")
+                    return False, f"Error: download request failed: {req_err}"
+                total_size = int(r.headers.get('content-length', 0))
+                downloaded = 0
+                dest_path_str = str(dest_path)
+                try:
+                    with open(dest_path_str, 'wb') as f:
                         for chunk in r.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                    logger.info(f"Download completed. Size: {downloaded} bytes")
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                    logger.info("Download completed. Size: %s bytes", downloaded)
+                except Exception as write_err:
+                    logger.error("receive_file: failed to write file %s: %s", dest_path_str, write_err)
+                    logger.exception("receive_file write failed")
+                    return False, f"Error: failed to write file: {write_err}"
             
             elif source_type in ['link', 'network_path'] and url:
-                # File Copy
                 src_path = Path(url)
-                logger.debug(f"Copying from {src_path}")
+                logger.info("Copying from %s to %s", src_path, dest_path)
                 shutil.copy2(src_path, dest_path)
-            
+            else:
+                logger.error(
+                    "receive_file: no action taken (source_type=%s, url=%s)",
+                    source_type,
+                    (str(url)[:50] + "..." if url and len(str(url)) > 50 else url),
+                )
+                return False, "Error: invalid source_type or missing url for download/copy"
+
             # Visual Feedback - Best Effort
             msg = f"Arquivo recebido: {filename}\nLocal: {base_dir}"
             try:
@@ -691,24 +758,35 @@ class Agent:
             return True, f"File successfully saved to {dest_path}"
             
         except Exception as e:
-            logger.error(f"Error receiving file: {e}")
-            logger.exception(e) # Print stack trace
+            logger.error("Error receiving file: %s", e)
+            logger.exception("receive_file failed")
             return False, f"Error: {str(e)}"
 
     def execute_command(self, cmd):
         """Execute a remote command."""
-        command_id = cmd['id']
-        command_type = cmd['command']
-        params = cmd.get('parameters', {}) or {}
-        
-        logger.info(f"Executing command {command_type} (ID: {command_id})")
-        
-        # Mark as processing
-        self.update_command_status(command_id, 'processing')
-        
+        command_id = cmd.get('id')
+        command_type = cmd.get('command') or cmd.get('command_type')
+        params = cmd.get('parameters') or cmd.get('params') or {}
+        if not isinstance(params, dict):
+            params = {}
+        if not command_type:
+            logger.warning("execute_command: missing command type in cmd keys=%s", list(cmd.keys()))
+            return
+        logger.info("Executing command %s (ID: %s)", command_type, command_id)
+
+        try:
+            self.update_command_status(command_id, 'processing')
+        except Exception as e:
+            logger.warning("Could not mark command as processing (will still execute): %s", e)
+
+        logger.info("Proceeding to run command body (type=%s)", command_type)
+
         output = ""
         success = False
-        
+
+        # Normalize command_type for comparison (backend may send different casing)
+        command_type = (command_type or "").strip().lower()
+
         try:
             if command_type == 'shutdown':
                 if platform.system() == 'Windows':
@@ -920,6 +998,7 @@ exit 1
                     output = "Missing command text"
             
             elif command_type == 'receive_file':
+                logger.info("receive_file: calling with params keys=%s", list(params.keys()) if params else [])
                 success, output = self.receive_file(params)
 
             elif command_type == 'install_software':
@@ -1076,8 +1155,9 @@ exit 1
         try:
             url = f"{config.API_BASE_URL}/commands/{command_id}/status"
             payload = {'status': status}
-            if output: payload['output'] = output
-            resp = self.session.put(url, json=payload)
+            if output:
+                payload['output'] = output
+            resp = self.session.put(url, json=payload, timeout=15)
             resp.raise_for_status()
         except Exception as e:
             logger.error("Failed to update command status: %s", e)
