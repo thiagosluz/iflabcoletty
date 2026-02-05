@@ -25,6 +25,8 @@ const PublicComputerView = lazy(() => import('./pages/PublicComputerView'));
 const SystemHealth = lazy(() => import('./pages/SystemHealth'));
 const SoftwareInstallation = lazy(() => import('./pages/SoftwareInstallation'));
 const AgentDownloads = lazy(() => import('./pages/AgentDownloads'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 
 function PageFallback() {
   return (
@@ -45,6 +47,8 @@ function App() {
         <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             {/* Public Routes */}
             <Route path="/public/pc/:hash" element={<PublicComputerView />} />

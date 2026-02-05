@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 
 import axios from 'axios';
@@ -91,6 +91,11 @@ export default function Login() {
                             </div>
                             {errors.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
                         </div>
+                        <div className="flex justify-end">
+                            <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                                Esqueceu sua senha?
+                            </Link>
+                        </div>
                         {error && <p className="text-sm text-red-500">{error}</p>}
                         <Button type="submit" className="w-full" disabled={isSubmitting}>
                             {isSubmitting ? 'Entrando...' : 'Entrar'}
@@ -98,6 +103,6 @@ export default function Login() {
                     </form>
                 </CardContent>
             </Card>
-        </div>
+        </div >
     );
 }

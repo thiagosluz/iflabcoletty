@@ -30,6 +30,10 @@ Route::prefix('v1')->group(function () {
     // Auth - Admin - Rate limit for login (10 attempts per minute per IP)
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1'); // 10 attempts per minute
 
+    // Password Reset
+    Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Auth\ForgotPasswordController::class, 'sendResetLinkEmail']);
+    Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Auth\ResetPasswordController::class, 'reset']);
+
     // Broadcasting authentication route - needs to be outside the auth group to handle auth manually
     Route::post('/broadcasting/auth', function (Request $request) {
         Log::info('Broadcasting auth hit', [
