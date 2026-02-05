@@ -593,7 +593,7 @@ class Agent:
             source_type = params.get('source_type')
             url = params.get('url') # URL or Path
             auth_required = params.get('auth_required', False)
-            destination_folder = params.get('destination_folder', 'public_desktop')
+            # destination_folder is currently ignored in favor of hardcoded paths for safety/consistency
             
             # Determine destination path
             if platform.system() == 'Windows':
@@ -601,24 +601,50 @@ class Agent:
                 public_desktop = Path(os.environ.get('PUBLIC', 'C:\\Users\\Public')) / 'Desktop'
                 base_dir = public_desktop / 'Recebidos do Laboratório'
             else:
-                base_dir = Path('/tmp/Received')
+                # Linux: Use /tmp/Received or User Desktop if possible
+                # Trying to find a more visible location than /tmp
+                home = Path.home()
+                if home.name == 'root' and os.environ.get('SUDO_USER'):
+                     # If running as sudo, try to get actual user home
+                     home = Path('/home') / os.environ.get('SUDO_USER')
+                
+                # Check if we can write to home/Desktop
+                desktop = home / 'Desktop'
+                if desktop.exists():
+                     base_dir = desktop / 'Recebidos'
+                else:
+                     base_dir = Path('/tmp/Received')
             
-            base_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                base_dir.mkdir(parents=True, exist_ok=True)
+                # Verify we can write to it
+                test_file = base_dir / '.write_test'
+                test_file.touch()
+                test_file.unlink()
+            except Exception as e:
+                logger.error(f"Cannot write to destination {base_dir}: {e}")
+                # Fallback to tmp
+                if platform.system() == 'Windows':
+                    base_dir = Path('C:\\Temp\\Received')
+                else:
+                    base_dir = Path('/tmp/Received')
+                base_dir.mkdir(parents=True, exist_ok=True)
             
             if not filename:
                 if source_type == 'upload' and url:
-                    # Try to get from URL
-                    filename = 'downloaded_file'
+                    # Generic name
+                    filename = 'downloaded_file.dat'
                 elif url:
                     filename = Path(url).name
                 else:
-                    filename = f"file_{int(time.time())}"
+                    filename = f"file_{int(time.time())}.dat"
             
             # Sanitize filename
             filename = "".join(x for x in filename if (x.isalnum() or x in "._- "))
             dest_path = base_dir / filename
             
-            logger.info(f"Receiving file '{filename}' to {dest_path}")
+            logger.info(f"Receiving file '{filename}' from {url}")
+            logger.info(f"Saving to: {dest_path}")
             
             if source_type == 'upload' or (url and url.startswith(('http:', 'https:'))):
                 # HTTP Download
@@ -626,39 +652,48 @@ class Agent:
                 if auth_required and self.token:
                     headers['Authorization'] = f"Bearer {self.token}"
                 
-                # If it's a backend download link, we might need to handle redirects or specific headers? 
-                # Session handles it mostly.
-                
-                logger.debug(f"Downloading from {url}")
+                logger.debug(f"Starting download...")
                 with self.session.get(url, headers=headers, stream=True, timeout=600) as r:
                     r.raise_for_status()
+                    total_size = int(r.headers.get('content-length', 0))
+                    downloaded = 0
+                    
                     with open(dest_path, 'wb') as f:
                         for chunk in r.iter_content(chunk_size=8192):
                             f.write(chunk)
+                            downloaded += len(chunk)
+                    logger.info(f"Download completed. Size: {downloaded} bytes")
             
             elif source_type in ['link', 'network_path'] and url:
-                # File Copy (Network Share or Local)
-                # Ensure we handle UNC paths correctly on Windows
+                # File Copy
                 src_path = Path(url)
                 logger.debug(f"Copying from {src_path}")
                 shutil.copy2(src_path, dest_path)
             
-            # Visual Feedback
-            msg = f"Novo arquivo recebido: {filename}\nSalvo em: {base_dir}"
-            if platform.system() == 'Windows':
-                # msg command is simple but effective
-                subprocess.run(['msg', '*', msg], shell=True)
-                # Optional: Open folder
-                subprocess.Popen(['explorer', str(base_dir)])
-            else:
-                subprocess.run(['notify-send', 'Laboratório', msg])
-                subprocess.Popen(['xdg-open', str(base_dir)])
-                
-            return True, f"File saved to {dest_path}"
+            # Visual Feedback - Best Effort
+            msg = f"Arquivo recebido: {filename}\nLocal: {base_dir}"
+            try:
+                if platform.system() == 'Windows':
+                    # Try msg command
+                    subprocess.run(['msg', '*', msg], shell=True, capture_output=True)
+                    # Try opening explorer (might fail in Session 0)
+                    subprocess.Popen(['explorer', str(base_dir)])
+                else:
+                    # Linux feedback
+                    user = os.environ.get('SUDO_USER') or os.environ.get('USER')
+                    if user:
+                        # Try to notify user
+                        subprocess.run(['notify-send', 'Laboratório', msg], capture_output=True)
+                        subprocess.Popen(['xdg-open', str(base_dir)], stderr=subprocess.DEVNULL)
+            except Exception as e:
+                logger.warning(f"Visual feedback failed (non-critical): {e}")
+
+            return True, f"File successfully saved to {dest_path}"
             
         except Exception as e:
             logger.error(f"Error receiving file: {e}")
-            return False, str(e)
+            logger.exception(e) # Print stack trace
+            return False, f"Error: {str(e)}"
 
     def execute_command(self, cmd):
         """Execute a remote command."""
