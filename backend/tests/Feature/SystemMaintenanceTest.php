@@ -36,7 +36,7 @@ class SystemMaintenanceTest extends TestCase
 
         // Create a dummy log file
         $logPath = storage_path('logs/laravel.log');
-        if (!file_exists($logPath)) {
+        if (! file_exists($logPath)) {
             \Illuminate\Support\Facades\File::put($logPath, 'Test log content');
         }
 

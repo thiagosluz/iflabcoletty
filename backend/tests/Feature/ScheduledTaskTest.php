@@ -23,7 +23,7 @@ class ScheduledTaskTest extends TestCase
             'target_id' => $computer->id,
             'frequency' => 'daily',
             'time' => '12:00',
-            'user_id' => $user->id
+            'user_id' => $user->id,
         ]);
 
         $response = $this->getJson('/api/v1/scheduled-tasks', $this->getAuthHeaders($user));
@@ -67,7 +67,7 @@ class ScheduledTaskTest extends TestCase
             'target_id' => $computer->id,
             'frequency' => 'once',
             'time' => '12:00',
-            'user_id' => $user->id
+            'user_id' => $user->id,
         ]);
 
         // Mocking the actual execution logic might be complex if it involves jobs/queues.
@@ -90,7 +90,7 @@ class ScheduledTaskTest extends TestCase
             'target_id' => $computer->id,
             'frequency' => 'once',
             'time' => '12:00',
-            'user_id' => $user->id
+            'user_id' => $user->id,
         ]);
 
         $response = $this->deleteJson("/api/v1/scheduled-tasks/{$task->id}", [], $this->getAuthHeaders($user));

@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class RoleTest extends TestCase
@@ -50,7 +50,7 @@ class RoleTest extends TestCase
 
         $response = $this->postJson('/api/v1/roles', [
             'name' => 'New Role',
-            'permissions' => ['roles.view']
+            'permissions' => ['roles.view'],
         ], $this->getAuthHeaders($user));
 
         $response->assertStatus(201)
@@ -72,7 +72,7 @@ class RoleTest extends TestCase
 
         $response = $this->postJson('/api/v1/roles', [
             'name' => 'Existing Role',
-            'permissions' => []
+            'permissions' => [],
         ], $this->getAuthHeaders($user));
 
         $response->assertStatus(422)
@@ -87,7 +87,7 @@ class RoleTest extends TestCase
 
         $response = $this->putJson("/api/v1/roles/{$role->id}", [
             'name' => 'Updated Name',
-            'permissions' => ['roles.delete']
+            'permissions' => ['roles.delete'],
         ], $this->getAuthHeaders($user));
 
         $response->assertStatus(200)
@@ -120,7 +120,7 @@ class RoleTest extends TestCase
         $user = \App\Models\User::factory()->create();
         $token = $user->createToken('test-token')->plainTextToken;
         $headers = [
-            'Authorization' => 'Bearer ' . $token,
+            'Authorization' => 'Bearer '.$token,
             'Accept' => 'application/json',
         ];
 

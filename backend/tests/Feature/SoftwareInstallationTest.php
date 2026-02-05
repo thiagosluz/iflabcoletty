@@ -24,7 +24,7 @@ class SoftwareInstallationTest extends TestCase
             'software_name' => 'Test Soft',
             'installer_type' => 'upload',
             'status' => 'pending',
-            'method' => 'upload' // deprecated/dup column? Controller uses installer_type in create, but validation checks method input. Model fillable?
+            'method' => 'upload', // deprecated/dup column? Controller uses installer_type in create, but validation checks method input. Model fillable?
         ]);
 
         $response = $this->getJson('/api/v1/software-installations', $this->getAuthHeaders($user));
@@ -55,7 +55,7 @@ class SoftwareInstallationTest extends TestCase
     {
         $user = $this->actingAsUser();
         $computers = Computer::factory()->count(3)->create([
-            'hardware_info' => ['os' => ['system' => 'Windows']] // Mock Windows OS
+            'hardware_info' => ['os' => ['system' => 'Windows']], // Mock Windows OS
         ]);
 
         $response = $this->postJson('/api/v1/software-installations', [
@@ -63,7 +63,7 @@ class SoftwareInstallationTest extends TestCase
             'method' => 'network',
             'network_path' => '\\\\server\\share\\setup.exe',
             'install_args' => '/S',
-            'computer_ids' => $computers->pluck('id')->toArray()
+            'computer_ids' => $computers->pluck('id')->toArray(),
         ], $this->getAuthHeaders($user));
 
         $response->assertStatus(201);
@@ -83,7 +83,7 @@ class SoftwareInstallationTest extends TestCase
             'software_name' => 'To Delete',
             'installer_type' => 'url', // or upload/network
             'status' => 'pending',
-            'method' => 'url'
+            'method' => 'url',
         ]);
 
         $response = $this->deleteJson("/api/v1/software-installations/{$installation->id}", [], $this->getAuthHeaders($user));
