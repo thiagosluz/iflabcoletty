@@ -16,6 +16,23 @@ export interface SendFileParams {
     };
 }
 
+export type CommandStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface TransferCommandItem {
+    id: number;
+    computer_id: number;
+    computer_name: string;
+    status: CommandStatus;
+    output: string | null;
+    executed_at: string | null;
+}
+
+export interface TransferCommandStatusResponse {
+    commands: TransferCommandItem[];
+    summary: { pending: number; processing: number; completed: number; failed: number };
+    total: number;
+}
+
 const FileTransferService = {
     upload: async (file: File): Promise<FileTransfer> => {
         const formData = new FormData();
@@ -41,6 +58,11 @@ const FileTransferService = {
 
     send: async (params: SendFileParams): Promise<{ message: string; command_count: number }> => {
         const response = await apiClient.post('/transfers/send', params);
+        return response.data;
+    },
+
+    getCommandStatus: async (fileTransferId: number): Promise<TransferCommandStatusResponse> => {
+        const response = await apiClient.get(`/transfers/${fileTransferId}/command-status`);
         return response.data;
     },
 };

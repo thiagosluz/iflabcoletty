@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Computer;
+use App\Models\ComputerCommand;
 use App\Models\FileTransfer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -85,11 +86,12 @@ class FileTransferController extends Controller
         if ($transfer->source_type === 'upload') {
             // URL for agent to download
             $commandParams['url'] = route('api.v1.transfers.download', ['fileTransfer' => $transfer->id]);
-            $commandParams['file_id'] = $transfer->id; // Optional hint
+            $commandParams['file_id'] = $transfer->id;
             $commandParams['auth_required'] = true;
         } else {
             // Link or Network Path
-            $commandParams['url'] = $transfer->file_path; // Can be http://... or \\Server\Share
+            $commandParams['url'] = $transfer->file_path;
+            $commandParams['file_id'] = $transfer->id; // For polling command-status
         }
 
         $computers = Computer::whereIn('id', $targetComputerIds)->get();
@@ -108,6 +110,48 @@ class FileTransferController extends Controller
         return response()->json([
             'message' => "File transfer initiated for {$count} computers.",
             'command_count' => $count,
+        ]);
+    }
+
+    /**
+     * Get status of commands for this file transfer (for progress UI).
+     */
+    public function commandStatus(FileTransfer $fileTransfer)
+    {
+        $commands = ComputerCommand::query()
+            ->where('command', 'receive_file')
+            ->where('parameters->file_id', $fileTransfer->id)
+            ->with('computer:id,hostname')
+            ->orderBy('computer_id')
+            ->get(['id', 'computer_id', 'status', 'output', 'executed_at']);
+
+        $summary = [
+            'pending' => 0,
+            'processing' => 0,
+            'completed' => 0,
+            'failed' => 0,
+        ];
+        foreach ($commands as $cmd) {
+            if (isset($summary[$cmd->status])) {
+                $summary[$cmd->status]++;
+            }
+        }
+
+        $items = $commands->map(function (ComputerCommand $cmd) {
+            return [
+                'id' => $cmd->id,
+                'computer_id' => $cmd->computer_id,
+                'computer_name' => $cmd->computer?->hostname ?? 'Computador #'.$cmd->computer_id,
+                'status' => $cmd->status,
+                'output' => $cmd->output,
+                'executed_at' => $cmd->executed_at,
+            ];
+        });
+
+        return response()->json([
+            'commands' => $items,
+            'summary' => $summary,
+            'total' => $commands->count(),
         ]);
     }
 

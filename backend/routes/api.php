@@ -254,6 +254,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/transfers/upload', [FileTransferController::class, 'upload']);
         Route::post('/transfers/send', [FileTransferController::class, 'send']);
         Route::get('/transfers/{fileTransfer}/download', [FileTransferController::class, 'download'])->name('api.v1.transfers.download');
+        Route::get('/transfers/{fileTransfer}/command-status', [FileTransferController::class, 'commandStatus']);
     });
 });
 
