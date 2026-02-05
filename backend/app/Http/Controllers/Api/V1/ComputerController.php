@@ -56,8 +56,7 @@ class ComputerController extends Controller
 
         // Filter by outdated agents (agent_version != latest)
         if ($request->query('outdated')) {
-            $agentController = new AgentController;
-            $latestVersion = $agentController->getLatestVersion();
+            $latestVersion = app(AgentController::class)->getLatestVersion();
             if ($latestVersion) {
                 $query->whereNotNull('agent_version')
                     ->where('agent_version', '!=', $latestVersion);

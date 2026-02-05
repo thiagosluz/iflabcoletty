@@ -3,16 +3,17 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Computer;
+use App\Services\AgentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use ZipArchive;
 
 class AgentController extends Controller
 {
+    public function __construct(
+        private AgentService $agentService
+    ) {}
+
     /**
      * Check for agent updates
      *
@@ -20,16 +21,10 @@ class AgentController extends Controller
      */
     public function checkUpdate(Request $request)
     {
-        // This endpoint can be accessed by agents (no auth required for now)
-        // In production, you might want to add authentication
-
         $currentVersion = $request->query('current_version', '0.0.0');
         $platform = $request->query('platform', '');
 
-        // Get the latest version from config or storage
-        $latestVersion = $this->getLatestVersion();
-
-        // Compare versions (simple string comparison, can be improved with semver)
+        $latestVersion = $this->agentService->getLatestVersion();
         $updateAvailable = version_compare($latestVersion, $currentVersion, '>');
 
         $response = [
@@ -40,7 +35,6 @@ class AgentController extends Controller
         ];
 
         if ($updateAvailable) {
-            // For Windows frozen (PyInstaller installer), return URL to the .exe installer
             if ($platform === 'windows-frozen') {
                 $baseUrl = config('app.agent_installer_base_url', '');
                 if ($baseUrl !== '') {
@@ -50,10 +44,10 @@ class AgentController extends Controller
                 }
             }
             if (empty($response['download_url']) && $platform !== 'windows-frozen') {
-                $response['download_url'] = $this->getDownloadUrl($latestVersion);
+                $response['download_url'] = $this->agentService->getDownloadUrl($latestVersion);
             }
-            $response['changelog'] = $this->getChangelog($latestVersion);
-            $response['size'] = $this->getUpdateSize($latestVersion);
+            $response['changelog'] = $this->agentService->getChangelog($latestVersion);
+            $response['size'] = $this->agentService->getUpdateSize($latestVersion);
         }
 
         return response()->json($response);
@@ -62,15 +56,13 @@ class AgentController extends Controller
     /**
      * Download agent update package
      *
-     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
      */
     public function downloadUpdate(Request $request, string $version)
     {
-        // Requer autenticação e permissão para baixar atualizações
         $this->authorize('computers.view');
 
-        // Verify version exists
-        $packagePath = $this->getPackagePath($version);
+        $packagePath = $this->agentService->getPackagePath($version);
 
         if (! $packagePath || ! file_exists($packagePath)) {
             return response()->json([
@@ -84,73 +76,11 @@ class AgentController extends Controller
     }
 
     /**
-     * Get the latest agent version
+     * Get the latest agent version (public for ComputerController etc.)
      */
     public function getLatestVersion(): string
     {
-        // Option 1: Read from config file
-        $versionFile = storage_path('app/agent/latest_version.txt');
-
-        if (file_exists($versionFile)) {
-            return trim(file_get_contents($versionFile));
-        }
-
-        // Option 2: Read from config
-        $version = config('app.agent_latest_version', '1.0.0');
-
-        return $version;
-    }
-
-    /**
-     * Get download URL for a version
-     */
-    private function getDownloadUrl(string $version): string
-    {
-        // Generate URL to download endpoint
-        return url("/api/v1/agent/download/{$version}");
-    }
-
-    /**
-     * Get changelog for a version
-     */
-    private function getChangelog(string $version): ?string
-    {
-        $changelogFile = storage_path("app/agent/changelogs/{$version}.md");
-
-        if (file_exists($changelogFile)) {
-            return file_get_contents($changelogFile);
-        }
-
-        return null;
-    }
-
-    /**
-     * Get update package size
-     */
-    private function getUpdateSize(string $version): int
-    {
-        $packagePath = $this->getPackagePath($version);
-
-        if ($packagePath && file_exists($packagePath)) {
-            return filesize($packagePath);
-        }
-
-        return 0;
-    }
-
-    /**
-     * Get package file path for a version
-     */
-    private function getPackagePath(string $version): ?string
-    {
-        // Look for package in storage
-        $packagePath = storage_path("app/agent/packages/iflab-agent-{$version}.zip");
-
-        if (file_exists($packagePath)) {
-            return $packagePath;
-        }
-
-        return null;
+        return $this->agentService->getLatestVersion();
     }
 
     /**
@@ -162,10 +92,12 @@ class AgentController extends Controller
     {
         $this->authorize('computers.view');
 
+        $latestVersion = $this->agentService->getLatestVersion();
+
         return response()->json([
-            'latest_version' => $this->getLatestVersion(),
-            'package_exists' => $this->getPackagePath($this->getLatestVersion()) !== null,
-            'package_size' => $this->getUpdateSize($this->getLatestVersion()),
+            'latest_version' => $latestVersion,
+            'package_exists' => $this->agentService->getPackagePath($latestVersion) !== null,
+            'package_size' => $this->agentService->getUpdateSize($latestVersion),
         ]);
     }
 
@@ -178,9 +110,9 @@ class AgentController extends Controller
     {
         $this->authorize('computers.view');
 
-        $packages = $this->getAvailablePackages();
-        $installers = $this->getAvailableInstallers();
-        $sourceCode = $this->getSourceCodeInfo();
+        $packages = $this->agentService->getAvailablePackages();
+        $installers = $this->agentService->getAvailableInstallers();
+        $sourceCode = $this->agentService->getSourceCodeInfo();
 
         Log::info('AgentController::listFiles', [
             'packages_count' => count($packages),
@@ -192,9 +124,9 @@ class AgentController extends Controller
             'packages' => $packages,
             'installers' => $installers,
             'source_code' => $sourceCode,
-            'latest_version' => $this->getLatestVersion(),
+            'latest_version' => $this->agentService->getLatestVersion(),
             'packages_info' => [
-                'directory' => storage_path('app/agent/packages'),
+                'directory' => config('agent.storage.packages'),
                 'how_to_create' => 'Run: php artisan agent:build-package [version]',
             ],
         ]);
@@ -244,24 +176,9 @@ class AgentController extends Controller
                 ], 500);
             }
 
-            // Descobrir a versão final a partir do arquivo latest_version.txt
-            $latestVersionFile = storage_path('app/agent/latest_version.txt');
-            $finalVersion = $version;
-
-            if (file_exists($latestVersionFile)) {
-                $finalVersion = trim(file_get_contents($latestVersionFile));
-            }
-
-            // Caminho do pacote gerado
-            $packagePath = null;
-            $size = null;
-
-            if ($finalVersion) {
-                $packagePath = $this->getPackagePath($finalVersion);
-                if ($packagePath && file_exists($packagePath)) {
-                    $size = filesize($packagePath);
-                }
-            }
+            $finalVersion = $this->agentService->getLatestVersion();
+            $packagePath = $this->agentService->getPackagePath($finalVersion);
+            $size = $packagePath && file_exists($packagePath) ? filesize($packagePath) : null;
 
             return response()->json([
                 'message' => 'Pacote do agente criado com sucesso.',
@@ -285,7 +202,7 @@ class AgentController extends Controller
     /**
      * Download installer script
      *
-     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
      */
     public function downloadInstaller(string $platform)
     {
@@ -297,7 +214,7 @@ class AgentController extends Controller
             ], 400);
         }
 
-        $installerPath = $this->getInstallerPath($platform);
+        $installerPath = $this->agentService->getInstallerPath($platform);
 
         if (! $installerPath || ! file_exists($installerPath)) {
             return response()->json([
@@ -316,14 +233,14 @@ class AgentController extends Controller
     /**
      * Download source code as ZIP
      *
-     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
      */
     public function downloadSourceCode()
     {
         $this->authorize('computers.view');
 
         try {
-            $zipPath = $this->createSourceCodeZip();
+            $zipPath = $this->agentService->createSourceCodeZip();
 
             if (! $zipPath || ! file_exists($zipPath)) {
                 return response()->json([
@@ -331,7 +248,7 @@ class AgentController extends Controller
                 ], 500);
             }
 
-            $version = $this->getLatestVersion();
+            $version = $this->agentService->getLatestVersion();
             $filename = "iflab-agent-source-{$version}.zip";
 
             return response()->download($zipPath, $filename, [
@@ -347,304 +264,6 @@ class AgentController extends Controller
     }
 
     /**
-     * Get available packages
-     */
-    private function getAvailablePackages(): array
-    {
-        $packagesDir = storage_path('app/agent/packages');
-        $packages = [];
-
-        // Create directory if it doesn't exist
-        if (! is_dir($packagesDir)) {
-            mkdir($packagesDir, 0755, true);
-        }
-
-        if (is_dir($packagesDir)) {
-            $files = glob($packagesDir.'/iflab-agent-*.zip');
-
-            foreach ($files as $file) {
-                // Extract version from filename: iflab-agent-1.0.0.zip
-                if (preg_match('/iflab-agent-([\d.]+)\.zip$/', basename($file), $matches)) {
-                    $version = $matches[1];
-                    $size = file_exists($file) ? filesize($file) : 0;
-                    $latestVersion = $this->getLatestVersion();
-
-                    // Count computers using this agent version
-                    $computersCount = Computer::where('agent_version', $version)->count();
-
-                    $packages[] = [
-                        'version' => $version,
-                        'size' => $size,
-                        'size_human' => $this->formatBytes($size),
-                        'download_url' => url("/api/v1/agent/download/{$version}"),
-                        'exists' => true,
-                        'is_latest' => $version === $latestVersion,
-                        'created_at' => file_exists($file) ? date('Y-m-d H:i:s', filemtime($file)) : null,
-                        'computers_count' => $computersCount,
-                    ];
-                }
-            }
-
-            // Sort by version (descending)
-            usort($packages, function ($a, $b) {
-                return version_compare($b['version'], $a['version']);
-            });
-        }
-
-        return $packages;
-    }
-
-    /**
-     * Get available installers
-     */
-    private function getAvailableInstallers(): array
-    {
-        $installers = [];
-
-        // Windows installer
-        $windowsPath = $this->getInstallerPath('windows');
-        if ($windowsPath && file_exists($windowsPath)) {
-            $installers[] = [
-                'platform' => 'windows',
-                'filename' => 'install_windows.ps1',
-                'size' => filesize($windowsPath),
-                'size_human' => $this->formatBytes(filesize($windowsPath)),
-                'download_url' => url('/api/v1/agent/installer/windows'),
-                'exists' => true,
-            ];
-        } else {
-            $installers[] = [
-                'platform' => 'windows',
-                'filename' => 'install_windows.ps1',
-                'exists' => false,
-            ];
-        }
-
-        // Linux installer
-        $linuxPath = $this->getInstallerPath('linux');
-        if ($linuxPath && file_exists($linuxPath)) {
-            $installers[] = [
-                'platform' => 'linux',
-                'filename' => 'install_linux.sh',
-                'size' => filesize($linuxPath),
-                'size_human' => $this->formatBytes(filesize($linuxPath)),
-                'download_url' => url('/api/v1/agent/installer/linux'),
-                'exists' => true,
-            ];
-        } else {
-            $installers[] = [
-                'platform' => 'linux',
-                'filename' => 'install_linux.sh',
-                'exists' => false,
-            ];
-        }
-
-        return $installers;
-    }
-
-    /**
-     * Get source code info
-     */
-    private function getSourceCodeInfo(): array
-    {
-        // Find agent directory
-        $possiblePaths = [
-            base_path('agent'),
-            '/var/www/agent', // Docker volume mount path
-            app_path('../agent'),
-            storage_path('../agent'),
-        ];
-
-        $agentDir = null;
-        foreach ($possiblePaths as $path) {
-            if (is_dir($path) && file_exists($path.'/main.py')) {
-                $agentDir = $path;
-                break;
-            }
-        }
-
-        if (! $agentDir) {
-            return [
-                'available' => false,
-                'download_url' => null,
-                'size' => 0,
-            ];
-        }
-
-        // Estimate size (rough calculation)
-        $size = $this->calculateDirectorySize($agentDir);
-
-        return [
-            'available' => true,
-            'download_url' => url('/api/v1/agent/source-code'),
-            'size' => $size,
-            'size_human' => $this->formatBytes($size),
-        ];
-    }
-
-    /**
-     * Get installer path
-     */
-    private function getInstallerPath(string $platform): ?string
-    {
-        // Try multiple possible paths
-        $possiblePaths = [
-            base_path('agent'), // Laravel base path (if agent is in project root)
-            '/var/www/agent', // Docker volume mount path
-            app_path('../agent'), // Relative to app directory
-            storage_path('../agent'), // Relative to storage
-        ];
-
-        $filename = $platform === 'windows' ? 'install_windows.ps1' : 'install_linux.sh';
-
-        foreach ($possiblePaths as $agentDir) {
-            $path = $agentDir.'/'.$filename;
-            if (file_exists($path)) {
-                Log::info("Found installer at: {$path}");
-
-                return $path;
-            }
-        }
-
-        Log::warning("Installer not found for platform: {$platform}", [
-            'tried_paths' => array_map(fn ($p) => $p.'/'.$filename, $possiblePaths),
-        ]);
-
-        return null;
-    }
-
-    /**
-     * Create source code ZIP
-     */
-    private function createSourceCodeZip(): ?string
-    {
-        // Find agent directory
-        $possiblePaths = [
-            base_path('agent'),
-            '/var/www/agent', // Docker volume mount path
-            app_path('../agent'),
-            storage_path('../agent'),
-        ];
-
-        $agentDir = null;
-        foreach ($possiblePaths as $path) {
-            if (is_dir($path) && file_exists($path.'/main.py')) {
-                $agentDir = $path;
-                break;
-            }
-        }
-
-        if (! $agentDir) {
-            Log::error('Agent directory not found', ['tried_paths' => $possiblePaths]);
-
-            return null;
-        }
-
-        $version = $this->getLatestVersion();
-        $zipFilename = "iflab-agent-source-{$version}.zip";
-        $tempDir = storage_path('app/temp');
-        $zipPath = $tempDir.'/'.$zipFilename;
-
-        // Create temp directory if it doesn't exist
-        if (! is_dir($tempDir)) {
-            mkdir($tempDir, 0755, true);
-        }
-
-        // Remove old ZIP if exists
-        if (file_exists($zipPath)) {
-            unlink($zipPath);
-        }
-
-        $zip = new ZipArchive;
-
-        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            return null;
-        }
-
-        // Files and directories to include
-        $filesToInclude = [
-            'main.py',
-            'config.py',
-            'update.py',
-            'requirements.txt',
-            'install_windows.ps1',
-            'install_linux.sh',
-        ];
-
-        // Add files
-        foreach ($filesToInclude as $file) {
-            $filePath = $agentDir.'/'.$file;
-            if (file_exists($filePath)) {
-                $zip->addFile($filePath, $file);
-            }
-        }
-
-        // Add README if exists
-        $readmePath = $agentDir.'/README.md';
-        if (file_exists($readmePath)) {
-            $zip->addFile($readmePath, 'README.md');
-        }
-
-        $zip->close();
-
-        return file_exists($zipPath) ? $zipPath : null;
-    }
-
-    /**
-     * Calculate directory size (excluding .venv and __pycache__)
-     */
-    private function calculateDirectorySize(string $directory): int
-    {
-        $size = 0;
-        $excludeDirs = ['.venv', '__pycache__', 'node_modules', '.git'];
-
-        if (! is_dir($directory)) {
-            return 0;
-        }
-
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::SELF_FIRST
-        );
-
-        foreach ($iterator as $file) {
-            if ($file->isFile()) {
-                $path = $file->getPathname();
-                $relativePath = str_replace($directory.'/', '', $path);
-
-                // Skip excluded directories
-                $shouldExclude = false;
-                foreach ($excludeDirs as $excludeDir) {
-                    if (strpos($relativePath, $excludeDir) === 0) {
-                        $shouldExclude = true;
-                        break;
-                    }
-                }
-
-                if (! $shouldExclude) {
-                    $size += $file->getSize();
-                }
-            }
-        }
-
-        return $size;
-    }
-
-    /**
-     * Format bytes to human readable
-     */
-    private function formatBytes(int $bytes, int $precision = 2): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
-        $bytes /= pow(1024, $pow);
-
-        return round($bytes, $precision).' '.$units[$pow];
-    }
-
-    /**
      * Delete an agent package (only if no computers are using it)
      *
      * @return \Illuminate\Http\JsonResponse
@@ -653,52 +272,29 @@ class AgentController extends Controller
     {
         $this->authorize('computers.view');
 
-        // Check if any computers are using this version
-        $computersCount = Computer::where('agent_version', $version)->count();
-
-        if ($computersCount > 0) {
-            return response()->json([
-                'message' => "Não é possível excluir: existem {$computersCount} computador(es) usando esta versão.",
-            ], 403);
-        }
-
-        // Check if this is the latest version
-        $latestVersion = $this->getLatestVersion();
-        if ($version === $latestVersion) {
-            return response()->json([
-                'message' => 'Não é possível excluir a versão mais recente.',
-            ], 403);
-        }
-
-        // Get package path
-        $packagePath = $this->getPackagePath($version);
-
-        if (! $packagePath || ! file_exists($packagePath)) {
-            return response()->json([
-                'message' => 'Pacote não encontrado.',
-            ], 404);
-        }
-
-        // Delete the package file
         try {
-            if (unlink($packagePath)) {
-                Log::info("Agent package deleted: {$version}", [
-                    'path' => $packagePath,
-                    'user_id' => auth()->id(),
-                ]);
+            $this->agentService->deletePackage($version);
 
-                return response()->json([
-                    'message' => 'Pacote excluído com sucesso.',
-                ]);
-            } else {
-                return response()->json([
-                    'message' => 'Erro ao excluir o arquivo do pacote.',
-                ], 500);
+            return response()->json([
+                'message' => 'Pacote excluído com sucesso.',
+            ]);
+        } catch (\RuntimeException $e) {
+            $message = $e->getMessage();
+
+            if (str_contains($message, 'computador(es) usando')) {
+                return response()->json(['message' => $message], 403);
             }
+            if (str_contains($message, 'versão mais recente')) {
+                return response()->json(['message' => $message], 403);
+            }
+            if (str_contains($message, 'Pacote não encontrado')) {
+                return response()->json(['message' => $message], 404);
+            }
+
+            return response()->json(['message' => $message], 500);
         } catch (\Exception $e) {
             Log::error("Error deleting agent package: {$version}", [
                 'error' => $e->getMessage(),
-                'path' => $packagePath,
             ]);
 
             return response()->json([

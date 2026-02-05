@@ -73,8 +73,7 @@ class DashboardController extends Controller
         // Agent versions: count outdated agents compared to latest version
         $outdatedAgents = 0;
         try {
-            $agentController = new AgentController;
-            $latestVersion = $agentController->getLatestVersion();
+            $latestVersion = app(AgentController::class)->getLatestVersion();
             if ($latestVersion) {
                 $agentsQuery = (clone $computerQuery)->whereNotNull('agent_version');
                 $outdatedAgents = $agentsQuery->where('agent_version', '!=', $latestVersion)->count();
