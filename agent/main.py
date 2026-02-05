@@ -17,6 +17,8 @@ import base64
 import re
 import subprocess
 import tempfile
+import tempfile
+import shutil
 from pathlib import Path
 
 # Setup Logging
@@ -584,6 +586,80 @@ class Agent:
         processes.sort(key=lambda p: p['cpu_percent'] or 0, reverse=True)
         return processes[:100]
 
+    def receive_file(self, params):
+        """Handle file reception (download or copy)."""
+        try:
+            filename = params.get('filename')
+            source_type = params.get('source_type')
+            url = params.get('url') # URL or Path
+            auth_required = params.get('auth_required', False)
+            destination_folder = params.get('destination_folder', 'public_desktop')
+            
+            # Determine destination path
+            if platform.system() == 'Windows':
+                # Public Desktop (Visible to all users)
+                public_desktop = Path(os.environ.get('PUBLIC', 'C:\\Users\\Public')) / 'Desktop'
+                base_dir = public_desktop / 'Recebidos do Laboratório'
+            else:
+                base_dir = Path('/tmp/Received')
+            
+            base_dir.mkdir(parents=True, exist_ok=True)
+            
+            if not filename:
+                if source_type == 'upload' and url:
+                    # Try to get from URL
+                    filename = 'downloaded_file'
+                elif url:
+                    filename = Path(url).name
+                else:
+                    filename = f"file_{int(time.time())}"
+            
+            # Sanitize filename
+            filename = "".join(x for x in filename if (x.isalnum() or x in "._- "))
+            dest_path = base_dir / filename
+            
+            logger.info(f"Receiving file '{filename}' to {dest_path}")
+            
+            if source_type == 'upload' or (url and url.startswith(('http:', 'https:'))):
+                # HTTP Download
+                headers = {}
+                if auth_required and self.token:
+                    headers['Authorization'] = f"Bearer {self.token}"
+                
+                # If it's a backend download link, we might need to handle redirects or specific headers? 
+                # Session handles it mostly.
+                
+                logger.debug(f"Downloading from {url}")
+                with self.session.get(url, headers=headers, stream=True, timeout=600) as r:
+                    r.raise_for_status()
+                    with open(dest_path, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+            
+            elif source_type in ['link', 'network_path'] and url:
+                # File Copy (Network Share or Local)
+                # Ensure we handle UNC paths correctly on Windows
+                src_path = Path(url)
+                logger.debug(f"Copying from {src_path}")
+                shutil.copy2(src_path, dest_path)
+            
+            # Visual Feedback
+            msg = f"Novo arquivo recebido: {filename}\nSalvo em: {base_dir}"
+            if platform.system() == 'Windows':
+                # msg command is simple but effective
+                subprocess.run(['msg', '*', msg], shell=True)
+                # Optional: Open folder
+                subprocess.Popen(['explorer', str(base_dir)])
+            else:
+                subprocess.run(['notify-send', 'Laboratório', msg])
+                subprocess.Popen(['xdg-open', str(base_dir)])
+                
+            return True, f"File saved to {dest_path}"
+            
+        except Exception as e:
+            logger.error(f"Error receiving file: {e}")
+            return False, str(e)
+
     def execute_command(self, cmd):
         """Execute a remote command."""
         command_id = cmd['id']
@@ -798,6 +874,21 @@ exit 1
                     output = "Missing PID parameter"
             
             elif command_type == 'terminal':
+                cmd_text = params.get('command')
+                if cmd_text:
+                    # Be careful with shell=True!
+                    result = subprocess.run(cmd_text, shell=True, capture_output=True, text=True, timeout=30)
+                    success = True # Even if exit code != 0, the command executed
+                    output = result.stdout + result.stderr
+                else:
+                    success = False
+                    output = "Missing command text"
+            
+            elif command_type == 'receive_file':
+                success, output = self.receive_file(params)
+
+            # --- Update status ---
+            status = 'completed' if success else 'failed'
                 cmd_line = params.get('cmd_line')
                 if cmd_line:
                     try:

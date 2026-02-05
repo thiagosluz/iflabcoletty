@@ -48,3 +48,17 @@ Schedule::command('app:run-scheduled-tasks')
     ->onFailure(function () {
         Log::error('Scheduled task command failed');
     });
+
+// Clean expired file transfers hourly
+Schedule::call(function () {
+    $expired = \App\Models\FileTransfer::where('expires_at', '<', now())->get();
+    foreach ($expired as $transfer) {
+        if ($transfer->source_type === 'upload' && $transfer->file_path) {
+            \Illuminate\Support\Facades\Storage::delete($transfer->file_path);
+        }
+        $transfer->delete();
+    }
+    if ($expired->count() > 0) {
+        Log::info("Cleaned {$expired->count()} expired file transfers.");
+    }
+})->hourly();

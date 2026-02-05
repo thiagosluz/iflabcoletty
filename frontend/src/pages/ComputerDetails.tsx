@@ -6,7 +6,8 @@ import QRCodeDisplay from '@/components/QRCodeDisplay';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap, RefreshCw, Code2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap, RefreshCw, Code2, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
+import { FileTransferDialog } from '@/components/modals/FileTransferDialog';
 import { useToast } from '@/components/ui/use-toast';
 import { getApiErrorToast } from '@/lib/apiError';
 import { Progress } from '@/components/ui/progress';
@@ -87,10 +88,22 @@ interface ComputerMetric {
     memory_total_gb: number;
     memory_free_gb: number;
     disk_usage: Array<{ mount_point?: string; used_gb?: number; total_gb?: number; usage_percent?: number }>;
-    network_stats: unknown;
+    network_stats: {
+        bytes_sent?: number;
+        bytes_recv?: number;
+    };
     uptime_seconds: number;
     processes_count: number;
     recorded_at: string;
+}
+
+interface Process {
+    pid: number;
+    name: string;
+    username: string;
+    cpu_percent: number;
+    memory_percent: number;
+    create_time: number;
 }
 
 interface PaginationMeta {
@@ -142,12 +155,13 @@ export default function ComputerDetails() {
     const [newHostnameValue, setNewHostnameValue] = useState('');
     const [wolMacEdit, setWolMacEdit] = useState('');
     const [savingWolMac, setSavingWolMac] = useState(false);
+    const [isFileTransferOpen, setIsFileTransferOpen] = useState(false);
     const { toast } = useToast();
 
     // Supervision State
     const [lastScreenshot, setLastScreenshot] = useState<string | null>(null);
     const [loadingScreenshot, setLoadingScreenshot] = useState(false);
-    const [processes, setProcesses] = useState<Array<Record<string, unknown>>>([]);
+    const [processes, setProcesses] = useState<Process[]>([]);
     const [loadingProcesses, setLoadingProcesses] = useState(false);
     const [autoRefreshScreen, setAutoRefreshScreen] = useState(false);
 
@@ -165,7 +179,7 @@ export default function ComputerDetails() {
         if (computer) {
             setWolMacEdit(computer.wol_mac ?? '');
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync wol_mac from computer only when id/wol_mac change
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- sync wol_mac from computer only when id/wol_mac change
     }, [computer?.id, computer?.wol_mac]);
 
     useEffect(() => {
@@ -175,7 +189,7 @@ export default function ComputerDetails() {
             interval = setInterval(fetchScreenshot, 5000);
         }
         return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- id and autoRefreshScreen drive this; fetchScreenshot is stable
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- id and autoRefreshScreen drive this; fetchScreenshot is stable
     }, [autoRefreshScreen, id]);
 
     useEffect(() => {
@@ -183,21 +197,21 @@ export default function ComputerDetails() {
         fetchMetrics();
         const interval = setInterval(fetchMetrics, 30000);
         return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when route id changes only
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- run when route id changes only
     }, [id]);
 
     useEffect(() => {
         if (computer) {
             fetchSoftwares();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination and search drive refetch elsewhere
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination and search drive refetch elsewhere
     }, [computer, softwareCurrentPage, softwarePerPage, softwareSearch]);
 
     useEffect(() => {
         if (computer) {
             fetchActivities();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination drives refetch
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination drives refetch
     }, [computer, activityCurrentPage, activityPerPage]);
 
     const fetchComputer = async () => {
@@ -636,6 +650,11 @@ export default function ComputerDetails() {
                     <Button variant="outline" onClick={() => handleCommand('lock')}>
                         <Lock className="h-4 w-4 mr-2" />
                         Bloquear
+                    </Button>
+
+                    <Button variant="outline" onClick={() => setIsFileTransferOpen(true)}>
+                        <FileText className="h-4 w-4 mr-2" />
+                        Enviar Arquivo
                     </Button>
 
                     <Dialog open={isMessageOpen} onOpenChange={setIsMessageOpen}>
@@ -1178,20 +1197,20 @@ export default function ComputerDetails() {
                                     <p className="text-sm font-medium">{computer.latest_agent_version}</p>
                                 </div>
                             )}
-                            {computer.agent_version && 
-                             computer.latest_agent_version && 
-                             computer.agent_version !== computer.latest_agent_version && (
-                                <div className="pt-2 border-t">
-                                    <Button
-                                        size="sm"
-                                        onClick={() => handleCommand('update_agent')}
-                                        className="bg-blue-600 hover:bg-blue-700"
-                                    >
-                                        <RefreshCw className="h-4 w-4 mr-2" />
-                                        Atualizar agente
-                                    </Button>
-                                </div>
-                            )}
+                            {computer.agent_version &&
+                                computer.latest_agent_version &&
+                                computer.agent_version !== computer.latest_agent_version && (
+                                    <div className="pt-2 border-t">
+                                        <Button
+                                            size="sm"
+                                            onClick={() => handleCommand('update_agent')}
+                                            className="bg-blue-600 hover:bg-blue-700"
+                                        >
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            Atualizar agente
+                                        </Button>
+                                    </div>
+                                )}
                         </div>
                     </div>
 
@@ -1681,6 +1700,14 @@ export default function ComputerDetails() {
                     </div>
                 </TabsContent>
             </Tabs>
+            {/* File Transfer Dialog */}
+            {computer && (
+                <FileTransferDialog
+                    open={isFileTransferOpen}
+                    onOpenChange={setIsFileTransferOpen}
+                    targets={{ computers: [computer.id] }}
+                />
+            )}
         </div>
     );
 }

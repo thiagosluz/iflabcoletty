@@ -33,7 +33,8 @@ import {
     Trash2,
     ExternalLink,
     Pencil,
-    PowerOff
+    PowerOff,
+    FileText
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import LabMap from '@/components/LabMap';
@@ -64,6 +65,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Checkbox } from '@/components/ui/checkbox';
 import SoftwareComputersModal from '@/components/SoftwareComputersModal';
+import { FileTransferDialog } from '@/components/modals/FileTransferDialog';
 
 interface HardwareAverages {
     cpu?: {
@@ -177,22 +179,23 @@ export default function LabDetails() {
     const [isWallpaperDialogOpen, setIsWallpaperDialogOpen] = useState(false);
     const [wallpaperEditUrl, setWallpaperEditUrl] = useState('');
     const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
+    const [isFileTransferOpen, setIsFileTransferOpen] = useState(false);
     const [softwareComputersModal, setSoftwareComputersModal] = useState<{ id: number; name: string } | null>(null);
     const { toast } = useToast();
 
     useEffect(() => {
         if (id) fetchLabDetails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run when id changes only
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- run when id changes only
     }, [id]);
 
     useEffect(() => {
         if (id) fetchComputers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination/filters drive refetch
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination/filters drive refetch
     }, [id, computerCurrentPage, computerPerPage, computerSearch, computerStatusFilter, computerSortBy, computerSortDir]);
 
     useEffect(() => {
         if (id) fetchSoftwares();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination/search drive refetch
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination/search drive refetch
     }, [id, softwareCurrentPage, softwarePerPage, softwareSearch]);
 
     const fetchLabDetails = async () => {
@@ -245,19 +248,19 @@ export default function LabDetails() {
     const handleMapUpdate = async () => {
         // Fetch all computers for the map (without pagination/filters)
         if (!id) return [];
-        
+
         try {
             const response = await apiClient.get(`/labs/${id}/computers?per_page=1000`);
             const allComputers = response.data.data || [];
-            
+
             // Also update the main computers state if we're on page 1 and no filters
             if (computerCurrentPage === 1 && !computerSearch && computerStatusFilter === 'all') {
                 setComputers(allComputers);
             }
-            
+
             // Recalculate stats
             await fetchLabDetails();
-            
+
             return allComputers;
         } catch (error) {
             console.error('Falha ao atualizar dados do mapa:', error);
@@ -503,6 +506,9 @@ export default function LabDetails() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setIsTerminalDialogOpen(true)} className="text-yellow-600 focus:text-yellow-700">
                                 <Terminal className="mr-2 h-4 w-4" /> Terminal em Massa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setIsFileTransferOpen(true)}>
+                                <FileText className="mr-2 h-4 w-4" /> Enviar Arquivo
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -1269,6 +1275,12 @@ export default function LabDetails() {
                 softwareId={softwareComputersModal?.id ?? null}
                 softwareName={softwareComputersModal?.name ?? ''}
                 labId={id ? parseInt(id, 10) : undefined}
+            />
+
+            <FileTransferDialog
+                open={isFileTransferOpen}
+                onOpenChange={setIsFileTransferOpen}
+                targets={{ labs: id ? [parseInt(id, 10)] : [] }}
             />
         </div>
     );

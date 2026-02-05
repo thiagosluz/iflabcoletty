@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\ComputerController;
+use App\Http\Controllers\Api\V1\FileTransferController;
 use App\Http\Controllers\Api\V1\HealthCheckController;
 use App\Http\Controllers\Api\V1\LabController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -248,6 +249,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'show']);
         Route::delete('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'destroy']);
         Route::get('/installers/{fileId}/download', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'download']);
+
+        // File Transfers
+        Route::post('/transfers/upload', [FileTransferController::class, 'upload']);
+        Route::post('/transfers/send', [FileTransferController::class, 'send']);
+        Route::get('/transfers/{fileTransfer}/download', [FileTransferController::class, 'download'])->name('api.v1.transfers.download');
     });
 });
 
