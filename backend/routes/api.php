@@ -161,6 +161,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/agent/packages/{version}', [AgentController::class, 'deletePackage']);
 
         // Software
+        Route::delete('/softwares/cleanup', [SoftwareController::class, 'cleanup']);
         Route::apiResource('softwares', SoftwareController::class)->only(['index', 'show']);
 
         // Dashboard

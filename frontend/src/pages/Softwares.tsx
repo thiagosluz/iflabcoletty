@@ -3,10 +3,22 @@ import { AxiosError } from 'axios';
 import apiClient from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Search, Package, Download, List, LayoutGrid } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, Package, Download, List, LayoutGrid, Trash2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import ExportDialog from '@/components/ExportDialog';
 import SoftwareComputersModal from '@/components/SoftwareComputersModal';
+import { useToast } from '@/components/ui/use-toast';
+import { getApiErrorToast } from '@/lib/apiError';
 
 interface Software {
     id: number;
@@ -35,6 +47,9 @@ export default function Softwares() {
     const [perPage, setPerPage] = useState(20);
     const [pagination, setPagination] = useState<PaginationMeta | null>(null);
     const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+    const [isCleaningUp, setIsCleaningUp] = useState(false);
+    const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
+    const { toast } = useToast();
 
     const fetchSoftwares = useCallback(async () => {
         try {
@@ -60,6 +75,24 @@ export default function Softwares() {
             setLoading(false);
         }
     }, [currentPage, perPage, searchTerm]);
+
+    const handleCleanup = async () => {
+        try {
+            setIsCleaningUp(true);
+            const response = await apiClient.delete('/softwares/cleanup');
+            fetchSoftwares();
+            toast({
+                title: 'Limpeza concluída',
+                description: response.data.message || 'Os softwares não vinculados foram removidos com sucesso.'
+            });
+        } catch (error: unknown) {
+            console.error('Falha ao limpar softwares:', error);
+            toast({ ...getApiErrorToast(error) });
+        } finally {
+            setIsCleaningUp(false);
+            setShowCleanupConfirm(false);
+        }
+    };
 
     useEffect(() => {
         fetchSoftwares();
@@ -155,16 +188,26 @@ export default function Softwares() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h1 className="text-3xl font-bold tracking-tight">Inventário de Software</h1>
-                <ExportDialog
-                    trigger={
-                        <Button variant="outline">
-                            <Download className="mr-2 h-4 w-4" /> Exportar
-                        </Button>
-                    }
-                    onExport={handleExport}
-                    title="Exportar Relatório de Softwares"
-                    description="Escolha o formato para exportar a lista de softwares com os filtros aplicados"
-                />
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="destructive"
+                        onClick={() => setShowCleanupConfirm(true)}
+                        disabled={isCleaningUp}
+                    >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Limpar Não Vinculados
+                    </Button>
+                    <ExportDialog
+                        trigger={
+                            <Button variant="outline">
+                                <Download className="mr-2 h-4 w-4" /> Exportar
+                            </Button>
+                        }
+                        onExport={handleExport}
+                        title="Exportar Relatório de Softwares"
+                        description="Escolha o formato para exportar a lista de softwares com os filtros aplicados"
+                    />
+                </div>
             </div>
 
             {/* Search and Per Page */}
@@ -418,6 +461,28 @@ export default function Softwares() {
                 softwareId={computersModalSoftware?.id ?? null}
                 softwareName={computersModalSoftware?.name ?? ''}
             />
+
+            <AlertDialog open={showCleanupConfirm} onOpenChange={setShowCleanupConfirm}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Limpar softwares não vinculados</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta ação irá excluir todos os softwares que não estão instalados em nenhum computador.
+                            Tem certeza que deseja continuar?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isCleaningUp}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleCleanup}
+                            disabled={isCleaningUp}
+                            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                        >
+                            {isCleaningUp ? 'Limpando...' : 'Sim, limpar'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

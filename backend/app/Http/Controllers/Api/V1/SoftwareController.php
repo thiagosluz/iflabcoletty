@@ -66,4 +66,36 @@ class SoftwareController extends Controller
         // Optimized: Eager load computers with lab to avoid N+1 queries
         return $software->load(['computers.lab:id,name']);
     }
+
+    #[OA\Delete(
+        path: '/api/v1/softwares/cleanup',
+        summary: 'Excluir softwares não vinculados a nenhum computador',
+        tags: ['Softwares'],
+        security: [['sanctum' => []]],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Softwares excluídos com sucesso',
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: 'message', type: 'string', example: 'Limpeza concluída com sucesso'),
+                        new OA\Property(property: 'deleted_count', type: 'integer', example: 5),
+                    ]
+                )
+            ),
+            new OA\Response(response: 401, description: 'Não autenticado'),
+            new OA\Response(response: 403, description: 'Não autorizado'),
+        ]
+    )]
+    public function cleanup()
+    {
+        $this->authorize('softwares.delete');
+
+        $deleted = Software::doesntHave('computers')->delete();
+
+        return response()->json([
+            'message' => 'Limpeza concluída com sucesso',
+            'deleted_count' => $deleted,
+        ]);
+    }
 }

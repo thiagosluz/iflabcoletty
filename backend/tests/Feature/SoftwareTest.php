@@ -94,4 +94,30 @@ class SoftwareTest extends TestCase
 
         $response->assertStatus(401);
     }
+
+    public function test_authenticated_user_can_cleanup_unlinked_softwares(): void
+    {
+        $user = $this->actingAsUser();
+
+        // Software unlinked
+        Software::factory()->count(3)->create();
+
+        // Software linked
+        $linkedSoftware = Software::factory()->create();
+        $computer = Computer::factory()->create();
+        $linkedSoftware->computers()->attach($computer->id, ['installed_at' => now()]);
+
+        $this->assertEquals(4, Software::count());
+
+        $response = $this->deleteJson('/api/v1/softwares/cleanup', [], $this->getAuthHeaders($user));
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'message' => 'Limpeza concluída com sucesso',
+                'deleted_count' => 3,
+            ]);
+
+        $this->assertEquals(1, Software::count());
+        $this->assertDatabaseHas('softwares', ['id' => $linkedSoftware->id]);
+    }
 }

@@ -457,7 +457,15 @@ export default function Labs() {
                                 {labs.map((lab) => (
                                     <TableRow key={lab.id}>
                                         <TableCell className="font-mono text-xs">{lab.id}</TableCell>
-                                        <TableCell className="font-medium">{lab.name}</TableCell>
+                                        <TableCell className="font-medium">
+                                            <span
+                                                className="cursor-pointer hover:underline text-primary"
+                                                onClick={() => navigate(`/admin/labs/${lab.id}`)}
+                                                title="Ver Detalhes"
+                                            >
+                                                {lab.name}
+                                            </span>
+                                        </TableCell>
                                         <TableCell>{lab.description}</TableCell>
                                         <TableCell>{lab.computers_count || 0}</TableCell>
                                         <TableCell className="text-xs text-muted-foreground">
