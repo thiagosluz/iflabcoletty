@@ -263,6 +263,7 @@ class RunScheduledTasks extends Command
                             'target_hostname' => $computer->hostname,
                         ],
                         'status' => 'pending',
+                        'expires_at' => Carbon::now($timezone)->addMinutes($task->command_validity_minutes ?? 60),
                     ]);
                     $successCount++;
                 } else {
@@ -277,6 +278,7 @@ class RunScheduledTasks extends Command
                         'command' => $task->command,
                         'parameters' => $parameters,
                         'status' => 'pending',
+                        'expires_at' => Carbon::now($timezone)->addMinutes($task->command_validity_minutes ?? 60),
                     ]);
                     $successCount++;
                 }

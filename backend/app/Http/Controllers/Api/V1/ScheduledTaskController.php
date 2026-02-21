@@ -243,6 +243,7 @@ class ScheduledTaskController extends Controller
                             'target_hostname' => $computer->hostname,
                         ],
                         'status' => 'pending',
+                        'expires_at' => now()->addMinutes($task->command_validity_minutes ?? 60),
                     ]);
                     $successCount++;
                 } else {
@@ -251,6 +252,7 @@ class ScheduledTaskController extends Controller
                         'command' => $task->command,
                         'parameters' => $task->command === 'message' ? ['message' => 'Tarefa agendada executada'] : [],
                         'status' => 'pending',
+                        'expires_at' => now()->addMinutes($task->command_validity_minutes ?? 60),
                     ]);
                     $successCount++;
                 }
