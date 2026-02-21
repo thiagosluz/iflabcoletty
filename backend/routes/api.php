@@ -139,7 +139,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/computers/{computer}/activities', [ComputerController::class, 'getActivities']);
         Route::post('/computers/{computer}/rotate-hash', [ComputerController::class, 'rotatePublicHash']);
 
-        // Remote Control
+        // Remote Control and Commands
+        Route::get('/commands', [\App\Http\Controllers\Api\V1\ComputerCommandController::class, 'index']);
+        Route::delete('/commands/{command}', [\App\Http\Controllers\Api\V1\ComputerCommandController::class, 'destroy']);
+        Route::post('/commands/bulk-delete', [\App\Http\Controllers\Api\V1\ComputerCommandController::class, 'bulkDestroy']);
+
         Route::get('/computers/{computer}/commands', [RemoteControlController::class, 'index']);
         Route::post('/computers/{computer}/commands', [RemoteControlController::class, 'store']);
         Route::post('/computers/bulk-commands', [RemoteControlController::class, 'storeBulk']);

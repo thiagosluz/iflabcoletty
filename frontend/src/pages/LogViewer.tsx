@@ -156,7 +156,7 @@ export default function LogViewer() {
                                     className="h-8 pl-8 text-xs"
                                 />
                             </div>
-                            <Select value={fileSort} onValueChange={(v: string) => setFileSort(v)}>
+                            <Select value={fileSort} onValueChange={(v: string) => setFileSort(v as 'name' | 'size' | 'date')}>
                                 <SelectTrigger className="h-8 text-xs">
                                     <SelectValue placeholder="Ordenar por" />
                                 </SelectTrigger>

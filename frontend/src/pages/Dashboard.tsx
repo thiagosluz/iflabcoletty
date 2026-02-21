@@ -291,12 +291,12 @@ export default function Dashboard() {
                                         margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                                                <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                                                <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                                                <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
                                             </linearGradient>
                                             <linearGradient id="colorMem" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8}/>
-                                                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0}/>
+                                                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                                                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
                                         <XAxis dataKey="hour" />
@@ -337,7 +337,7 @@ export default function Dashboard() {
                                             dataKey="value"
                                             label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                                         >
-                                            {pieData.map((entry, index) => (
+                                            {pieData.map((_entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
@@ -375,7 +375,7 @@ export default function Dashboard() {
                             </div>
                         </CardContent>
                     </Card>
-                    
+
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-sm font-medium">Média RAM</CardTitle>
@@ -399,8 +399,8 @@ export default function Dashboard() {
                                     <span className="font-bold">{stats.hardware_averages.disk?.avg_total_gb?.toFixed(0)} GB</span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                    <div 
-                                        className="bg-purple-600 h-2.5 rounded-full" 
+                                    <div
+                                        className="bg-purple-600 h-2.5 rounded-full"
                                         style={{ width: `${stats.hardware_averages.disk?.avg_usage_percent || 0}%` }}
                                     ></div>
                                 </div>

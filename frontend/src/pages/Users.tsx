@@ -136,12 +136,12 @@ export default function Users() {
             if (editingUser && (!payload.password || payload.password === '')) {
                 delete payload.password;
             }
-            
+
             // Remove roles if empty array
-            if (!payload.roles || payload.roles.length === 0) {
+            if (!payload.roles || (Array.isArray(payload.roles) && payload.roles.length === 0)) {
                 delete payload.roles;
             }
-            
+
             if (editingUser) {
                 await apiClient.put(`/users/${editingUser.id}`, payload);
                 toast({ title: 'Sucesso', description: 'Usuário atualizado com sucesso' });
@@ -169,19 +169,19 @@ export default function Users() {
 
     const handleDelete = async () => {
         if (!userToDelete) return;
-        
+
         try {
             setIsDeleting(true);
             await apiClient.delete(`/users/${userToDelete.id}`);
             toast({ title: 'Excluído', description: 'Usuário excluído com sucesso' });
-            
+
             const currentUsersCount = users.length;
             if (pagination && currentUsersCount === 1 && currentPage > 1) {
                 setCurrentPage(currentPage - 1);
             } else {
                 fetchUsers();
             }
-            
+
             setUserToDelete(null);
         } catch (error: unknown) {
             toast({ ...getApiErrorToast(error) });

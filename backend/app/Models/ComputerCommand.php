@@ -18,11 +18,13 @@ class ComputerCommand extends Model
         'status',
         'output',
         'executed_at',
+        'expires_at',
     ];
 
     protected $casts = [
         'parameters' => 'array',
         'executed_at' => 'datetime',
+        'expires_at' => 'datetime',
     ];
 
     public function computer(): BelongsTo

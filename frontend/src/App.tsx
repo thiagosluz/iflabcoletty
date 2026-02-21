@@ -24,6 +24,7 @@ const AlertRules = lazy(() => import('./pages/AlertRules'));
 const PublicComputerView = lazy(() => import('./pages/PublicComputerView'));
 const SystemHealth = lazy(() => import('./pages/SystemHealth'));
 const SoftwareInstallation = lazy(() => import('./pages/SoftwareInstallation'));
+const Commands = lazy(() => import('./pages/Commands'));
 const AgentDownloads = lazy(() => import('./pages/AgentDownloads'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
@@ -61,6 +62,7 @@ function App() {
               <Route path="computers/:id" element={<ComputerDetails />} />
               <Route path="softwares" element={<Softwares />} />
               <Route path="schedules" element={<Schedules />} />
+              <Route path="commands" element={<Commands />} />
               <Route path="audit-logs" element={<AuditLogs />} />
               <Route path="logs" element={<LogViewer />} />
               <Route path="report-jobs" element={<ReportJobs />} />

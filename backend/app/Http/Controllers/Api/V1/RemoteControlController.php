@@ -33,6 +33,7 @@ class RemoteControlController extends Controller
             'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
             'parameters.cmd_line' => 'nullable|string|max:10000',
             'parameters.command' => 'nullable|string|max:10000',
+            'expires_in_minutes' => 'nullable|integer|min:1',
         ]);
 
         if ($validated['command'] === 'terminal') {
@@ -78,6 +79,7 @@ class RemoteControlController extends Controller
             'command' => $validated['command'],
             'parameters' => $validated['parameters'] ?? [],
             'status' => 'pending',
+            'expires_at' => isset($validated['expires_in_minutes']) ? now()->addMinutes($validated['expires_in_minutes']) : now()->addMinutes(60),
         ]);
 
         return response()->json($command, 201);
@@ -96,6 +98,7 @@ class RemoteControlController extends Controller
             'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
             'parameters.cmd_line' => 'nullable|string|max:10000',
             'parameters.command' => 'nullable|string|max:10000',
+            'expires_in_minutes' => 'nullable|integer|min:1',
         ]);
 
         if ($validated['command'] === 'terminal') {
@@ -121,6 +124,7 @@ class RemoteControlController extends Controller
                         'command' => $validated['command'],
                         'parameters' => $validated['parameters'] ?? [],
                         'status' => 'pending',
+                        'expires_at' => isset($validated['expires_in_minutes']) ? now()->addMinutes($validated['expires_in_minutes']) : now()->addMinutes(60),
                     ]);
                 }
                 $count++;
@@ -146,6 +150,7 @@ class RemoteControlController extends Controller
             'parameters.message' => 'required_if:command,message|nullable|string|max:1000',
             'parameters.cmd_line' => 'nullable|string|max:10000',
             'parameters.command' => 'nullable|string|max:10000',
+            'expires_in_minutes' => 'nullable|integer|min:1',
         ]);
 
         if ($validated['command'] === 'terminal') {
@@ -171,6 +176,7 @@ class RemoteControlController extends Controller
                         'command' => $validated['command'],
                         'parameters' => $validated['parameters'] ?? [],
                         'status' => 'pending',
+                        'expires_at' => isset($validated['expires_in_minutes']) ? now()->addMinutes($validated['expires_in_minutes']) : now()->addMinutes(60),
                     ]);
                 }
                 $count++;
@@ -264,8 +270,25 @@ class RemoteControlController extends Controller
 
     public function pending(Computer $computer)
     {
+        $now = now();
+
+        // Mark expired commands as failed
+        $computer->commands()
+            ->where('status', 'pending')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<', $now)
+            ->update([
+                'status' => 'failed',
+                'output' => 'Comando expirado: o computador não ficou online a tempo.',
+                'executed_at' => $now,
+            ]);
+
         $commands = $computer->commands()
             ->where('status', 'pending')
+            ->where(function ($query) use ($now) {
+                $query->whereNull('expires_at')
+                    ->orWhere('expires_at', '>=', $now);
+            })
             ->orderBy('created_at', 'asc')
             ->get();
 

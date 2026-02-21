@@ -122,6 +122,7 @@ export default function Schedules() {
             target_id: task.target_id.toString(),
             frequency: task.frequency,
             time: task.time,
+            command_validity_minutes: task.command_validity_minutes,
             days_of_week: task.days_of_week || [],
             run_at_date: task.run_at_date || '',
             is_active: task.is_active
@@ -145,7 +146,7 @@ export default function Schedules() {
         fetchTasks();
         fetchLabs();
         fetchComputers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetches defined below
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetches defined below
     }, []);
 
     // Debounce search for computers

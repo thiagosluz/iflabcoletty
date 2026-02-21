@@ -89,10 +89,10 @@ export default function Roles() {
         try {
             // Remove permissions if empty array
             const payload: Record<string, unknown> = { ...data };
-            if (!payload.permissions || payload.permissions.length === 0) {
+            if (!payload.permissions || (Array.isArray(payload.permissions) && payload.permissions.length === 0)) {
                 delete payload.permissions;
             }
-            
+
             if (editingRole) {
                 await apiClient.put(`/roles/${editingRole.id}`, payload);
                 toast({ title: 'Sucesso', description: 'Role atualizada com sucesso' });
@@ -124,7 +124,7 @@ export default function Roles() {
 
     const handleDelete = async () => {
         if (!roleToDelete) return;
-        
+
         try {
             setIsDeleting(true);
             await apiClient.delete(`/roles/${roleToDelete.id}`);

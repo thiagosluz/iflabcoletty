@@ -34,18 +34,18 @@ const echoConfig: Record<string, unknown> = {
                     socket_id: socketId,
                     channel_name: channel.name
                 })
-                .then(response => {
-                    callback(false, response.data);
-                })
-                .catch(error => {
-                    callback(true, error);
-                });
+                    .then(response => {
+                        callback(false, response.data);
+                    })
+                    .catch(error => {
+                        callback(true, error);
+                    });
             }
         };
     },
 };
 
-const echo = new Echo(echoConfig as Parameters<typeof Echo>[0]);
+const echo = new Echo(echoConfig as any);
 
 interface EchoConnector {
     connector?: {

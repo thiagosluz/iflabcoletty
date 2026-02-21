@@ -100,6 +100,11 @@ export default function DashboardLayout() {
                         {!collapsed && <span className="ml-3 truncate">Automação</span>}
                         {collapsed && <span className="sr-only">Automação</span>}
                     </Link>
+                    <Link to="/admin/commands" className={navLinkClass('/admin/commands', collapsed)} title="Comandos Remotos">
+                        <Activity className="h-5 w-5 shrink-0" />
+                        {!collapsed && <span className="ml-3 truncate">Comandos Remotos</span>}
+                        {collapsed && <span className="sr-only">Comandos Remotos</span>}
+                    </Link>
                     <Link to="/admin/softwares" className={navLinkClass('/admin/softwares', collapsed)} title="Software">
                         <Package className="h-5 w-5 shrink-0" />
                         {!collapsed && <span className="ml-3 truncate">Software</span>}
