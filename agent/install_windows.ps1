@@ -291,6 +291,9 @@ if ($existingTask) {
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
 $taskUser = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
+# Add repetition interval of 30 minutes to the logon trigger
+$trigger.RepetitionInterval = (New-TimeSpan -Minutes 30)
+$trigger.RepetitionDuration = (New-TimeSpan -Days 1) # Repeat for a day, or use [System.TimeSpan]::MaxValue for indefinite
 $principal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Description "IFLab Agent: apply lab wallpaper" -Force | Out-Null
 Write-ColorOutput Green "Scheduled task '$taskName' created for $taskUser (service can trigger for immediate apply when this user is logged in)."

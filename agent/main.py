@@ -1456,6 +1456,35 @@ $fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
         except Exception as e:
             logger.debug("Could not ensure Startup shortcut: %s", e)
 
+    def _ensure_wallpaper_task_schedule(self):
+        """Ensure the scheduled task has a 30-minute repetition trigger for existing installations."""
+        if platform.system() != "Windows":
+            return
+        if getattr(self, '_wallpaper_task_checked', False):
+            return
+        try:
+            ps_script = '''
+$taskName = "IFLabAgentSetWallpaper"
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($null -ne $task) {
+    if (-not $task.Triggers[0].Repetition.Interval -or $task.Triggers[0].Repetition.Interval -ne "PT30M") {
+        $taskUser = $task.Principal.UserId
+        $newTrigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
+        $newTrigger.RepetitionInterval = (New-TimeSpan -Minutes 30)
+        $newTrigger.RepetitionDuration = (New-TimeSpan -Days 1)
+        Set-ScheduledTask -TaskName $taskName -Trigger $newTrigger -User $taskUser | Out-Null
+    }
+}
+'''
+            subprocess.run(
+                ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
+                capture_output=True,
+                timeout=15,
+            )
+            self._wallpaper_task_checked = True
+        except Exception as e:
+            logger.debug("Failed to ensure wallpaper task schedule: %s", e)
+
     def _set_wallpaper(self, file_path):
         """Aplica o arquivo como papel de parede. file_path deve ser caminho absoluto."""
         try:
@@ -1525,6 +1554,7 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
         """Verifica o wallpaper padrão do lab no servidor e, se o atual for diferente, aplica o padrão."""
         if not getattr(self, '_cached_lab_wallpaper_enabled', True):
             return
+        self._ensure_wallpaper_task_schedule()
         url = (self._cached_lab_wallpaper_url or "").strip()
         if not url:
             return
