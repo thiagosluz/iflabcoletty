@@ -441,11 +441,19 @@ class Agent:
             }
             
             # Uptime
-            uptime_seconds = int(time.time() - psutil.boot_time())
+            uptime = int(time.time() - psutil.boot_time())
             
             # Processes
-            processes_count = len(psutil.pids())
+            process_count = len(psutil.pids())
             
+            
+            # Check if kiosk active
+            kiosk_locked = False
+            if platform.system() == 'Windows':
+                active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
+                if os.path.exists(active_file):
+                    kiosk_locked = True
+
             return {
                 'cpu_usage_percent': cpu_percent,
                 'memory_usage_percent': memory.percent,
@@ -453,8 +461,9 @@ class Agent:
                 'memory_free_gb': round(memory.available / (1024**3), 2),
                 'disk_usage': disk_usage,
                 'network_stats': network_stats,
-                'uptime_seconds': uptime_seconds,
-                'processes_count': processes_count
+                'uptime_seconds': uptime,
+                'processes_count': process_count,
+                'kiosk_locked': kiosk_locked
             }
         except Exception as e:
             logger.error(f"Error collecting metrics: {e}")
@@ -949,6 +958,78 @@ exit 1
                         success = False
                         output = f"Lock failed: {str(e)}"
 
+            elif command_type == 'kiosk_lock':
+                if platform.system() == 'Windows':
+                    import sys
+                    unlock_file = r"C:\ProgramData\IFLabAgent\unlock_kiosk.txt"
+                    if os.path.exists(unlock_file):
+                        try:
+                            os.remove(unlock_file)
+                        except:
+                            pass
+                    
+                    script_path = self._ensure_kiosk_script()
+                    if script_path:
+                        python_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                        if not os.path.exists(python_exe):
+                            python_exe = sys.executable
+                            
+                        ps_script = f'''
+$cs = Get-WmiObject -Class Win32_ComputerSystem
+$user = $cs.UserName
+if (-not $user) {{ exit 1 }}
+if ($user -match '^(.+)\\\\(.+)$') {{
+    $domain = $matches[1]
+    $username = $matches[2]
+}} else {{
+    $domain = $env:COMPUTERNAME
+    $username = $user
+}}
+$taskName = "IFLabKiosk_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+cmd /c "schtasks /Create /TN `"$taskName`" /TR `"{python_exe} `"{script_path}`"`" /SC ONCE /ST 23:59 /F /RU `"$domain\\$username`" /RL HIGHEST" 2>&1 | Out-Null
+cmd /c "schtasks /Run /TN `"$taskName`"" 2>&1 | Out-Null
+Start-Sleep -Milliseconds 800
+cmd /c "schtasks /Delete /TN `"$taskName`" /F" 2>&1 | Out-Null
+exit 0
+'''
+                        try:
+                            result = subprocess.run(
+                                ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_script],
+                                capture_output=True, text=True, timeout=25
+                            )
+                            if result.returncode == 0:
+                                success = True
+                                output = "Kiosk mode locked successfully."
+                            else:
+                                success = False
+                                output = f"Failed to run schtasks: {result.stderr or result.stdout}"
+                        except Exception as e:
+                            success = False
+                            output = str(e)
+                    else:
+                        success = False
+                        output = "Failed to create kiosk script."
+                else:
+                    success = False
+                    output = "Kiosk mode not supported on Linux."
+
+            elif command_type == 'kiosk_unlock':
+                if platform.system() == 'Windows':
+                    unlock_file = r"C:\ProgramData\IFLabAgent\unlock_kiosk.txt"
+                    try:
+                        if not os.path.exists(r"C:\ProgramData\IFLabAgent"):
+                            os.makedirs(r"C:\ProgramData\IFLabAgent", exist_ok=True)
+                        with open(unlock_file, 'w') as f:
+                            f.write('unlock')
+                        success = True
+                        output = "Kiosk mode unlocked successfully."
+                    except Exception as e:
+                        success = False
+                        output = f"Failed to write unlock file: {e}"
+                else:
+                    success = False
+                    output = "Kiosk mode not supported on Linux."
+            
             elif command_type == 'message':
                 msg = (params.get('message') or params.get('text') or '').strip()
                 if not msg:

@@ -35,7 +35,9 @@ import {
     ExternalLink,
     Pencil,
     PowerOff,
-    FileText
+    FileText,
+    Lock,
+    Unlock
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import LabMap from '@/components/LabMap';
@@ -117,6 +119,7 @@ interface Computer {
         id: number;
         name: string;
     };
+    is_locked?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -321,6 +324,20 @@ export default function LabDetails() {
         }
     };
 
+    const handleKioskCommand = async (action: 'lock' | 'unlock') => {
+        if (!id) return;
+        try {
+            const response = await apiClient.post(`/labs/${id}/kiosk/${action}`);
+            toast({
+                title: action === 'lock' ? 'Telas bloqueadas' : 'Telas desbloqueadas',
+                description: response.data.message || (action === 'lock' ? 'As telas dos computadores online foram bloqueadas.' : 'As telas foram desbloqueadas.'),
+            });
+            fetchComputers();
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
+        }
+    };
+
     const handleComputerSearchChange = (value: string) => {
         setComputerSearch(value);
         setComputerCurrentPage(1);
@@ -501,6 +518,12 @@ export default function LabDetails() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setConfirmAction({ command: 'update_agent', title: 'Atualizar agente em massa', description: 'O comando será enfileirado para todos os computadores deste laboratório. Os agentes online executarão a atualização ao verificar a fila.' })}>
                                 <RefreshCw className="mr-2 h-4 w-4" /> Atualizar agente
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleKioskCommand('lock')} className="text-orange-600 focus:text-orange-700">
+                                <Lock className="mr-2 h-4 w-4" /> Bloquear Telas (Modo Atenção)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleKioskCommand('unlock')} className="text-green-600 focus:text-green-700">
+                                <Unlock className="mr-2 h-4 w-4" /> Desbloquear Telas
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleLabCommand('wol')}>
                                 <Zap className="mr-2 h-4 w-4" /> Acordar Todos (WoL)
@@ -1024,9 +1047,12 @@ export default function LabDetails() {
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="flex items-center gap-2">
-                                                            <div className={`h-2.5 w-2.5 rounded-full ${isOnline(computer.updated_at) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                                            <div className={`h-2.5 w-2.5 rounded-full ${!isOnline(computer.updated_at) ? 'bg-gray-300' :
+                                                                    computer.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                                                }`} />
                                                             <span className="text-xs text-muted-foreground">
-                                                                {isOnline(computer.updated_at) ? 'Online' : 'Offline'}
+                                                                {!isOnline(computer.updated_at) ? 'Offline' :
+                                                                    computer.is_locked ? 'Bloqueado' : 'Online'}
                                                             </span>
                                                         </div>
                                                     </td>

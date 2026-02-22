@@ -139,6 +139,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/computers/{computer}/activities', [ComputerController::class, 'getActivities']);
         Route::post('/computers/{computer}/rotate-hash', [ComputerController::class, 'rotatePublicHash']);
 
+        // Kiosk Mode (Lock/Unlock)
+        Route::post('/labs/{lab}/kiosk/lock', [\App\Http\Controllers\Api\V1\KioskController::class, 'lockLab']);
+        Route::post('/labs/{lab}/kiosk/unlock', [\App\Http\Controllers\Api\V1\KioskController::class, 'unlockLab']);
+        Route::post('/computers/{computer}/kiosk/lock', [\App\Http\Controllers\Api\V1\KioskController::class, 'lockComputer']);
+        Route::post('/computers/{computer}/kiosk/unlock', [\App\Http\Controllers\Api\V1\KioskController::class, 'unlockComputer']);
+
         // Remote Control and Commands
         Route::get('/commands', [\App\Http\Controllers\Api\V1\ComputerCommandController::class, 'index']);
         Route::delete('/commands/{command}', [\App\Http\Controllers\Api\V1\ComputerCommandController::class, 'destroy']);

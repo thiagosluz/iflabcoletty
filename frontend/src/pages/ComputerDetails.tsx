@@ -6,7 +6,7 @@ import QRCodeDisplay from '@/components/QRCodeDisplay';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, MessageSquare, Zap, RefreshCw, Code2, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
+import { Copy, Download, QrCode, ChevronLeft, ChevronRight, Search, Package, Cpu, MemoryStick, HardDrive, Monitor as MonitorIcon, Activity, Clock, Network, Power, RotateCw, Lock, Unlock, MessageSquare, Zap, RefreshCw, Code2, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import { FileTransferDialog } from '@/components/modals/FileTransferDialog';
 import { useToast } from '@/components/ui/use-toast';
 import { getApiErrorToast } from '@/lib/apiError';
@@ -128,6 +128,7 @@ interface Computer {
         id: number;
         name: string;
     };
+    is_locked?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -376,6 +377,20 @@ export default function ComputerDetails() {
         }
     };
 
+    const handleKioskCommand = async (action: 'lock' | 'unlock') => {
+        if (!id) return;
+        try {
+            const response = await apiClient.post(`/computers/${id}/kiosk/${action}`);
+            toast({
+                title: action === 'lock' ? 'Tela bloqueada' : 'Tela desbloqueada',
+                description: response.data.message || (action === 'lock' ? 'A tela do computador foi bloqueada.' : 'A tela foi desbloqueada.'),
+            });
+            fetchComputer();
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
+        }
+    };
+
     const pollCommandResult = async (commandId: number, type: string) => {
         let attempts = 0;
         const maxAttempts = 10; // 20 seconds total
@@ -587,11 +602,13 @@ export default function ComputerDetails() {
                     </h1>
                     <div className="flex items-center gap-2 mt-1">
                         <span
-                            className={`inline-block w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-400'
+                            className={`inline-block w-2 h-2 rounded-full ${!isOnline ? 'bg-gray-400' :
+                                    computer.is_locked ? 'bg-orange-500' : 'bg-green-500'
                                 }`}
                         />
                         <span className="text-sm text-gray-600">
-                            {isOnline ? 'Online' : 'Offline'}
+                            {!isOnline ? 'Offline' :
+                                computer.is_locked ? 'Bloqueado (Atenção)' : 'Online'}
                         </span>
                         <span className="text-sm text-gray-500">
                             • Última atualização: {new Date(computer.updated_at).toLocaleString('pt-BR')}
@@ -647,9 +664,14 @@ export default function ComputerDetails() {
                         </AlertDialogContent>
                     </AlertDialog>
 
-                    <Button variant="outline" onClick={() => handleCommand('lock')}>
+                    <Button variant="outline" onClick={() => handleKioskCommand('lock')} className="text-orange-600 border-orange-200 hover:bg-orange-50">
                         <Lock className="h-4 w-4 mr-2" />
-                        Bloquear
+                        Modo Atenção
+                    </Button>
+
+                    <Button variant="outline" onClick={() => handleKioskCommand('unlock')} className="text-green-600 border-green-200 hover:bg-green-50">
+                        <Unlock className="h-4 w-4 mr-2" />
+                        Desbloquear
                     </Button>
 
                     <Button variant="outline" onClick={() => setIsFileTransferOpen(true)}>

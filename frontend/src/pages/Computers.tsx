@@ -39,6 +39,7 @@ interface Computer {
     public_hash: string;
     hostname: string;
     lab?: Lab;
+    is_locked?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -642,9 +643,12 @@ export default function Computers() {
                                         <TableCell>{pc.lab?.name}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <div className={`h-2.5 w-2.5 rounded-full ${isOnline(pc.updated_at) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                                <div className={`h-2.5 w-2.5 rounded-full ${!isOnline(pc.updated_at) ? 'bg-gray-300' :
+                                                        pc.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                                    }`} />
                                                 <span className="text-xs text-muted-foreground">
-                                                    {isOnline(pc.updated_at) ? 'Online' : 'Offline'}
+                                                    {!isOnline(pc.updated_at) ? 'Offline' :
+                                                        pc.is_locked ? 'Bloqueado' : 'Online'}
                                                 </span>
                                             </div>
                                         </TableCell>
@@ -706,9 +710,12 @@ export default function Computers() {
                                             </div>
                                         )}
                                         <div className="flex items-center gap-2">
-                                            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${isOnline(pc.updated_at) ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${!isOnline(pc.updated_at) ? 'bg-gray-300' :
+                                                    pc.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                                }`} />
                                             <span className="text-xs text-muted-foreground">
-                                                {isOnline(pc.updated_at) ? 'Online' : 'Offline'}
+                                                {!isOnline(pc.updated_at) ? 'Offline' :
+                                                    pc.is_locked ? 'Bloqueado' : 'Online'}
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">

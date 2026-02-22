@@ -283,8 +283,17 @@ class ComputerController extends Controller
         // Store metric
         $computer->metrics()->create($validated);
 
+        // Update kiosk lock status if provided in heartbeat
+        if ($request->has('kiosk_locked')) {
+            $isLocked = filter_var($request->input('kiosk_locked'), FILTER_VALIDATE_BOOLEAN);
+            if ($computer->is_locked !== $isLocked) {
+                $computer->is_locked = $isLocked;
+            }
+        }
+
         // Update computer last seen
         $computer->touch();
+        $computer->save();
 
         // Create activity for heartbeat (lighter than full report)
         // Optionally, we can skip creating an activity for every metric push to save DB space

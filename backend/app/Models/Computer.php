@@ -21,11 +21,13 @@ class Computer extends Model
         'position_y',
         'agent_version',
         'wol_mac',
+        'is_locked',
     ];
 
     protected $casts = [
         'hardware_info' => 'array',
         'public_hash_expires_at' => 'datetime',
+        'is_locked' => 'boolean',
     ];
 
     protected static function boot()
