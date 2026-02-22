@@ -13,12 +13,13 @@ jobs:
     
     services:
       postgres:
-        image: postgres:15-alpine
+        image: timescale/timescaledb:latest-pg15
         env:
           POSTGRES_DB: app
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
         options: >-
+          -c shared_preload_libraries=timescaledb
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
