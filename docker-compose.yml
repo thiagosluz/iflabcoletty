@@ -125,7 +125,7 @@ services:
 
   # For development convenience, a node service to run build
   node:
-    image: node:20-alpine
+    image: node:20
     working_dir: /app
     volumes:
       - ./frontend:/app
@@ -134,8 +134,9 @@ services:
       - iflab-net
 
   db:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     restart: unless-stopped
+    command: postgres -c shared_preload_libraries=timescaledb
     environment:
       POSTGRES_DB: app
       POSTGRES_USER: user

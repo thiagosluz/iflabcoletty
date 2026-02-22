@@ -62,3 +62,23 @@ Schedule::call(function () {
         Log::info("Cleaned {$expired->count()} expired file transfers.");
     }
 })->hourly();
+
+// Clean old computer activities (older than 90 days)
+Schedule::call(function () {
+    $deleted = \Illuminate\Support\Facades\DB::table('computer_activities')
+        ->where('created_at', '<', now()->subDays(90))
+        ->delete();
+    if ($deleted > 0) {
+        Log::info("Cleaned {$deleted} old computer activities (older than 90 days).");
+    }
+})->dailyAt('04:00')->timezone('America/Sao_Paulo');
+
+// Clean old audit logs (older than 365 days)
+Schedule::call(function () {
+    $deleted = \Illuminate\Support\Facades\DB::table('audit_logs')
+        ->where('created_at', '<', now()->subDays(365))
+        ->delete();
+    if ($deleted > 0) {
+        Log::info("Cleaned {$deleted} old audit logs (older than 365 days).");
+    }
+})->dailyAt('04:15')->timezone('America/Sao_Paulo');

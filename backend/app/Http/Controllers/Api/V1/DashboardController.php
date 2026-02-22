@@ -62,8 +62,8 @@ class DashboardController extends Controller
         $allComputers = (clone $computerQuery)->get(['id', 'lab_id', 'hardware_info', 'agent_version', 'updated_at']);
         $computersWithHardware = $allComputers->filter(function ($computer) {
             return ! empty($computer->hardware_info) &&
-                   is_array($computer->hardware_info) &&
-                   ! empty($computer->hardware_info);
+                is_array($computer->hardware_info) &&
+                ! empty($computer->hardware_info);
         });
 
         $hardwareAverages = $this->calculateHardwareAverages($computersWithHardware);
@@ -138,11 +138,11 @@ class DashboardController extends Controller
         } elseif ($driver === 'pgsql') {
             $metrics = \App\Models\ComputerMetric::when($computerIds, function ($q) use ($computerIds) {
                 $q->whereIn('computer_id', $computerIds);
-            })->selectRaw('
-                DATE_TRUNC(\'hour\', recorded_at) as hour,
+            })->selectRaw("
+                time_bucket('1 hour', recorded_at) as hour,
                 AVG(cpu_usage_percent) as avg_cpu,
                 AVG(memory_usage_percent) as avg_memory
-            ')
+            ")
                 ->where('recorded_at', '>=', now()->subHours($hours))
                 ->groupBy('hour')
                 ->orderBy('hour')
