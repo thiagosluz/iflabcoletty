@@ -9,7 +9,7 @@ class Lab extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'description', 'default_wallpaper_url', 'default_wallpaper_enabled'];
+    protected $fillable = ['name', 'description', 'default_wallpaper_url', 'default_wallpaper_enabled', 'installation_token'];
 
     protected $casts = [
         'default_wallpaper_enabled' => 'boolean',

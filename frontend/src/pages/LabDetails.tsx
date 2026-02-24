@@ -37,7 +37,10 @@ import {
     PowerOff,
     FileText,
     Lock,
-    Unlock
+    Unlock,
+    Key,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import LabMap from '@/components/LabMap';
@@ -97,6 +100,7 @@ interface LabStats {
     total_computers: number;
     online_computers: number;
     offline_computers: number;
+    locked_computers: number;
     total_softwares: number;
     hardware_averages: HardwareAverages | null;
     os_distribution: OSDistribution[];
@@ -108,6 +112,7 @@ interface Lab {
     description: string;
     default_wallpaper_url?: string | null;
     default_wallpaper_enabled?: boolean;
+    installation_token?: string | null;
     created_at: string;
 }
 
@@ -185,6 +190,8 @@ export default function LabDetails() {
     const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
     const [isFileTransferOpen, setIsFileTransferOpen] = useState(false);
     const [softwareComputersModal, setSoftwareComputersModal] = useState<{ id: number; name: string } | null>(null);
+    const [showToken, setShowToken] = useState(false);
+    const [isRotatingToken, setIsRotatingToken] = useState(false);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -442,6 +449,21 @@ export default function LabDetails() {
         }
     };
 
+    const handleRotateToken = async () => {
+        if (!id) return;
+        try {
+            setIsRotatingToken(true);
+            await apiClient.post(`/labs/${id}/rotate-token`);
+            toast({ title: 'Sucesso', description: 'Token de instalação rotacionado com sucesso.' });
+            fetchLabDetails(); // Recarrega os detalhes para pegar o novo token
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
+        } finally {
+            setIsRotatingToken(false);
+            setConfirmAction(null);
+        }
+    };
+
     const resolveWallpaperUrl = (url: string | null | undefined): string => {
         if (!url) return '';
         if (url.startsWith('http://') || url.startsWith('https://')) return url;
@@ -525,6 +547,9 @@ export default function LabDetails() {
                             <DropdownMenuItem onClick={() => handleKioskCommand('unlock')} className="text-green-600 focus:text-green-700">
                                 <Unlock className="mr-2 h-4 w-4" /> Desbloquear Telas
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setConfirmAction({ command: 'rotate_token', title: 'Rotacionar Token de Instalação', description: 'Isso invalidará o token atual. Agentes já instalados e registrados não serão afetados, mas as novas instalações exigirão o novo token.' })} className="text-blue-600 focus:text-blue-700">
+                                <Key className="mr-2 h-4 w-4" /> Rotacionar Token
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleLabCommand('wol')}>
                                 <Zap className="mr-2 h-4 w-4" /> Acordar Todos (WoL)
                             </DropdownMenuItem>
@@ -589,12 +614,19 @@ export default function LabDetails() {
                                 </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogCancel disabled={isRotatingToken}>Cancelar</AlertDialogCancel>
                                 <AlertDialogAction
-                                    onClick={() => confirmAction && handleLabCommand(confirmAction.command)}
+                                    onClick={() => {
+                                        if (confirmAction?.command === 'rotate_token') {
+                                            handleRotateToken();
+                                        } else if (confirmAction) {
+                                            handleLabCommand(confirmAction.command);
+                                        }
+                                    }}
+                                    disabled={isRotatingToken}
                                     className={confirmAction?.command === 'shutdown' ? 'bg-red-600 hover:bg-red-700' : ''}
                                 >
-                                    Confirmar
+                                    {isRotatingToken ? 'Processando...' : 'Confirmar'}
                                 </AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
@@ -711,6 +743,16 @@ export default function LabDetails() {
                         <div className="bg-white shadow rounded-lg p-6">
                             <div className="flex items-center justify-between">
                                 <div>
+                                    <p className="text-sm text-gray-500">Bloqueados</p>
+                                    <p className="text-2xl font-bold text-destructive mt-1">{stats.locked_computers}</p>
+                                </div>
+                                <Monitor className="h-8 w-8 text-destructive" />
+                            </div>
+                        </div>
+
+                        <div className="bg-white shadow rounded-lg p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
                                     <p className="text-sm text-gray-500">Offline</p>
                                     <p className="text-2xl font-bold text-gray-500 mt-1">{stats.offline_computers}</p>
                                 </div>
@@ -725,6 +767,46 @@ export default function LabDetails() {
                                     <p className="text-2xl font-bold text-purple-600 mt-1">{stats.total_softwares}</p>
                                 </div>
                                 <Package className="h-8 w-8 text-purple-500" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Segurança / Token */}
+                    <div className="bg-white shadow rounded-lg p-6 border-l-4 border-blue-500">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Key className="h-5 w-5 text-blue-600" />
+                            <h2 className="text-lg font-semibold text-gray-900">Segurança & Autenticação de Agentes</h2>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <Label className="text-gray-500 mb-1 block">Token de Instalação</Label>
+                                <div className="flex max-w-lg items-center gap-2">
+                                    <Input
+                                        readOnly
+                                        type={showToken ? "text" : "password"}
+                                        value={lab.installation_token || "Nenhum token configurado"}
+                                        className="font-mono bg-gray-50 text-gray-600 flex-1"
+                                    />
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={() => setShowToken(!showToken)}
+                                        title={showToken ? "Ocultar token" : "Mostrar token"}
+                                    >
+                                        {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </Button>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">
+                                    Este token é utilizado apenas na instação de novos agentes neste laboratório. Agentes já configurados continuam utilizando suas chaves locais e não serão afetados se este token for rotacionado.
+                                </p>
+                            </div>
+                            <div className="pt-2 border-t flex flex-wrap gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setConfirmAction({ command: 'rotate_token', title: 'Rotacionar Token de Instalação', description: 'Isso invalidará o token atual. Agentes já instalados e registrados não serão afetados, mas as novas instalações exigirão o novo token.' })}
+                                >
+                                    <RefreshCw className="h-4 w-4 mr-2" /> Rotacionar Token
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -979,6 +1061,7 @@ export default function LabDetails() {
                                     <SelectItem value="all">Todos</SelectItem>
                                     <SelectItem value="online">Online</SelectItem>
                                     <SelectItem value="offline">Offline</SelectItem>
+                                    <SelectItem value="bloqueado">Bloqueado</SelectItem>
                                 </SelectContent>
                             </Select>
                             <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-2">
@@ -1048,7 +1131,7 @@ export default function LabDetails() {
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <div className="flex items-center gap-2">
                                                             <div className={`h-2.5 w-2.5 rounded-full ${!isOnline(computer.updated_at) ? 'bg-gray-300' :
-                                                                    computer.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                                                computer.is_locked ? 'bg-orange-500' : 'bg-green-500'
                                                                 }`} />
                                                             <span className="text-xs text-muted-foreground">
                                                                 {!isOnline(computer.updated_at) ? 'Offline' :

@@ -41,6 +41,7 @@ interface Stats {
     total_computers: number;
     online_computers: number;
     offline_computers: number;
+    locked_computers: number;
     total_softwares?: number;
     hardware_averages?: HardwareAverages | null;
     os_distribution?: OSDistribution[];
@@ -219,6 +220,20 @@ export default function Dashboard() {
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{stats.online_computers}</div>
                         <p className="text-xs text-muted-foreground">Ativos nos últimos 5 min</p>
+                    </CardContent>
+                </Card>
+
+                <Card
+                    onClick={() => navigate('/admin/computers?status=bloqueado')}
+                    className="cursor-pointer hover:shadow-md transition-shadow border-destructive/20"
+                >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Bloqueados (Kiosk)</CardTitle>
+                        <Monitor className="h-4 w-4 text-destructive" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-destructive">{stats.locked_computers}</div>
+                        <p className="text-xs text-muted-foreground">Telas travadas em laboratórios</p>
                     </CardContent>
                 </Card>
 

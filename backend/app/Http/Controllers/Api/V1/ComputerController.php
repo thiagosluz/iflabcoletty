@@ -691,4 +691,25 @@ class ComputerController extends Controller
             'public_hash' => $computer->public_hash,
         ]);
     }
+
+    /**
+     * Revoke the agent's API key. This will force the agent to re-register.
+     */
+    public function revokeAgent(Request $request, Computer $computer)
+    {
+        $this->authorize('computers.update');
+
+        $oldValues = $computer->toArray();
+
+        $computer->update([
+            'agent_api_key' => null,
+        ]);
+
+        // Log activity
+        $this->logActivity('update', $computer, $oldValues, $computer->toArray());
+
+        return response()->json([
+            'message' => 'Acesso revogado com sucesso. O agente precisará de um novo token para ser reinstalado.',
+        ]);
+    }
 }

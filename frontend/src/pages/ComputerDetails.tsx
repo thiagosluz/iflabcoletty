@@ -33,7 +33,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Eye, Ban, Terminal, Pencil } from "lucide-react"
+import { Eye, Ban, Terminal, Pencil, UserX } from "lucide-react"
 
 interface HardwareInfo {
     cpu?: {
@@ -543,6 +543,20 @@ export default function ComputerDetails() {
         }
     };
 
+    const handleRevokeAgent = async () => {
+        if (!id) return;
+        try {
+            await apiClient.post(`/computers/${id}/revoke-agent`);
+            toast({
+                title: 'Acesso revogado',
+                description: 'A chave API do agente foi invalidada com sucesso. O computador será marcado como offline.',
+            });
+            fetchComputer();
+        } catch (error: unknown) {
+            toast({ ...getApiErrorToast(error) });
+        }
+    };
+
     const sortedProcesses = processes
         .filter(p => p.name.toLowerCase().includes(processSearch.toLowerCase()) || p.pid.toString().includes(processSearch))
         .sort((a, b) => {
@@ -603,7 +617,7 @@ export default function ComputerDetails() {
                     <div className="flex items-center gap-2 mt-1">
                         <span
                             className={`inline-block w-2 h-2 rounded-full ${!isOnline ? 'bg-gray-400' :
-                                    computer.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                computer.is_locked ? 'bg-orange-500' : 'bg-green-500'
                                 }`}
                         />
                         <span className="text-sm text-gray-600">
@@ -1233,6 +1247,35 @@ export default function ComputerDetails() {
                                         </Button>
                                     </div>
                                 )}
+
+                            <div className="pt-2 border-t mt-4">
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-red-600 border-red-200 hover:bg-red-50"
+                                        >
+                                            <UserX className="h-4 w-4 mr-2" />
+                                            Revogar Acesso do Agente
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Revogar acesso deste agente?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Isso invalidará a chave API atual do agente neste computador. Ele perderá a comunicação com o servidor imediatamente. O agente precisará ser provisionado novamente com um novo Token de Instalação.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={handleRevokeAgent} className="bg-red-600 hover:bg-red-700 text-white">
+                                                Confirmar Revogação
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
                         </div>
                     </div>
 

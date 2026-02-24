@@ -97,6 +97,7 @@ class DashboardController extends Controller
             'total_computers' => (clone $computerQuery)->count(),
             'online_computers' => (clone $computerQuery)->where('updated_at', '>=', $threshold)->count(),
             'offline_computers' => (clone $computerQuery)->where('updated_at', '<', $threshold)->count(),
+            'locked_computers' => (clone $computerQuery)->where('is_locked', true)->count(),
             'total_softwares' => $totalSoftwares,
             'hardware_averages' => $hardwareAverages,
             'os_distribution' => $osDistribution,

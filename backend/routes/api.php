@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AgentAuthController;
 use App\Http\Controllers\Api\V1\AgentController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -28,12 +29,28 @@ Route::prefix('v1')->group(function () {
         Route::get('/computers/{hash}/softwares', [PublicController::class, 'getSoftwares']);
     });
 
+    // Public Agent Updates
+    Route::get('/agent/check-update', [AgentController::class, 'checkUpdate']);
+    Route::get('/agent/download/{version}', [AgentController::class, 'downloadUpdate']);
+
     // Auth - Admin - Rate limit for login (10 attempts per minute per IP)
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1'); // 10 attempts per minute
 
     // Password Reset
     Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Auth\ForgotPasswordController::class, 'sendResetLinkEmail']);
     Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Auth\ResetPasswordController::class, 'reset']);
+
+    // Agent Registration and Migration
+    Route::post('/agents/register', [AgentAuthController::class, 'register']);
+    Route::post('/agents/migrate', [AgentAuthController::class, 'migrate']);
+
+    // Agent Authenticated Routes
+    Route::middleware([\App\Http\Middleware\AgentAuthMiddleware::class])->group(function () {
+        Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
+        Route::post('/computers/{computer}/metrics', [ComputerController::class, 'storeMetrics']);
+        Route::get('/computers/{computer}/commands/pending', [RemoteControlController::class, 'pending']);
+        Route::put('/commands/{command}/status', [RemoteControlController::class, 'updateStatus']);
+    });
 
     // Broadcasting authentication route - needs to be outside the auth group to handle auth manually
     Route::post('/broadcasting/auth', function (Request $request) {
@@ -57,7 +74,7 @@ Route::prefix('v1')->group(function () {
             Log::warning('Broadcasting auth no bearer token found');
         }
 
-        if (! $user) {
+        if (!$user) {
             Log::warning('Broadcasting auth failed: User not found or unauthenticated');
 
             return response()->json(['message' => 'Unauthenticated.'], 401);
@@ -80,7 +97,7 @@ Route::prefix('v1')->group(function () {
         ]);
 
         // Ensure channel_name and socket_id are present
-        if (! $request->has('channel_name') || ! $request->has('socket_id')) {
+        if (!$request->has('channel_name') || !$request->has('socket_id')) {
             Log::error('Broadcasting auth missing required parameters', [
                 'has_channel_name' => $request->has('channel_name'),
                 'has_socket_id' => $request->has('socket_id'),
@@ -123,6 +140,7 @@ Route::prefix('v1')->group(function () {
 
         // Labs
         Route::apiResource('labs', LabController::class);
+        Route::post('/labs/{lab}/rotate-token', [LabController::class, 'rotateToken']);
         Route::get('/labs/{lab}/computers', [LabController::class, 'getComputers']);
         Route::get('/labs/{lab}/softwares', [LabController::class, 'getSoftwares']);
         Route::post('/labs/{lab}/wallpaper', [LabController::class, 'uploadWallpaper']);
@@ -130,14 +148,13 @@ Route::prefix('v1')->group(function () {
         // Computers
         Route::apiResource('computers', ComputerController::class);
         Route::get('/computers/by-machine-id/{machineId}', [ComputerController::class, 'findByMachineId']);
-        Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
-        Route::post('/computers/{computer}/metrics', [ComputerController::class, 'storeMetrics']);
         Route::get('/computers/{computer}/metrics', [ComputerController::class, 'getMetrics']);
         Route::get('/computers/{computer}/qrcode', [ComputerController::class, 'generateQrCode']);
         Route::post('/computers/export-qrcodes', [ComputerController::class, 'exportQrCodes']);
         Route::get('/computers/{computer}/softwares', [ComputerController::class, 'getSoftwares']);
         Route::get('/computers/{computer}/activities', [ComputerController::class, 'getActivities']);
         Route::post('/computers/{computer}/rotate-hash', [ComputerController::class, 'rotatePublicHash']);
+        Route::post('/computers/{computer}/revoke-agent', [ComputerController::class, 'revokeAgent']);
 
         // Kiosk Mode (Lock/Unlock)
         Route::post('/labs/{lab}/kiosk/lock', [\App\Http\Controllers\Api\V1\KioskController::class, 'lockLab']);
@@ -155,12 +172,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/computers/bulk-commands', [RemoteControlController::class, 'storeBulk']);
         Route::post('/labs/{lab}/commands', [RemoteControlController::class, 'storeLab']);
         Route::post('/labs/{lab}/positions', [LabController::class, 'updatePositions']);
-        Route::get('/computers/{computer}/commands/pending', [RemoteControlController::class, 'pending']);
-        Route::put('/commands/{command}/status', [RemoteControlController::class, 'updateStatus']);
 
         // Agent Updates
-        Route::get('/agent/check-update', [AgentController::class, 'checkUpdate']);
-        Route::get('/agent/download/{version}', [AgentController::class, 'downloadUpdate']);
         Route::get('/agent/version-info', [AgentController::class, 'versionInfo']);
 
         // Agent Downloads

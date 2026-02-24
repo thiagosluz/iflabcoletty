@@ -298,11 +298,7 @@ class RemoteControlController extends Controller
     public function updateStatus(Request $request, ComputerCommand $command)
     {
         // Este método é chamado pelo agente para atualizar o status do comando
-        // Não requer permissão específica, mas requer autenticação
-        // O agente usa o token de autenticação do computador
-        if (! auth()->check()) {
-            return response()->json(['message' => 'Não autenticado'], 401);
-        }
+        // A autenticação do agente já é validada pelo AgentAuthMiddleware no routes/api.php
 
         $validated = $request->validate([
             'status' => 'required|in:processing,completed,failed',

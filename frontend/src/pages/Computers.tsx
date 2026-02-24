@@ -58,7 +58,7 @@ const isOnline = (dateString: string) => isComputerOnline(dateString, 5);
 
 type ComputerSortBy = 'hostname' | 'machine_id' | 'lab' | 'status' | 'updated_at';
 type SortDir = 'asc' | 'desc';
-type StatusFilter = 'all' | 'online' | 'offline';
+type StatusFilter = 'all' | 'online' | 'offline' | 'bloqueado';
 
 const computerSchema = z.object({
     lab_id: z.string().min(1, "Laboratório é obrigatório"),
@@ -73,7 +73,7 @@ export default function Computers() {
     const [searchParams, setSearchParams] = useSearchParams();
     const statusFilter: StatusFilter = (() => {
         const s = searchParams.get('status');
-        if (s === 'online' || s === 'offline') return s;
+        if (s === 'online' || s === 'offline' || s === 'bloqueado') return s as StatusFilter;
         return 'all';
     })();
     const outdatedFilter = searchParams.get('outdated') === '1' || searchParams.get('outdated') === 'true';
@@ -131,6 +131,7 @@ export default function Computers() {
             if (labFilter !== 'all') params.append('lab_id', labFilter);
             if (statusFilter === 'online') params.append('status', 'online');
             if (statusFilter === 'offline') params.append('status', 'offline');
+            if (statusFilter === 'bloqueado') params.append('status', 'bloqueado');
             if (outdatedFilter) params.append('outdated', '1');
             params.append('sort_by', sortBy);
             params.append('sort_dir', sortDir);
@@ -541,6 +542,7 @@ export default function Computers() {
                             <SelectItem value="all">Todos</SelectItem>
                             <SelectItem value="online">Online</SelectItem>
                             <SelectItem value="offline">Offline</SelectItem>
+                            <SelectItem value="bloqueado">Bloqueado</SelectItem>
                         </SelectContent>
                     </Select>
                     <div className="flex items-center gap-2">
@@ -643,12 +645,12 @@ export default function Computers() {
                                         <TableCell>{pc.lab?.name}</TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <div className={`h-2.5 w-2.5 rounded-full ${!isOnline(pc.updated_at) ? 'bg-gray-300' :
-                                                        pc.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                                <div className={`h-2.5 w-2.5 rounded-full ${pc.is_locked ? 'bg-orange-500' :
+                                                    !isOnline(pc.updated_at) ? 'bg-gray-300' : 'bg-green-500'
                                                     }`} />
                                                 <span className="text-xs text-muted-foreground">
-                                                    {!isOnline(pc.updated_at) ? 'Offline' :
-                                                        pc.is_locked ? 'Bloqueado' : 'Online'}
+                                                    {pc.is_locked ? 'Bloqueado' :
+                                                        !isOnline(pc.updated_at) ? 'Offline' : 'Online'}
                                                 </span>
                                             </div>
                                         </TableCell>
@@ -710,12 +712,12 @@ export default function Computers() {
                                             </div>
                                         )}
                                         <div className="flex items-center gap-2">
-                                            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${!isOnline(pc.updated_at) ? 'bg-gray-300' :
-                                                    pc.is_locked ? 'bg-orange-500' : 'bg-green-500'
+                                            <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${pc.is_locked ? 'bg-orange-500' :
+                                                !isOnline(pc.updated_at) ? 'bg-gray-300' : 'bg-green-500'
                                                 }`} />
                                             <span className="text-xs text-muted-foreground">
-                                                {!isOnline(pc.updated_at) ? 'Offline' :
-                                                    pc.is_locked ? 'Bloqueado' : 'Online'}
+                                                {pc.is_locked ? 'Bloqueado' :
+                                                    !isOnline(pc.updated_at) ? 'Offline' : 'Online'}
                                             </span>
                                         </div>
                                         <div className="text-xs text-muted-foreground">

@@ -1,7 +1,14 @@
 import sys
+import os
+from pathlib import Path
+
+# Fix sys.path for NSSM/Windows Service
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
 import time
 import json
-import os
 import uuid
 import platform
 from datetime import datetime, timezone
@@ -18,9 +25,8 @@ import base64
 import re
 import subprocess
 import tempfile
-import tempfile
 import shutil
-from pathlib import Path
+from src.security import get_hardware_fingerprint, load_api_key, save_api_key, clear_legacy_credentials
 
 # Setup Logging
 logging.basicConfig(
@@ -37,55 +43,163 @@ class Agent:
             'Content-Type': 'application/json'
         })
         self.token = None
-        self.machine_id = self._get_or_create_machine_id()
-        self.computer_db_id = None  # ID in the database
-        self._cached_lab_wallpaper_url = None  # URL do papel de parede padrão do lab
-        self._cached_lab_wallpaper_enabled = True  # Se o agente deve aplicar o wallpaper
         if getattr(sys, 'frozen', False):
             self.agent_dir = Path(sys.executable).resolve().parent
         else:
             self.agent_dir = Path(__file__).parent.absolute()
         self.version_file = self.agent_dir / ".agent_version"
+        self.machine_id = self._get_or_create_machine_id()
+        self.computer_db_id = None  # ID in the database
+        self._cached_lab_wallpaper_url = None  # URL do papel de parede padrão do lab
+        self._cached_lab_wallpaper_enabled = True  # Se o agente deve aplicar o wallpaper
 
     def _get_or_create_machine_id(self):
         """Get machine ID from file or generate new one."""
-        if os.path.exists(config.STORAGE_FILE):
+        machine_id_path = self.agent_dir / config.MACHINE_ID_FILE
+        if os.path.exists(machine_id_path):
             try:
-                with open(config.STORAGE_FILE, 'r') as f:
-                    return f.read().strip()
+                with open(machine_id_path, 'r') as f:
+                    content = f.read().strip()
+                    if content and len(content) == 36 and '-' in content:
+                        return content
+                    else:
+                        logger.warning("Invalid machine ID found, generating new one.")
             except Exception as e:
                 logger.error(f"Error reading identity file: {e}")
         
-        # Generate new ID
+        # If not, generate new ID
         new_id = str(uuid.uuid4())
         try:
-            with open(config.STORAGE_FILE, 'w') as f:
+            with open(machine_id_path, 'w') as f:
                 f.write(new_id)
         except Exception as e:
             logger.error(f"Error saving identity file: {e}")
         
         return new_id
 
-    def login(self):
-        """Authenticate with the backend to get a token."""
-        url = f"{config.API_BASE_URL}/login"
-        payload = {
-            'email': config.AGENT_EMAIL,
-            'password': config.AGENT_PASSWORD
-        }
-        
+    def _ensure_kiosk_script(self):
+        """Returns the path to the kiosk lock script, generating it if necessary."""
+        script_path = self.agent_dir / "src" / "kiosk.py"
         try:
-            logger.info("Attempting login...")
-            response = self.session.post(url, json=payload, headers={'Accept': 'application/json'})
-            response.raise_for_status()
-            data = response.json()
-            self.token = data.get('token')
-            self.session.headers.update({'Authorization': f"Bearer {self.token}"})
-            logger.info("Login successful.")
-            return True
+            os.makedirs(script_path.parent, exist_ok=True)
+            with open(script_path, "w", encoding="utf-8") as f:
+                f.write("""import tkinter as tk
+import os, time, sys
+
+unlock_file = r"C:\\ProgramData\\IFLabAgent\\unlock_kiosk.txt"
+
+def check_unlock(root):
+    if os.path.exists(unlock_file):
+        try:
+            os.remove(unlock_file)
+        except:
+            pass
+        active_file = r"C:\\ProgramData\\IFLabAgent\\kiosk_active.txt"
+        try:
+            if os.path.exists(active_file):
+                os.remove(active_file)
+        except:
+            pass
+        root.destroy()
+        sys.exit(0)
+    root.after(1000, check_unlock, root)
+
+root = tk.Tk()
+root.attributes("-fullscreen", True)
+root.attributes("-topmost", True)
+root.configure(background="black")
+root.protocol("WM_DELETE_WINDOW", lambda: None)
+root.bind("<Escape>", lambda e: None)
+root.bind("<Alt-F4>", lambda e: None)
+label = tk.Label(root, text="LABORATÓRIO EM ATENÇÃO", font=("Arial", 48, "bold"), fg="red", bg="black")
+label.pack(expand=True)
+root.after(1000, check_unlock, root)
+root.mainloop()""")
+            return str(script_path)
         except Exception as e:
-            logger.error(f"Login failed: {e}")
-            return False
+            logger.error(f"Error generating kiosk script: {e}")
+            return None
+
+    def login(self):
+        """Authenticate with the backend using the securely stored API Key."""
+        # 1. Tentar ler API Key local
+        api_key, computer_id = load_api_key()
+        
+        if api_key and computer_id:
+            logger.info("Chave API válida encontrada localmente.")
+            self.token = api_key
+            self.computer_db_id = computer_id
+            self.session.headers.update({'Authorization': f"Bearer {self.token}"})
+            return True
+            
+        logger.warning("Nenhuma chave API local encontrada. Iniciando fluxo de provisionamento...")
+        
+        # 2. Fluxo de Migração (Se ainda temos email e senha legado)
+        if config.AGENT_EMAIL and config.AGENT_PASSWORD:
+            logger.info("Credenciais legadas detectadas. Tentando migrar para API Key...")
+            try:
+                hardware_info = self.get_hardware_info()
+                payload = {
+                    'email': config.AGENT_EMAIL,
+                    'password': config.AGENT_PASSWORD,
+                    'lab_id': config.LAB_ID,
+                    'hardware_info': hardware_info,
+                    'hostname': socket.gethostname(),
+                    'agent_version': self.get_current_version()
+                }
+                
+                # Se tivermos interface de rede MAC, capturamos para o WoL.
+                if hardware_info.get('network') and len(hardware_info['network']) > 0:
+                   payload['wol_mac'] = hardware_info['network'][0].get('mac')
+
+                res = self.session.post(f"{config.API_BASE_URL}/agents/migrate", json=payload)
+                res.raise_for_status()
+                data = res.json()
+                
+                self.token = data['api_key']
+                self.computer_db_id = data['computer_id']
+                save_api_key(self.token, self.computer_db_id)
+                self.session.headers.update({'Authorization': f"Bearer {self.token}"})
+                
+                logger.info("Migração bem-sucedida. Credenciais antigas serão apagadas.")
+                clear_legacy_credentials(config.env_path)
+                return True
+                
+            except Exception as e:
+                logger.error(f"Falha na migração: {e}")
+                
+        # 3. Fluxo de Registro Limpo (Com INSTALLATION_TOKEN)
+        if config.INSTALLATION_TOKEN:
+            logger.info("Token de instalação detectado. Tentando registrar no laboratório...")
+            try:
+                hardware_info = self.get_hardware_info()
+                payload = {
+                    'installation_token': config.INSTALLATION_TOKEN,
+                    'hardware_info': hardware_info,
+                    'hostname': socket.gethostname(),
+                    'agent_version': self.get_current_version()
+                }
+                
+                if hardware_info.get('network') and len(hardware_info['network']) > 0:
+                   payload['wol_mac'] = hardware_info['network'][0].get('mac')
+
+                res = self.session.post(f"{config.API_BASE_URL}/agents/register", json=payload, timeout=30)
+                res.raise_for_status()
+                data = res.json()
+                
+                self.token = data['api_key']
+                self.computer_db_id = data['computer_id']
+                save_api_key(self.token, self.computer_db_id)
+                self.session.headers.update({'Authorization': f"Bearer {self.token}"})
+                
+                logger.info("Registro bem-sucedido.")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Falha no registro: {e}")
+                
+        logger.error("Sem chave API, sem credenciais legadas e sem token de instalação. Agente interrompido.")
+        return False
 
     def get_hardware_info(self):
         """Collect hardware information."""
@@ -274,10 +388,14 @@ class Agent:
 
     def _find_computer_by_machine_id(self, bypass_cache=False):
         """Search for computer by machine_id using exact match endpoint first, then fallback to search."""
+        headers = {}
+        if self.token:
+            headers['Authorization'] = f"Bearer {self.token}"
+
         # First, try the exact match endpoint (faster and more reliable)
         try:
             exact_url = f"{config.API_BASE_URL}/computers/by-machine-id/{self.machine_id}"
-            response = self.session.get(exact_url)
+            response = self.session.get(exact_url, headers=headers)
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 404:
@@ -292,7 +410,7 @@ class Agent:
         cache_buster = f"&_bypass_cache=true&_t={int(time.time())}" if bypass_cache else ""
         search_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}&per_page=100{cache_buster}"
         try:
-            response = self.session.get(search_url)
+            response = self.session.get(search_url, headers=headers)
             response.raise_for_status()
             results = response.json()
             
@@ -306,7 +424,7 @@ class Agent:
             if results.get('last_page', 1) > 1:
                 for page in range(2, results.get('last_page', 1) + 1):
                     page_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}&per_page=100&page={page}{cache_buster}"
-                    page_response = self.session.get(page_url)
+                    page_response = self.session.get(page_url, headers=headers)
                     page_response.raise_for_status()
                     page_results = page_response.json()
                     
@@ -320,93 +438,8 @@ class Agent:
         return None
 
     def register_or_update(self):
-        """Check if computer exists, then create or update."""
-        data = self.collect_data()
-        
-        try:
-            # 1. Search for existing computer by machine_id
-            existing = self._find_computer_by_machine_id()
-            
-            if existing:
-                self.computer_db_id = existing['id']
-                lab_data = existing.get('lab') or {}
-                self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
-                self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
-                logger.info(f"Computer found (ID: {self.computer_db_id}). Updating...")
-                # Update
-                update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
-                update_response = self.session.put(update_url, json=data)
-                update_response.raise_for_status()
-                logger.info("Update successful.")
-            else:
-                logger.info("Computer not found. Registering...")
-                # Create
-                create_url = f"{config.API_BASE_URL}/computers"
-                res = self.session.post(create_url, json=data)
-                
-                # Handle 422 error (machine_id already exists) - try to find and update instead
-                if res.status_code == 422:
-                    error_data = res.json()
-                    if 'errors' in error_data and 'machine_id' in error_data['errors']:
-                        logger.warning("Machine ID already exists (422 error). Searching again to update...")
-                        # Wait a bit for database to sync (in case of race condition)
-                        time.sleep(0.5)
-                        
-                        # Try to find the computer using exact match endpoint (bypasses cache)
-                        found_computer = self._find_computer_by_machine_id(bypass_cache=True)
-                        
-                        if found_computer:
-                            self.computer_db_id = found_computer['id']
-                            lab_data = found_computer.get('lab') or {}
-                            self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
-                            self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
-                            logger.info(f"Found existing computer (ID: {self.computer_db_id}). Updating...")
-                            update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
-                            update_response = self.session.put(update_url, json=data)
-                            update_response.raise_for_status()
-                            logger.info("Update successful after handling 422 error.")
-                        else:
-                            # If still not found, wait a bit more and try again
-                            logger.warning("Computer not found on first attempt. Waiting and retrying...")
-                            time.sleep(1)
-                            found_computer = self._find_computer_by_machine_id(bypass_cache=True)
-                            
-                            if found_computer:
-                                self.computer_db_id = found_computer['id']
-                                lab_data = found_computer.get('lab') or {}
-                                self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
-                                self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
-                                logger.info(f"Found existing computer on retry (ID: {self.computer_db_id}). Updating...")
-                                update_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}"
-                                update_response = self.session.put(update_url, json=data)
-                                update_response.raise_for_status()
-                                logger.info("Update successful after retry.")
-                            else:
-                                logger.error("Machine ID exists but computer not found even after retry.")
-                                logger.error(f"Machine ID: {self.machine_id}")
-                                logger.error("This may indicate a database inconsistency. Skipping this update cycle.")
-                                # Don't raise error, just log and continue - will retry next cycle
-                                return
-                    else:
-                        res.raise_for_status()
-                else:
-                    res.raise_for_status()
-                    self.computer_db_id = res.json()['id']
-                    logger.info(f"Registration successful (ID: {self.computer_db_id}).")
-                
-        except requests.HTTPError as e:
-            logger.error(f"HTTP error: {e}")
-            if e.response is not None:
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response: {e.response.text}")
-            # Identify if auth error, maybe retry login?
-            if e.response and e.response.status_code == 401:
-                logger.warning("Token expired/invalid. Re-authenticating next loop.")
-                self.token = None
-        except Exception as e:
-            logger.error(f"Communication error: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
+        """No longer used. Updates are handled by send_detailed_report and registration by login()."""
+        pass
 
     def get_metrics(self):
         """Collect dynamic system metrics."""
@@ -960,7 +993,6 @@ exit 1
 
             elif command_type == 'kiosk_lock':
                 if platform.system() == 'Windows':
-                    import sys
                     unlock_file = r"C:\ProgramData\IFLabAgent\unlock_kiosk.txt"
                     if os.path.exists(unlock_file):
                         try:
@@ -970,6 +1002,14 @@ exit 1
                     
                     script_path = self._ensure_kiosk_script()
                     if script_path:
+                        active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
+                        try:
+                            os.makedirs(r"C:\ProgramData\IFLabAgent", exist_ok=True)
+                            with open(active_file, 'w') as f:
+                                f.write('locked')
+                        except Exception as e:
+                            logger.error(f"Failed to create kiosk_active file: {e}")
+                            
                         python_exe = sys.executable.replace('python.exe', 'pythonw.exe')
                         if not os.path.exists(python_exe):
                             python_exe = sys.executable
@@ -1016,11 +1056,17 @@ exit 0
             elif command_type == 'kiosk_unlock':
                 if platform.system() == 'Windows':
                     unlock_file = r"C:\ProgramData\IFLabAgent\unlock_kiosk.txt"
+                    active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
                     try:
                         if not os.path.exists(r"C:\ProgramData\IFLabAgent"):
                             os.makedirs(r"C:\ProgramData\IFLabAgent", exist_ok=True)
                         with open(unlock_file, 'w') as f:
                             f.write('unlock')
+                        if os.path.exists(active_file):
+                            try:
+                                os.remove(active_file)
+                            except:
+                                pass
                         success = True
                         output = "Kiosk mode unlocked successfully."
                     except Exception as e:
@@ -1910,13 +1956,10 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
         last_wallpaper_check_time = 0
 
         while True:
-            if not self.token:
+            if not self.token or not self.computer_db_id:
                 if not self.login():
                     time.sleep(10)  # Wait before retry
                     continue
-
-            # Always ensure registered
-            self.register_or_update()
 
             # Check for commands frequently (every loop)
             if self.computer_db_id:

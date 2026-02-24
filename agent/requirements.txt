@@ -4,3 +4,4 @@ psutil==5.9.8
 mac-vendor-lookup==0.1.12
 mss==9.0.1
 Pillow>=10.0.0
+cryptography==42.0.5

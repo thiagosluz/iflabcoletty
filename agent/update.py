@@ -262,12 +262,25 @@ def main():
     """Main update function."""
     logger.info("Starting agent update check...")
     
-    # Token: variável AGENT_TOKEN ou login com email/senha do agente
-    token = os.getenv('AGENT_TOKEN')
-    if not token and AGENT_EMAIL and AGENT_PASSWORD:
-        token = login(API_BASE_URL)
+    # Tentativa de carregar novo formato de chave API
+    token = None
+    try:
+        from src.security import load_api_key
+        api_key, _ = load_api_key()
+        if api_key:
+            token = api_key
+            logger.info("Chave API válida encontrada localmente.")
+    except Exception as e:
+        logger.warning(f"Não foi possível carregar a API Key do keystore: {e}")
+
+    # Fallback para métodos legados (Token ou email/senha) se API Key falhar
     if not token:
-        logger.warning("Nenhum token disponível. Configure AGENT_EMAIL e AGENT_PASSWORD no .env (ou AGENT_TOKEN).")
+        token = os.getenv('AGENT_TOKEN')
+        if not token and AGENT_EMAIL and AGENT_PASSWORD:
+            token = login(API_BASE_URL)
+            
+    if not token:
+        logger.warning("Nenhum token disponível. Autenticação na API poderá falhar.")
     
     # Check for updates
     update_info = check_for_updates(API_BASE_URL, token)

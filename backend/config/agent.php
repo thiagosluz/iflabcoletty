@@ -52,6 +52,8 @@ return [
         'requirements.txt',
         'install_windows.ps1',
         'install_linux.sh',
+        'src/security.py',
+        'src/__init__.py',
     ],
 
     /*

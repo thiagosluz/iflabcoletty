@@ -17,6 +17,21 @@ AGENT_DIR="$SCRIPT_DIR"
 SERVICE_NAME="iflab-agent"
 SERVICE_USER="${SERVICE_USER:-iflab}"
 
+# Parse parameters
+API_BASE_URL=""
+LAB_ID=""
+INSTALLATION_TOKEN=""
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --url) API_BASE_URL="$2"; shift ;;
+        --lab) LAB_ID="$2"; shift ;;
+        --token) INSTALLATION_TOKEN="$2"; shift ;;
+        *) echo -e "${RED}Unknown parameter passed: $1${NC}"; exit 1 ;;
+    esac
+    shift
+done
+
 echo -e "${GREEN}=== IFG Lab Manager - Agent Installation (Linux) ===${NC}\n"
 
 # Check if running as root
@@ -68,9 +83,23 @@ pip install --upgrade pip
 pip install -r requirements.txt
 deactivate
 
+# Create .env file if parameters were provided
+if [ -n "$API_BASE_URL" ] && [ -n "$LAB_ID" ] && [ -n "$INSTALLATION_TOKEN" ]; then
+    echo -e "${YELLOW}Creating .env file...${NC}"
+    cat > "$AGENT_DIR/.env" <<EOF
+API_BASE_URL=$API_BASE_URL
+LAB_ID=$LAB_ID
+INSTALLATION_TOKEN=$INSTALLATION_TOKEN
+EOF
+    echo -e "${GREEN}.env file created successfully!${NC}"
+fi
+
 # Set permissions
 echo -e "${YELLOW}Setting permissions...${NC}"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$AGENT_DIR"
+if [ -f "$AGENT_DIR/.env" ]; then
+    chmod 600 "$AGENT_DIR/.env"
+fi
 chmod +x "$AGENT_DIR/main.py"
 
 # Create systemd service file
@@ -133,8 +162,7 @@ echo "  Disable service:  sudo systemctl disable $SERVICE_NAME\n"
 echo -e "${YELLOW}To configure environment variables, edit $SERVICE_FILE and add:${NC}"
 echo "  Environment=\"API_BASE_URL=http://your-server:8000/api/v1\""
 echo "  Environment=\"LAB_ID=1\""
-echo "  Environment=\"AGENT_EMAIL=admin@iflab.com\""
-echo "  Environment=\"AGENT_PASSWORD=your-password\""
+echo "  Environment=\"INSTALLATION_TOKEN=your-token\""
 echo "  Environment=\"LOG_LEVEL=INFO\"\n"
 
 echo -e "${GREEN}Installation completed successfully!${NC}"

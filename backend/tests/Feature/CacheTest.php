@@ -221,19 +221,23 @@ class CacheTest extends TestCase
     public function test_cache_is_invalidated_when_computer_receives_agent_report(): void
     {
         $user = $this->actingAsUser();
-        $computer = Computer::factory()->create();
+        $plainToken = 'secret_token_abc';
+        $computer = Computer::factory()->create([
+            'agent_api_key' => hash('sha256', $plainToken),
+        ]);
 
         // Warm cache
         $response1 = $this->getJson('/api/v1/computers?per_page=20', $this->getAuthHeaders($user));
         $response1->assertStatus(200);
 
         // Send agent report
-        $this->postJson("/api/v1/computers/{$computer->id}/report", [
-            'hardware_info' => [
-                'cpu' => ['physical_cores' => 4],
-                'memory' => ['total_gb' => 8],
-            ],
-        ], $this->getAuthHeaders($user))->assertStatus(200);
+        $this->withHeader('Authorization', 'Bearer '.$plainToken)
+            ->postJson("/api/v1/computers/{$computer->id}/report", [
+                'hardware_info' => [
+                    'cpu' => ['physical_cores' => 4],
+                    'memory' => ['total_gb' => 8],
+                ],
+            ])->assertStatus(200);
 
         // After report, make another request - should get fresh data
         $response2 = $this->getJson('/api/v1/computers?per_page=20', $this->getAuthHeaders($user));

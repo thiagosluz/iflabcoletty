@@ -4,7 +4,10 @@
 param(
     [string]$ServiceName = "IFLabAgent",
     [string]$ServiceDisplayName = "IFG Lab Manager Agent",
-    [string]$ServiceDescription = "IFG Lab Manager Agent - Monitors computer status and reports to server"
+    [string]$ServiceDescription = "IFG Lab Manager Agent - Monitors computer status and reports to server",
+    [string]$ApiBaseUrl = "",
+    [string]$LabId = "",
+    [string]$InstallationToken = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -291,9 +294,9 @@ if ($existingTask) {
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
 $taskUser = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
-# Add repetition interval of 30 minutes to the logon trigger
-$trigger.RepetitionInterval = (New-TimeSpan -Minutes 30)
-$trigger.RepetitionDuration = (New-TimeSpan -Days 1) # Repeat for a day, or use [System.TimeSpan]::MaxValue for indefinite
+# Add repetition interval of 30 minutes to the logon trigger using a dummy trigger
+$dummyTrigger = New-ScheduledTaskTrigger -Once -At "00:00" -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 1)
+$trigger.Repetition = $dummyTrigger.Repetition
 $principal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Description "IFLab Agent: apply lab wallpaper" -Force | Out-Null
 Write-ColorOutput Green "Scheduled task '$taskName' created for $taskUser (service can trigger for immediate apply when this user is logged in)."
@@ -314,7 +317,20 @@ Write-ColorOutput Yellow "Configuration:"
 Write-Output "Before starting the service, configure the agent by:"
 Write-Output "  1. Setting environment variables in the service (use NSSM GUI or command line)"
 Write-Output "  2. Or create a .env file in $AgentDir"
+Write-Output "  (This is done automatically if you passed -ApiBaseUrl, -LabId and -InstallationToken)"
 Write-Output ""
+
+if ($ApiBaseUrl -and $LabId -and $InstallationToken) {
+    Write-ColorOutput Yellow "Creating .env file..."
+    $envContent = @"
+API_BASE_URL=$ApiBaseUrl
+LAB_ID=$LabId
+INSTALLATION_TOKEN=$InstallationToken
+"@
+    Set-Content -Path "$AgentDir\.env" -Value $envContent -Encoding UTF8
+    Write-ColorOutput Green ".env file created successfully!"
+    Write-Output ""
+}
 
 Write-ColorOutput Yellow "Useful commands:"
 Write-Output "  Start service:    Start-Service $ServiceName"
@@ -332,8 +348,7 @@ Write-Output ""
 Write-Output "  Option 2: Use command line:"
 Write-Output "    & `"$nssmPath`" set $ServiceName AppEnvironmentExtra `"API_BASE_URL=http://your-server:8000/api/v1`""
 Write-Output "    & `"$nssmPath`" set $ServiceName AppEnvironmentExtra `"LAB_ID=1`""
-Write-Output "    & `"$nssmPath`" set $ServiceName AppEnvironmentExtra `"AGENT_EMAIL=admin@iflab.com`""
-Write-Output "    & `"$nssmPath`" set $ServiceName AppEnvironmentExtra `"AGENT_PASSWORD=your-password`""
+Write-Output "    & `"$nssmPath`" set $ServiceName AppEnvironmentExtra `"INSTALLATION_TOKEN=your-token`""
 Write-Output ""
 
 Write-ColorOutput Green "Installation completed successfully!"

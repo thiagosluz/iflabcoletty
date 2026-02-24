@@ -15,13 +15,13 @@ class Computer extends Model
         'public_hash',
         'public_hash_expires_at',
         'hostname',
-        'hostname',
         'hardware_info',
         'position_x',
         'position_y',
         'agent_version',
         'wol_mac',
         'is_locked',
+        'agent_api_key',
     ];
 
     protected $casts = [

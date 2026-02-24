@@ -31,9 +31,10 @@ class KioskController extends Controller
             $payloads[] = [
                 'computer_id' => $computer->id,
                 'user_id' => $userId,
-                'command_type' => $commandType,
+                'command' => $commandType,
                 'parameters' => json_encode(['expires_at' => $now->copy()->addMinutes(5)->toIso8601String()]),
                 'status' => 'pending',
+                'expires_at' => $now->copy()->addMinutes(5),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];

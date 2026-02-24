@@ -133,6 +133,7 @@ class LabController extends Controller
                 'description' => $lab->description,
                 'default_wallpaper_url' => $lab->default_wallpaper_url,
                 'default_wallpaper_enabled' => $lab->default_wallpaper_enabled ?? true,
+                'installation_token' => $lab->installation_token,
                 'created_at' => $lab->created_at,
             ],
             'stats' => $stats,
@@ -150,7 +151,7 @@ class LabController extends Controller
         parameters: [
             new OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
             new OA\Parameter(name: 'search', in: 'query', required: false, schema: new OA\Schema(type: 'string')),
-            new OA\Parameter(name: 'status', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['online', 'offline'])),
+            new OA\Parameter(name: 'status', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['online', 'offline', 'bloqueado'])),
             new OA\Parameter(name: 'per_page', in: 'query', required: false, schema: new OA\Schema(type: 'integer', example: 20)),
             new OA\Parameter(name: 'sort_by', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['hostname', 'machine_id', 'status', 'updated_at'])),
             new OA\Parameter(name: 'sort_dir', in: 'query', required: false, schema: new OA\Schema(type: 'string', enum: ['asc', 'desc'])),
@@ -177,9 +178,12 @@ class LabController extends Controller
         // Filter by status
         if ($status = $request->query('status')) {
             if ($status === 'online') {
-                $query->where('updated_at', '>=', now()->subMinutes(5));
+                $query->where('updated_at', '>=', now()->subMinutes(5))
+                    ->where('is_locked', false);
             } elseif ($status === 'offline') {
                 $query->where('updated_at', '<', now()->subMinutes(5));
+            } elseif ($status === 'bloqueado') {
+                $query->where('is_locked', true);
             }
         }
 
@@ -265,6 +269,7 @@ class LabController extends Controller
                 'total_computers' => 0,
                 'online_computers' => 0,
                 'offline_computers' => 0,
+                'locked_computers' => 0,
                 'total_softwares' => 0,
                 'hardware_averages' => null,
                 'os_distribution' => [],
@@ -289,10 +294,15 @@ class LabController extends Controller
                 ? $computer->updated_at->setTimezone($timezone)
                 : Carbon::parse($computer->updated_at, $timezone);
 
-            // Computer is online if updated_at is greater than or equal to threshold (last 5 minutes)
-            return $updatedAt->gte($threshold);
+            // Comportamento ajustado: 'online' puro significa online e NÃO bloqueado
+            return $updatedAt->gte($threshold) && ! $computer->is_locked;
         })->count();
-        $offlineCount = $totalComputers - $onlineCount;
+
+        $lockedCount = $computers->filter(function ($computer) {
+            return $computer->is_locked;
+        })->count();
+
+        $offlineCount = $totalComputers - ($onlineCount + $lockedCount);
 
         // Calculate hardware averages
         $hardwareAverages = $this->calculateHardwareAverages($computers);
@@ -309,6 +319,7 @@ class LabController extends Controller
             'total_computers' => $totalComputers,
             'online_computers' => $onlineCount,
             'offline_computers' => $offlineCount,
+            'locked_computers' => $lockedCount,
             'total_softwares' => $uniqueSoftwares,
             'hardware_averages' => $hardwareAverages,
             'os_distribution' => $osDistribution,
@@ -423,6 +434,23 @@ class LabController extends Controller
         $this->logActivity('update', $lab, $oldValues, $lab->toArray());
 
         return response()->json($lab);
+    }
+
+    /**
+     * Generate or rotate the installation token for the lab.
+     */
+    public function rotateToken(Request $request, Lab $lab)
+    {
+        $this->authorize('labs.update');
+
+        $token = 'install_tk_'.\Illuminate\Support\Str::random(32);
+
+        $lab->update(['installation_token' => $token]);
+
+        return response()->json([
+            'message' => 'Token rotacionado com sucesso',
+            'installation_token' => $token,
+        ]);
     }
 
     /**

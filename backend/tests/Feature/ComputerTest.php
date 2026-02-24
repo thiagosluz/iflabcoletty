@@ -217,7 +217,10 @@ class ComputerTest extends TestCase
     public function test_computer_can_receive_agent_report(): void
     {
         $user = $this->actingAsUser();
-        $computer = Computer::factory()->create();
+        $plainToken = 'secret_token_abc';
+        $computer = Computer::factory()->create([
+            'agent_api_key' => hash('sha256', $plainToken),
+        ]);
 
         $hardwareInfo = [
             'cpu' => ['physical_cores' => 4, 'logical_cores' => 8],
@@ -231,10 +234,11 @@ class ComputerTest extends TestCase
             ['name' => 'Software 2', 'version' => '2.0.0'],
         ];
 
-        $response = $this->postJson("/api/v1/computers/{$computer->id}/report", [
-            'hardware_info' => $hardwareInfo,
-            'softwares' => $softwares,
-        ], $this->getAuthHeaders($user));
+        $response = $this->withHeader('Authorization', 'Bearer '.$plainToken)
+            ->postJson("/api/v1/computers/{$computer->id}/report", [
+                'hardware_info' => $hardwareInfo,
+                'softwares' => $softwares,
+            ]);
 
         $response->assertStatus(200)
             ->assertJson(['message' => 'Relatório recebido com sucesso']);
