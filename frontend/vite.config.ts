@@ -2,15 +2,10 @@
 import path from "path"
 import { fileURLToPath } from 'url'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type UserConfig } from 'vite'
-import type { InlineConfig } from 'vitest/node'
+import { defineConfig } from 'vite'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-interface VitestConfigExport extends UserConfig {
-  test: InlineConfig;
-}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -23,10 +18,11 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 600,
   },
+  // @ts-ignore
   test: {
     globals: true,
     environment: 'jsdom',
     setupFiles: './vitest.setup.ts',
     css: true,
   },
-} as VitestConfigExport)
+})
