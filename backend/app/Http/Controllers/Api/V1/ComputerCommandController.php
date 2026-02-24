@@ -12,6 +12,16 @@ class ComputerCommandController extends Controller
     {
         $this->authorize('remote-control.view');
 
+        $now = now();
+        ComputerCommand::where('status', 'pending')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<', $now)
+            ->update([
+                'status' => 'failed',
+                'output' => 'Comando expirado: o computador não ficou online a tempo.',
+                'executed_at' => $now,
+            ]);
+
         $query = ComputerCommand::with(['computer:id,hostname', 'user:id,name']);
 
         if ($request->has('search')) {

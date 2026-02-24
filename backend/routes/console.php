@@ -49,6 +49,23 @@ Schedule::command('app:run-scheduled-tasks')
         Log::error('Scheduled task command failed');
     });
 
+// Mark expired commands as failed every minute
+Schedule::call(function () {
+    $now = now();
+    $expiredCount = \App\Models\ComputerCommand::where('status', 'pending')
+        ->whereNotNull('expires_at')
+        ->where('expires_at', '<', $now)
+        ->update([
+            'status' => 'failed',
+            'output' => 'Comando expirado: o computador não ficou online a tempo.',
+            'executed_at' => $now,
+        ]);
+
+    if ($expiredCount > 0) {
+        Log::info("Marked {$expiredCount} expired commands as failed.");
+    }
+})->everyMinute();
+
 // Clean expired file transfers hourly
 Schedule::call(function () {
     $expired = \App\Models\FileTransfer::where('expires_at', '<', now())->get();
