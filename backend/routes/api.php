@@ -46,6 +46,9 @@ Route::prefix('v1')->group(function () {
 
     // Agent Authenticated Routes
     Route::middleware([\App\Http\Middleware\AgentAuthMiddleware::class])->group(function () {
+        Route::get('/agent/me', function (Request $request) {
+            return response()->json($request->computer);
+        });
         Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
         Route::post('/computers/{computer}/metrics', [ComputerController::class, 'storeMetrics']);
         Route::get('/computers/{computer}/commands/pending', [RemoteControlController::class, 'pending']);
@@ -262,9 +265,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/system/logs/{filename}', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'show']);
 
         // Queue Management
-        Route::post('/system/queue/retry-failed', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'retryFailedJobs']);
-        Route::post('/system/queue/clear', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'clearQueue']);
-        Route::post('/system/queue/delete', [\App\Http\Controllers\Api\V1\HealthCheckController::class, 'deleteQueue']);
+        Route::post('/system/queue/retry-failed', [HealthCheckController::class, 'retryFailedJobs']);
+        Route::post('/system/queue/clear', [HealthCheckController::class, 'clearQueue']);
+        Route::post('/system/queue/delete', [HealthCheckController::class, 'deleteQueue']);
 
         // Software Installations
         Route::post('/software-installations', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'store']);

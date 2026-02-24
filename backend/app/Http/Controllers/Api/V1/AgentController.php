@@ -12,8 +12,7 @@ class AgentController extends Controller
 {
     public function __construct(
         private AgentService $agentService
-    ) {
-    }
+    ) {}
 
     /**
      * Check for agent updates
@@ -40,8 +39,8 @@ class AgentController extends Controller
                 $baseUrl = config('app.agent_installer_base_url', '');
                 if ($baseUrl !== '') {
                     $baseUrl = rtrim($baseUrl, '/');
-                    $tag = str_starts_with($latestVersion, 'v') ? $latestVersion : 'v' . $latestVersion;
-                    $response['download_url'] = $baseUrl . '/' . $tag . '/iflab-agent-setup-' . $tag . '.exe';
+                    $tag = str_starts_with($latestVersion, 'v') ? $latestVersion : 'v'.$latestVersion;
+                    $response['download_url'] = $baseUrl.'/'.$tag.'/iflab-agent-setup-'.$tag.'.exe';
                 }
             }
             if (empty($response['download_url']) && $platform !== 'windows-frozen') {
@@ -63,7 +62,7 @@ class AgentController extends Controller
     {
         $packagePath = $this->agentService->getPackagePath($version);
 
-        if (!$packagePath || !file_exists($packagePath)) {
+        if (! $packagePath || ! file_exists($packagePath)) {
             return response()->json([
                 'message' => 'Update package not found',
             ], 404);
@@ -193,7 +192,7 @@ class AgentController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Erro ao criar pacote do agente: ' . $e->getMessage(),
+                'message' => 'Erro ao criar pacote do agente: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -207,7 +206,7 @@ class AgentController extends Controller
     {
         $this->authorize('computers.view');
 
-        if (!in_array($platform, ['windows', 'linux'])) {
+        if (! in_array($platform, ['windows', 'linux'])) {
             return response()->json([
                 'message' => 'Platform inválida. Use "windows" ou "linux"',
             ], 400);
@@ -215,7 +214,7 @@ class AgentController extends Controller
 
         $installerPath = $this->agentService->getInstallerPath($platform);
 
-        if (!$installerPath || !file_exists($installerPath)) {
+        if (! $installerPath || ! file_exists($installerPath)) {
             return response()->json([
                 'message' => 'Script de instalação não encontrado',
             ], 404);
@@ -241,7 +240,7 @@ class AgentController extends Controller
         try {
             $zipPath = $this->agentService->createSourceCodeZip();
 
-            if (!$zipPath || !file_exists($zipPath)) {
+            if (! $zipPath || ! file_exists($zipPath)) {
                 return response()->json([
                     'message' => 'Erro ao criar arquivo ZIP do código-fonte',
                 ], 500);
@@ -254,10 +253,10 @@ class AgentController extends Controller
                 'Content-Type' => 'application/zip',
             ])->deleteFileAfterSend(true);
         } catch (\Exception $e) {
-            Log::error('Error creating source code ZIP: ' . $e->getMessage());
+            Log::error('Error creating source code ZIP: '.$e->getMessage());
 
             return response()->json([
-                'message' => 'Erro ao criar arquivo ZIP: ' . $e->getMessage(),
+                'message' => 'Erro ao criar arquivo ZIP: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -297,7 +296,7 @@ class AgentController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Erro ao excluir o pacote: ' . $e->getMessage(),
+                'message' => 'Erro ao excluir o pacote: '.$e->getMessage(),
             ], 500);
         }
     }

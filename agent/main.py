@@ -85,11 +85,78 @@ class Agent:
             with open(script_path, "w", encoding="utf-8") as f:
                 f.write("""import tkinter as tk
 import os, time, sys
+import ctypes
+from ctypes import wintypes
+import atexit
 
 unlock_file = r"C:\\ProgramData\\IFLabAgent\\unlock_kiosk.txt"
+active_file = r"C:\\ProgramData\\IFLabAgent\\kiosk_active.txt"
+
+if not os.path.exists(active_file):
+    sys.exit(0)
+
+
+# Low-Level Keyboard Hook to block Windows Key, Alt+Tab, etc.
+WH_KEYBOARD_LL = 13
+WM_KEYDOWN = 0x0100
+WM_SYSKEYDOWN = 0x0104
+
+VK_TAB = 0x09
+VK_LWIN = 0x5B
+VK_RWIN = 0x5C
+VK_ESCAPE = 0x1B
+VK_F4 = 0x73
+LLKHF_ALTDOWN = 0x20
+
+user32 = ctypes.windll.user32
+
+class KBDLLHOOKSTRUCT(ctypes.Structure):
+    _fields_ = [("vkCode", wintypes.DWORD),
+                ("scanCode", wintypes.DWORD),
+                ("flags", wintypes.DWORD),
+                ("time", wintypes.DWORD),
+                ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG))]
+
+def hook_proc(nCode, wParam, lParam):
+    if nCode >= 0:
+        vk = lParam.contents.vkCode
+        flags = lParam.contents.flags
+        
+        # Block Win keys
+        if vk in (VK_LWIN, VK_RWIN):
+            return 1
+        
+        # Block Alt+Tab
+        if vk == VK_TAB and (flags & LLKHF_ALTDOWN):
+            return 1
+            
+        # Block Alt+F4
+        if vk == VK_F4 and (flags & LLKHF_ALTDOWN):
+            return 1
+            
+        # Block Ctrl+Esc
+        if vk == VK_ESCAPE and (ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000):
+            return 1
+
+    return user32.CallNextHookEx(None, nCode, wParam, lParam)
+
+CMPFUNC = ctypes.CFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, ctypes.POINTER(KBDLLHOOKSTRUCT))
+pointer = CMPFUNC(hook_proc)
+hook_id = None
+
+def install_hook():
+    global hook_id
+    hook_id = user32.SetWindowsHookExW(WH_KEYBOARD_LL, pointer, None, 0)
+
+def uninstall_hook():
+    global hook_id
+    if hook_id:
+        user32.UnhookWindowsHookEx(hook_id)
+        hook_id = None
 
 def check_unlock(root):
     if os.path.exists(unlock_file):
+        uninstall_hook()
         try:
             os.remove(unlock_file)
         except:
@@ -113,6 +180,10 @@ root.bind("<Escape>", lambda e: None)
 root.bind("<Alt-F4>", lambda e: None)
 label = tk.Label(root, text="LABORATÓRIO EM ATENÇÃO", font=("Arial", 48, "bold"), fg="red", bg="black")
 label.pack(expand=True)
+
+install_hook()
+atexit.register(uninstall_hook)
+
 root.after(1000, check_unlock, root)
 root.mainloop()""")
             return str(script_path)
@@ -573,6 +644,8 @@ root.mainloop()""")
                 ctype = cmd.get("command", "?")
                 logger.info("Processing command id=%s type=%s", cid, ctype)
                 self.execute_command(cmd)
+        except requests.exceptions.ConnectionError as e:
+            logger.debug("Network not ready yet for checking commands.")
         except Exception as e:
             logger.error("Error checking commands: %s", e)
             logger.exception("check_commands failed")
@@ -1297,9 +1370,14 @@ exit 0
             
         if command_type == 'wol':
             logger.info("WoL: updating command %s status to %s", command_id, 'completed' if success else 'failed')
+            
+        logger.info(f"Command {command_type} finished. Success: {success}, Output: {output}")
         self.update_command_status(command_id, 'completed' if success else 'failed', output)
 
     def update_command_status(self, command_id, status, output=None):
+        if not command_id:
+            return
+        
         try:
             url = f"{config.API_BASE_URL}/commands/{command_id}/status"
             payload = {'status': status}
@@ -1945,6 +2023,58 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
             logger.error(f"Failed to execute installer: {e}")
             return {'success': False, 'output': f"Installation error: {str(e)}"}
 
+    def _enforce_kiosk_process(self):
+        """Monitor kiosk_active.txt and ensure the kiosk process is running in user session."""
+        if platform.system() != 'Windows':
+            return
+            
+        active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
+        if os.path.exists(active_file):
+            kiosk_running = False
+            for p in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    if p.info['name'] and 'python' in p.info['name'].lower():
+                        cmdline = p.info.get('cmdline') or []
+                        if any('kiosk.py' in arg for arg in cmdline):
+                            kiosk_running = True
+                            break
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            if not kiosk_running:
+                logger.debug("Kiosk is active but process not running. Attempting to launch in user session...")
+                script_path = self._ensure_kiosk_script()
+                if script_path:
+                    python_exe = sys.executable.replace('python.exe', 'pythonw.exe')
+                    if not os.path.exists(python_exe):
+                        python_exe = sys.executable
+                        
+                    ps_script = f'''
+$cs = Get-WmiObject -Class Win32_ComputerSystem
+$user = $cs.UserName
+if (-not $user) {{ exit 1 }}
+if ($user -match '^(.+)\\\\(.+)$') {{
+    $domain = $matches[1]
+    $username = $matches[2]
+}} else {{
+    $domain = $env:COMPUTERNAME
+    $username = $user
+}}
+$taskName = "IFLabKiosk_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+cmd /c "schtasks /Create /TN `"$taskName`" /TR `"{python_exe} `"{script_path}`"`" /SC ONCE /ST 23:59 /F /RU `"$domain\\$username`" /RL HIGHEST" 2>&1 | Out-Null
+cmd /c "schtasks /Run /TN `"$taskName`"" 2>&1 | Out-Null
+Start-Sleep -Milliseconds 800
+cmd /c "schtasks /Delete /TN `"$taskName`" /F" 2>&1 | Out-Null
+exit 0
+'''
+                    try:
+                        subprocess.run(
+                            ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_script],
+                            capture_output=True, timeout=15
+                        )
+                    except Exception as e:
+                        pass
+
     def run(self):
         logger.info(f"Starting Agent for Machine ID: {self.machine_id}")
         
@@ -1954,6 +2084,7 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
         last_metrics_time = 0
         last_report_time = 0
         last_wallpaper_check_time = 0
+        startup_kiosk_checked = False
 
         while True:
             if not self.token or not self.computer_db_id:
@@ -1963,6 +2094,26 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
 
             # Check for commands frequently (every loop)
             if self.computer_db_id:
+                if not startup_kiosk_checked:
+                    # Sync initial kiosk state from server
+                    try:
+                        url = f"{config.API_BASE_URL}/agent/me"
+                        response = self.session.get(url, timeout=30)
+                        if response.status_code == 200:
+                            pc_data = response.json()
+                            is_locked = pc_data.get('is_locked', False)
+                            if is_locked:
+                                # Server says locked, trigger lock command locally to ensure screen is locked (e.g. after reboot)
+                                logger.info("Startup check: Server indicates kiosk is locked. Enforcing lock.")
+                                self.execute_command({'command': 'kiosk_lock'})
+                            else:
+                                # Server says unlocked, trigger unlock locally just in case
+                                logger.info("Startup check: Server indicates kiosk is unlocked. Ensuring unlock.")
+                                self.execute_command({'command': 'kiosk_unlock'})
+                            startup_kiosk_checked = True
+                    except Exception as e:
+                        logger.warning(f"Startup kiosk check failed: {e}")
+
                 self.check_commands()
 
             current_time = time.time()
@@ -1984,6 +2135,8 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
                 if self.computer_db_id:
                     self._enforce_lab_wallpaper()
                 last_wallpaper_check_time = current_time
+
+            self._enforce_kiosk_process()
 
             # Short sleep for responsive command handling
             time.sleep(5)

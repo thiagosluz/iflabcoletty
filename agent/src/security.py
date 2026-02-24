@@ -12,6 +12,8 @@ def get_hardware_fingerprint():
     """
     Gera uma string imutável baseada nas características únicas do hardware.
     Usada como entropia para derivar a chave de criptografia local.
+    A prioridade é o UUID da BIOS/Placa-mãe para garantir estabilidade mesmo se
+    a interface de rede cair ou for alterada.
     """
     fingerprint_parts = []
     
@@ -19,32 +21,42 @@ def get_hardware_fingerprint():
     fingerprint_parts.append(platform.system())
     fingerprint_parts.append(platform.machine())
     
-    # 2. MAC Address (First active active interface is better, but we will use node for simplicity)
-    # uuid.getnode() normally returns the MAC address of the current machine
-    import uuid
-    mac_node = uuid.getnode()
-    fingerprint_parts.append(str(mac_node))
-    
-    # 3. Motherboard/BIOS UUID (Se disponível)
+    # 2. Hardware ID Estável (Motherboard/BIOS UUID preferencialmente)
+    hardware_id_found = False
     os_name = platform.system().lower()
+    
     try:
         if os_name == 'windows':
-            output = subprocess.check_output('wmic csproduct get uuid', shell=True).decode()
+            output = subprocess.check_output('wmic csproduct get uuid', shell=True, stderr=subprocess.DEVNULL).decode()
             uuid_str = output.replace('UUID', '').strip()
-            if uuid_str:
+            # Garante que não é um UUID vazio ou genérico
+            if uuid_str and uuid_str.lower() != 'ffffffff-ffff-ffff-ffff-ffffffffffff':
                 fingerprint_parts.append(uuid_str)
+                hardware_id_found = True
         elif os_name == 'linux':
             # Tenta ler dmi id (requer root no linux normalmente)
             if os.path.exists('/sys/class/dmi/id/product_uuid'):
                 with open('/sys/class/dmi/id/product_uuid', 'r') as f:
-                    fingerprint_parts.append(f.read().strip())
-            else:
-                # Fallback to machine-id
-                if os.path.exists('/etc/machine-id'):
-                    with open('/etc/machine-id', 'r') as f:
-                        fingerprint_parts.append(f.read().strip())
+                    uuid_str = f.read().strip()
+                    if uuid_str:
+                        fingerprint_parts.append(uuid_str)
+                        hardware_id_found = True
+            
+            # Fallback para machine-id se o product_uuid falhar
+            if not hardware_id_found and os.path.exists('/etc/machine-id'):
+                with open('/etc/machine-id', 'r') as f:
+                    machine_id = f.read().strip()
+                    if machine_id:
+                        fingerprint_parts.append(machine_id)
+                        hardware_id_found = True
     except Exception:
-        pass # Ignora falhas na captura avançada, o MAC node servirá como base
+        pass # Ignora falhas na captura avançada
+        
+    # 3. Fallback apenas se as opções mais estáveis falharem (MAC node)
+    if not hardware_id_found:
+        import uuid
+        mac_node = uuid.getnode()
+        fingerprint_parts.append(str(mac_node))
         
     # Combina tudo em uma string hash para normalizar
     raw_fingerprint = "-".join(fingerprint_parts)
