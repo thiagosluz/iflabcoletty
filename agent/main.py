@@ -205,41 +205,7 @@ root.mainloop()""")
             
         logger.warning("Nenhuma chave API local encontrada. Iniciando fluxo de provisionamento...")
         
-        # 2. Fluxo de Migração (Se ainda temos email e senha legado)
-        if config.AGENT_EMAIL and config.AGENT_PASSWORD:
-            logger.info("Credenciais legadas detectadas. Tentando migrar para API Key...")
-            try:
-                hardware_info = self.get_hardware_info()
-                payload = {
-                    'email': config.AGENT_EMAIL,
-                    'password': config.AGENT_PASSWORD,
-                    'lab_id': config.LAB_ID,
-                    'hardware_info': hardware_info,
-                    'hostname': socket.gethostname(),
-                    'agent_version': self.get_current_version()
-                }
-                
-                # Se tivermos interface de rede MAC, capturamos para o WoL.
-                if hardware_info.get('network') and len(hardware_info['network']) > 0:
-                   payload['wol_mac'] = hardware_info['network'][0].get('mac')
-
-                res = self.session.post(f"{config.API_BASE_URL}/agents/migrate", json=payload)
-                res.raise_for_status()
-                data = res.json()
-                
-                self.token = data['api_key']
-                self.computer_db_id = data['computer_id']
-                save_api_key(self.token, self.computer_db_id)
-                self.session.headers.update({'Authorization': f"Bearer {self.token}"})
-                
-                logger.info("Migração bem-sucedida. Credenciais antigas serão apagadas.")
-                clear_legacy_credentials(config.env_path)
-                return True
-                
-            except Exception as e:
-                logger.error(f"Falha na migração: {e}")
-                
-        # 3. Fluxo de Registro Limpo (Com INSTALLATION_TOKEN)
+        # Fluxo de Registro Limpo (Com INSTALLATION_TOKEN)
         if config.INSTALLATION_TOKEN:
             logger.info("Token de instalação detectado. Tentando registrar no laboratório...")
             try:
@@ -269,7 +235,7 @@ root.mainloop()""")
             except Exception as e:
                 logger.error(f"Falha no registro: {e}")
                 
-        logger.error("Sem chave API, sem credenciais legadas e sem token de instalação. Agente interrompido.")
+        logger.error("Sem chave API local e sem token de instalação válido. Agente interrompido. Verifique o arquivo config.py / .env e verifique se o INSTALLATION_TOKEN está configurado corretamente e é válido para este laboratório.")
         return False
 
     def get_hardware_info(self):

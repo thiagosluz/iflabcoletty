@@ -32,36 +32,10 @@ CONFIG_FILE = AGENT_DIR / "config.py"
 try:
     import config
     API_BASE_URL = os.getenv('API_BASE_URL', getattr(config, 'API_BASE_URL', 'http://localhost:8000/api/v1'))
-    AGENT_EMAIL = getattr(config, 'AGENT_EMAIL', os.getenv('AGENT_EMAIL', ''))
-    AGENT_PASSWORD = getattr(config, 'AGENT_PASSWORD', os.getenv('AGENT_PASSWORD', ''))
+    INSTALLATION_TOKEN = getattr(config, 'INSTALLATION_TOKEN', os.getenv('INSTALLATION_TOKEN', ''))
 except ImportError:
     API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1')
-    AGENT_EMAIL = os.getenv('AGENT_EMAIL', '')
-    AGENT_PASSWORD = os.getenv('AGENT_PASSWORD', '')
-
-
-def login(api_base_url):
-    """Faz login na API com as credenciais do agente e retorna o token (ou None)."""
-    if not AGENT_EMAIL or not AGENT_PASSWORD:
-        logger.warning("AGENT_EMAIL e AGENT_PASSWORD não configurados (.env ou config)")
-        return None
-    try:
-        url = f"{api_base_url.rstrip('/')}/login"
-        resp = requests.post(
-            url,
-            json={'email': AGENT_EMAIL, 'password': AGENT_PASSWORD},
-            headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
-            timeout=10
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        token = data.get('token')
-        if token:
-            logger.info("Login na API realizado com sucesso.")
-        return token
-    except Exception as e:
-        logger.warning("Falha no login na API: %s", e)
-        return None
+    INSTALLATION_TOKEN = os.getenv('INSTALLATION_TOKEN', '')
 
 
 def get_current_version():
@@ -113,7 +87,7 @@ def check_for_updates(api_base_url, token=None):
                 data['version'] = data['latest_version']
             return data
         elif response.status_code == 401:
-            logger.warning("Não autorizado (401). Verifique AGENT_EMAIL e AGENT_PASSWORD no .env")
+            logger.warning("Não autorizado (401). Verifique o INSTALLATION_TOKEN ou a Chave da API.")
             return None
         elif response.status_code == 404:
             logger.info("Update endpoint not available (expected in older versions)")
@@ -205,24 +179,32 @@ def extract_update(package_file, extract_to=None):
 
 
 def apply_update(extracted_dir):
-    """Apply the update by copying files."""
+    """Apply the update by copying all files from the extracted directory."""
     try:
         logger.info("Applying update...")
         
-        # List of files/directories to update (exclude config and identity)
-        files_to_update = ['main.py', 'requirements.txt']
+        # Arquivos e diretórios que NÃO devem ser sobrescritos
+        exclude_patterns = ['.venv', 'backups', '__pycache__', '.agent_identity', 'config.py', '.env']
         
-        for item in files_to_update:
-            src = extracted_dir / item
-            dst = AGENT_DIR / item
+        for item in extracted_dir.iterdir():
+            if item.name in exclude_patterns:
+                continue
+                
+            src = item
+            dst = AGENT_DIR / item.name
             
-            if src.exists():
+            if src.is_file():
                 if dst.exists():
                     shutil.copy2(src, dst)
-                    logger.info(f"Updated {item}")
+                    logger.info(f"Updated file {item.name}")
                 else:
                     shutil.copy2(src, dst)
-                    logger.info(f"Created {item}")
+                    logger.info(f"Created file {item.name}")
+            elif src.is_dir():
+                if dst.exists():
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+                logger.info(f"Updated directory {item.name}")
         
         # Update requirements if changed
         new_requirements = extracted_dir / "requirements.txt"
@@ -273,14 +255,13 @@ def main():
     except Exception as e:
         logger.warning(f"Não foi possível carregar a API Key do keystore: {e}")
 
-    # Fallback para métodos legados (Token ou email/senha) se API Key falhar
-    if not token:
-        token = os.getenv('AGENT_TOKEN')
-        if not token and AGENT_EMAIL and AGENT_PASSWORD:
-            token = login(API_BASE_URL)
+    # Fallback para INSTALLATION_TOKEN se API Key não estiver disponível (ex: nova implantação)
+    if not token and INSTALLATION_TOKEN:
+        logger.info("Utilizando INSTALLATION_TOKEN para requisição de atualização.")
+        token = INSTALLATION_TOKEN
             
     if not token:
-        logger.warning("Nenhum token disponível. Autenticação na API poderá falhar.")
+        logger.warning("Nenhum token (API Key ou Installation Token) disponível. Autenticação na API poderá falhar.")
     
     # Check for updates
     update_info = check_for_updates(API_BASE_URL, token)
