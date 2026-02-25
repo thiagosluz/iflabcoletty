@@ -221,7 +221,7 @@ export default function AgentDownloads() {
                                 <ul className="list-disc list-inside ml-5">
                                     <li><code className="bg-gray-100 px-1 rounded">API_BASE_URL</code> (ex.: <code className="bg-gray-100 px-1 rounded">http://seu-servidor:8000/api/v1</code>)</li>
                                     <li><code className="bg-gray-100 px-1 rounded">LAB_ID</code></li>
-                                    <li><code className="bg-gray-100 px-1 rounded">AGENT_EMAIL</code> e <code className="bg-gray-100 px-1 rounded">AGENT_PASSWORD</code></li>
+                                    <li><code className="bg-gray-100 px-1 rounded">INSTALLATION_TOKEN</code></li>
                                 </ul>
                             </li>
                         </ol>
@@ -240,7 +240,7 @@ export default function AgentDownloads() {
                             </li>
                             <li>Linux (cron, exemplo diário às 02:00):
                                 <pre className="bg-gray-100 rounded p-2 text-xs overflow-x-auto mt-1">
-{`0 2 * * * cd /opt/iflab-agent && AUTO_UPDATE=1 /opt/iflab-agent/.venv/bin/python update.py >> /var/log/iflab-agent-update.log 2>&1`}
+                                    {`0 2 * * * cd /opt/iflab-agent && AUTO_UPDATE=1 /opt/iflab-agent/.venv/bin/python update.py >> /var/log/iflab-agent-update.log 2>&1`}
                                 </pre>
                             </li>
                             <li>Windows (Agendador de Tarefas):
@@ -248,7 +248,7 @@ export default function AgentDownloads() {
                                     <li>Criar tarefa que executa o PowerShell na pasta do agente.</li>
                                     <li>Exemplo de ação:
                                         <pre className="bg-gray-100 rounded p-2 text-xs overflow-x-auto mt-1">
-{`powershell.exe -Command "cd C:\\caminho\\para\\agent; $env:AUTO_UPDATE='1'; .\\.venv\\Scripts\\python.exe update.py"`}
+                                            {`powershell.exe -Command "cd C:\\caminho\\para\\agent; $env:AUTO_UPDATE='1'; .\\.venv\\Scripts\\python.exe update.py"`}
                                         </pre>
                                     </li>
                                 </ul>
@@ -531,7 +531,7 @@ export default function AgentDownloads() {
                                                     <li>O script irá instalar o agente como um serviço do Windows</li>
                                                 </ol>
                                                 <p className="text-yellow-600 dark:text-yellow-400 mt-2">
-                                                    <strong>Nota:</strong> Se encontrar erro de política de execução, execute primeiro: 
+                                                    <strong>Nota:</strong> Se encontrar erro de política de execução, execute primeiro:
                                                     <code className="bg-gray-100 px-1 rounded ml-1">Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser</code>
                                                 </p>
                                             </>

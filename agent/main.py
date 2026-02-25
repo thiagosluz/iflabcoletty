@@ -1757,6 +1757,21 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
 
     def _enforce_lab_wallpaper(self):
         """Verifica o wallpaper padrão do lab no servidor e, se o atual for diferente, aplica o padrão."""
+        if not self.computer_db_id:
+            return
+            
+        try:
+            url = f"{config.API_BASE_URL}/agent/me"
+            response = self.session.get(url, timeout=30)
+            if response.status_code == 200:
+                pc_data = response.json()
+                lab_data = pc_data.get('lab')
+                if lab_data:
+                    self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
+                    self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
+        except Exception as e:
+            logger.debug("Failed to sync lab wallpaper info: %s", e)
+
         if not getattr(self, '_cached_lab_wallpaper_enabled', True):
             return
         self._ensure_wallpaper_task_schedule()

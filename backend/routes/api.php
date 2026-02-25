@@ -47,7 +47,7 @@ Route::prefix('v1')->group(function () {
     // Agent Authenticated Routes
     Route::middleware([\App\Http\Middleware\AgentAuthMiddleware::class])->group(function () {
         Route::get('/agent/me', function (Request $request) {
-            return response()->json($request->computer);
+            return response()->json($request->computer->load('lab:id,name,default_wallpaper_url,default_wallpaper_enabled'));
         });
         Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
         Route::post('/computers/{computer}/metrics', [ComputerController::class, 'storeMetrics']);
