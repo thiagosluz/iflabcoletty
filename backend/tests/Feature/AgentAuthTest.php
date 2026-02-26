@@ -17,6 +17,7 @@ class AgentAuthTest extends TestCase
 
         $payload = [
             'installation_token' => 'test_token_123',
+            'machine_id' => 'test-machine-123',
             'hardware_info' => ['mac' => '00:11:22:33'],
             'hostname' => 'Test-PC',
             'agent_version' => '1.0.0',
@@ -55,6 +56,7 @@ class AgentAuthTest extends TestCase
             'email' => 'admin@test.com',
             'password' => 'password123',
             'lab_id' => $lab->id,
+            'machine_id' => 'migrate-machine-456',
             'hardware_info' => ['mac' => 'AA:BB:CC'],
             'hostname' => 'Migrate-PC',
             'agent_version' => '0.9.0',

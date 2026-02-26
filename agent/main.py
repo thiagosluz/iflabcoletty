@@ -48,34 +48,11 @@ class Agent:
         else:
             self.agent_dir = Path(__file__).parent.absolute()
         self.version_file = self.agent_dir / ".agent_version"
-        self.machine_id = self._get_or_create_machine_id()
+        self.machine_id = get_hardware_fingerprint().hex()
         self.computer_db_id = None  # ID in the database
         self._cached_lab_wallpaper_url = None  # URL do papel de parede padrão do lab
         self._cached_lab_wallpaper_enabled = True  # Se o agente deve aplicar o wallpaper
 
-    def _get_or_create_machine_id(self):
-        """Get machine ID from file or generate new one."""
-        machine_id_path = self.agent_dir / config.MACHINE_ID_FILE
-        if os.path.exists(machine_id_path):
-            try:
-                with open(machine_id_path, 'r') as f:
-                    content = f.read().strip()
-                    if content and len(content) == 36 and '-' in content:
-                        return content
-                    else:
-                        logger.warning("Invalid machine ID found, generating new one.")
-            except Exception as e:
-                logger.error(f"Error reading identity file: {e}")
-        
-        # If not, generate new ID
-        new_id = str(uuid.uuid4())
-        try:
-            with open(machine_id_path, 'w') as f:
-                f.write(new_id)
-        except Exception as e:
-            logger.error(f"Error saving identity file: {e}")
-        
-        return new_id
 
     def _ensure_kiosk_script(self):
         """Returns the path to the kiosk lock script, generating it if necessary."""
@@ -212,6 +189,7 @@ root.mainloop()""")
                 hardware_info = self.get_hardware_info()
                 payload = {
                     'installation_token': config.INSTALLATION_TOKEN,
+                    'machine_id': self.machine_id,
                     'hardware_info': hardware_info,
                     'hostname': socket.gethostname(),
                     'agent_version': self.get_current_version()

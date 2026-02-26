@@ -40,9 +40,9 @@ Route::prefix('v1')->group(function () {
     Route::post('/forgot-password', [\App\Http\Controllers\Api\V1\Auth\ForgotPasswordController::class, 'sendResetLinkEmail']);
     Route::post('/reset-password', [\App\Http\Controllers\Api\V1\Auth\ResetPasswordController::class, 'reset']);
 
-    // Agent Registration and Migration
-    Route::post('/agents/register', [AgentAuthController::class, 'register']);
-    Route::post('/agents/migrate', [AgentAuthController::class, 'migrate']);
+    // Agent Registration and Migration - Rate limited to prevent DoS
+    Route::post('/agents/register', [AgentAuthController::class, 'register'])->middleware('throttle:10,1');
+    Route::post('/agents/migrate', [AgentAuthController::class, 'migrate'])->middleware('throttle:10,1');
 
     // Agent Authenticated Routes
     Route::middleware([\App\Http\Middleware\AgentAuthMiddleware::class])->group(function () {

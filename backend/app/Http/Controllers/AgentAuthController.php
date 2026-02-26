@@ -10,6 +10,7 @@ class AgentAuthController extends Controller
     {
         $request->validate([
             'installation_token' => 'required|string',
+            'machine_id' => 'required|string',
             'hardware_info' => 'required|array',
             'hostname' => 'required|string',
             'agent_version' => 'required|string',
@@ -26,8 +27,8 @@ class AgentAuthController extends Controller
         $plainApiKey = \Illuminate\Support\Str::random(60);
         $hashedApiKey = hash('sha256', $plainApiKey);
 
-        // Hardware info represents the unique fingerprint of the machine
-        $machineId = md5(json_encode($request->hardware_info));
+        // Use the machine_id provided by the agent (derived from stable hardware fingerprint)
+        $machineId = $request->machine_id;
 
         // Let's check if the computer already exists or register a new one
         $computer = \App\Models\Computer::updateOrCreate(
@@ -54,6 +55,7 @@ class AgentAuthController extends Controller
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
+            'machine_id' => 'required|string',
             'hardware_info' => 'required|array',
             'hostname' => 'required|string',
             'agent_version' => 'required|string',
@@ -77,7 +79,7 @@ class AgentAuthController extends Controller
 
         $plainApiKey = \Illuminate\Support\Str::random(60);
         $hashedApiKey = hash('sha256', $plainApiKey);
-        $machineId = md5(json_encode($request->hardware_info));
+        $machineId = $request->machine_id;
 
         $computer = \App\Models\Computer::updateOrCreate(
             ['machine_id' => $machineId],
