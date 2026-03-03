@@ -128,6 +128,10 @@ class AgentOrchestrator:
                 'memory_total_gb': round(memory.total / (1024**3), 2),
                 'memory_free_gb': round(memory.available / (1024**3), 2),
                 'disk_usage': disk_info,
+                'network_stats': {
+                    'bytes_sent': psutil.net_io_counters().bytes_sent,
+                    'bytes_recv': psutil.net_io_counters().bytes_recv,
+                },
                 'uptime_seconds': int(time.time() - psutil.boot_time()),
                 'processes_count': len(psutil.pids()),
             }
@@ -149,7 +153,8 @@ class AgentOrchestrator:
             payload = {
                 'hardware_info': hardware,
                 'softwares': software,
-                'agent_version': self.get_current_version()
+                'agent_version': self.get_current_version(),
+                'hostname': socket.gethostname()
             }
             
             response = self.api.post(f"/computers/{self.api.computer_id}/report", json=payload)
