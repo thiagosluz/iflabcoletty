@@ -14,3 +14,11 @@ agent/backups/
 
 # Opcional: VERSION é gerado no CI a partir da tag
 agent/VERSION
+
+# Agent - Testes, logs e arquivos gerados dinamicamente
+agent/.pytest_cache/
+agent/agent.log
+agent/venv/
+agent/.agent_version
+agent/installer/
+agent/downloads/

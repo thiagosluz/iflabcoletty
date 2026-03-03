@@ -106,8 +106,18 @@ class SoftwareInstallationController extends Controller
      */
     public function download(string $fileId)
     {
-        // Require authentication (agent or user)
-        if (! auth()->check()) {
+        // Check Admin/User Auth (Sanctum)
+        $isUser = auth('sanctum')->check();
+
+        // Check Agent Auth (API Key)
+        $isAgent = false;
+        $token = request()->bearerToken();
+        if ($token) {
+            $hashedToken = hash('sha256', $token);
+            $isAgent = \App\Models\Computer::where('agent_api_key', $hashedToken)->exists();
+        }
+
+        if (! $isUser && ! $isAgent) {
             Log::warning('Installer download attempted without authentication', ['file_id' => $fileId]);
 
             return response()->json(['message' => 'Não autenticado'], 401);

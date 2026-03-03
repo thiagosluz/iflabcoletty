@@ -273,17 +273,9 @@ $fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
 '@
 Set-Content -Path "$programDataAgent\set_wallpaper.ps1" -Value $setWallpaperScript -Encoding UTF8
 
-# All Users Startup: shortcut so ANY user gets wallpaper applied at logon (most reliable for multi-user labs)
-$startupFolder = [Environment]::GetFolderPath("CommonStartup")
-$shortcutPath = Join-Path $startupFolder "IFLabAgent-ApplyWallpaper.lnk"
-$wshShell = New-Object -ComObject WScript.Shell
-$shortcut = $wshShell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = "powershell.exe"
-$shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
-$shortcut.WorkingDirectory = $programDataAgent
-$shortcut.Save()
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($wshShell) | Out-Null
-Write-ColorOutput Green "Startup shortcut added: wallpaper will apply at every user logon (All Users)."
+
+
+
 
 # Create scheduled task (same user as installer) so service can trigger immediate apply when that user is logged in
 $taskName = "IFLabAgentSetWallpaper"

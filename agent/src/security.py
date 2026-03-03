@@ -87,23 +87,29 @@ def save_api_key(api_key, computer_id=None):
     """
     Criptografa e salva a API_KEY vinculada a essa máquina no disco.
     """
-    key = _get_encryption_key()
-    f = Fernet(key)
-    
-    data = {
-        'api_key': api_key,
-        'computer_id': computer_id
-    }
-    
-    encrypted_data = f.encrypt(json.dumps(data).encode('utf-8'))
-    
-    identity_path = get_identity_file_path()
-    with open(identity_path, 'wb') as file:
-        file.write(encrypted_data)
+    try:
+        key = _get_encryption_key()
+        f = Fernet(key)
         
-    # Tenta restringir a permissão do arquivo (Linux/Mac)
-    if platform.system().lower() != 'windows':
-        os.chmod(identity_path, 0o600)
+        data = {
+            'api_key': api_key,
+            'computer_id': computer_id
+        }
+        
+        encrypted_data = f.encrypt(json.dumps(data).encode('utf-8'))
+        
+        identity_path = get_identity_file_path()
+        with open(identity_path, 'wb') as file:
+            file.write(encrypted_data)
+            
+        # Tenta restringir a permissão do arquivo (Linux/Mac)
+        if platform.system().lower() != 'windows':
+            os.chmod(identity_path, 0o600)
+            
+        return True
+    except Exception as e:
+        print(f"Erro ao salvar api key localmente: {e}")
+        return False
 
 def load_api_key():
     """

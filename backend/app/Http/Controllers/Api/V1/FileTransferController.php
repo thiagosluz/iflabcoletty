@@ -7,6 +7,7 @@ use App\Models\Computer;
 use App\Models\ComputerCommand;
 use App\Models\FileTransfer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class FileTransferController extends Controller
@@ -84,8 +85,8 @@ class FileTransferController extends Controller
         ];
 
         if ($transfer->source_type === 'upload') {
-            // URL for agent to download
-            $commandParams['url'] = route('api.v1.transfers.download', ['fileTransfer' => $transfer->id]);
+            // Provide just the relative path. The Agent will prepend its API_BASE_URL.
+            $commandParams['url'] = "/api/v1/transfers/{$transfer->id}/download";
             $commandParams['file_id'] = $transfer->id;
             $commandParams['auth_required'] = true;
         } else {
@@ -160,6 +161,23 @@ class FileTransferController extends Controller
      */
     public function download(FileTransfer $fileTransfer)
     {
+        // Check Admin/User Auth (Sanctum)
+        $isUser = auth('sanctum')->check();
+
+        // Check Agent Auth (API Key)
+        $isAgent = false;
+        $token = request()->bearerToken();
+        if ($token) {
+            $hashedToken = hash('sha256', $token);
+            $isAgent = \App\Models\Computer::where('agent_api_key', $hashedToken)->exists();
+        }
+
+        if (! $isUser && ! $isAgent) {
+            Log::warning('File transfer download attempted without authentication', ['file_transfer_id' => $fileTransfer->id]);
+
+            return response()->json(['message' => 'Não autenticado'], 401);
+        }
+
         if ($fileTransfer->source_type !== 'upload') {
             return response()->json(['message' => 'This transfer is not a file upload.'], 400);
         }

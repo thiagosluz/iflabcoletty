@@ -807,12 +807,12 @@ export default function ComputerDetails() {
                         <div className="bg-gray-50 rounded-md p-4 border border-gray-100">
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-sm font-medium text-gray-700">Memória</span>
-                                <span className="text-sm font-bold text-gray-900">{latestMetric.memory_usage_percent.toFixed(1)}%</span>
+                                <span className="text-sm font-bold text-gray-900">{latestMetric.memory_usage_percent?.toFixed(1) ?? '0.0'}%</span>
                             </div>
                             <Progress value={latestMetric.memory_usage_percent} className="h-2" />
                             <div className="flex justify-between mt-2 text-xs text-gray-500">
-                                <span>Livre: {latestMetric.memory_free_gb.toFixed(1)} GB</span>
-                                <span>Total: {latestMetric.memory_total_gb.toFixed(1)} GB</span>
+                                <span>Livre: {latestMetric.memory_free_gb ? latestMetric.memory_free_gb.toFixed(1) : 'N/A'} GB</span>
+                                <span>Total: {latestMetric.memory_total_gb ? latestMetric.memory_total_gb.toFixed(1) : 'N/A'} GB</span>
                             </div>
                         </div>
 
@@ -1154,13 +1154,13 @@ export default function ComputerDetails() {
                                                             <span className="font-mono">{iface.mac}</span>
                                                         </div>
                                                     )}
-                                                    {iface.ipv4.length > 0 && (
+                                                    {iface.ipv4?.length > 0 && (
                                                         <div className="flex justify-between mt-1">
                                                             <span className="text-gray-500">IPv4:</span>
                                                             <span className="font-mono text-right">{iface.ipv4.join(', ')}</span>
                                                         </div>
                                                     )}
-                                                    {iface.ipv6.length > 0 && (
+                                                    {iface.ipv6?.length > 0 && (
                                                         <div className="mt-1">
                                                             <span className="text-gray-500 block">IPv6:</span>
                                                             <span className="font-mono text-[10px] break-all">{iface.ipv6[0]}</span>

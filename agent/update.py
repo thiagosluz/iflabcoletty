@@ -29,13 +29,19 @@ VERSION_FILE = AGENT_DIR / ".agent_version"
 CONFIG_FILE = AGENT_DIR / "config.py"
 
 # Try to get API URL and credentials from config (config.py carrega o .env)
+# Support both new modular structure (src.config) and legacy (config)
 try:
-    import config
-    API_BASE_URL = os.getenv('API_BASE_URL', getattr(config, 'API_BASE_URL', 'http://localhost:8000/api/v1'))
+    from src import config
+    API_BASE_URL = os.getenv('API_BASE_URL', getattr(config, 'API_BASE_URL', getattr(config, 'SERVER_URL', 'http://localhost:8000/api/v1')))
     INSTALLATION_TOKEN = getattr(config, 'INSTALLATION_TOKEN', os.getenv('INSTALLATION_TOKEN', ''))
 except ImportError:
-    API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1')
-    INSTALLATION_TOKEN = os.getenv('INSTALLATION_TOKEN', '')
+    try:
+        import config
+        API_BASE_URL = os.getenv('API_BASE_URL', getattr(config, 'API_BASE_URL', getattr(config, 'SERVER_URL', 'http://localhost:8000/api/v1')))
+        INSTALLATION_TOKEN = getattr(config, 'INSTALLATION_TOKEN', os.getenv('INSTALLATION_TOKEN', ''))
+    except ImportError:
+        API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api/v1')
+        INSTALLATION_TOKEN = os.getenv('INSTALLATION_TOKEN', '')
 
 
 def get_current_version():

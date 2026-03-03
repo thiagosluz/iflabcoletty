@@ -12,7 +12,7 @@ a = Analysis(
     binaries=[],
     datas=[('VERSION', '.')],
     hiddenimports=[
-        'config',
+        'src.config',
         'dotenv',
         'python-dotenv',
         'requests',

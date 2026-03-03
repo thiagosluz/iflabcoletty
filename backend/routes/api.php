@@ -47,7 +47,17 @@ Route::prefix('v1')->group(function () {
     // Agent Authenticated Routes
     Route::middleware([\App\Http\Middleware\AgentAuthMiddleware::class])->group(function () {
         Route::get('/agent/me', function (Request $request) {
-            return response()->json($request->computer->load('lab:id,name,default_wallpaper_url,default_wallpaper_enabled'));
+            $computer = $request->computer->load('lab:id,name,default_wallpaper_url,default_wallpaper_enabled');
+            // Build an absolute wallpaper URL using the actual request host so agents on the LAN
+            // always get the correct server IP instead of APP_URL (which may be localhost/127.0.0.1).
+            if ($computer->lab && $computer->lab->default_wallpaper_url) {
+                $wallpaperPath = $computer->lab->default_wallpaper_url;
+                if (str_starts_with($wallpaperPath, '/')) {
+                    $computer->lab->default_wallpaper_url = $request->getSchemeAndHttpHost().$wallpaperPath;
+                }
+            }
+
+            return response()->json($computer);
         });
         Route::post('/computers/{computer}/report', [ComputerController::class, 'report']);
         Route::post('/computers/{computer}/metrics', [ComputerController::class, 'storeMetrics']);
@@ -131,6 +141,10 @@ Route::prefix('v1')->group(function () {
             throw $e;
         }
     })->middleware('throttle:60,1');
+
+    // File Downloads (Shared between Admin and Agents) - Controllers handle dual auth
+    Route::get('/installers/{fileId}/download', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'download']);
+    Route::get('/transfers/{fileTransfer}/download', [\App\Http\Controllers\Api\V1\FileTransferController::class, 'download'])->name('api.v1.transfers.download');
 
     // Protected Routes - Rate limit configurable via API_RATE_LIMIT_PER_MINUTE (default 5000/min)
     Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
@@ -275,12 +289,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/software-installations', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'index']);
         Route::get('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'show']);
         Route::delete('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'destroy']);
-        Route::get('/installers/{fileId}/download', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'download']);
+        Route::delete('/software-installations/{softwareInstallation}', [\App\Http\Controllers\Api\V1\SoftwareInstallationController::class, 'destroy']);
 
         // File Transfers
         Route::post('/transfers/upload', [FileTransferController::class, 'upload']);
         Route::post('/transfers/send', [FileTransferController::class, 'send']);
-        Route::get('/transfers/{fileTransfer}/download', [FileTransferController::class, 'download'])->name('api.v1.transfers.download');
+        Route::post('/transfers/send', [FileTransferController::class, 'send']);
         Route::get('/transfers/{fileTransfer}/command-status', [FileTransferController::class, 'commandStatus']);
     });
 });

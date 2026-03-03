@@ -1,5 +1,7 @@
 import sys
 import os
+import time
+import socket
 from pathlib import Path
 
 # Fix sys.path for NSSM/Windows Service
@@ -7,186 +9,66 @@ _current_dir = os.path.dirname(os.path.abspath(__file__))
 if _current_dir not in sys.path:
     sys.path.insert(0, _current_dir)
 
-import time
-import json
-import uuid
-import platform
-from datetime import datetime, timezone
-import logging
-import requests
-import socket
-import psutil  # type: ignore[import-untyped]
-import config
-import mss  # type: ignore[import-untyped]
-import mss.tools  # type: ignore
-from PIL import Image
-import io
-import base64
-import re
-import subprocess
-import tempfile
-import shutil
-from src.security import get_hardware_fingerprint, load_api_key, save_api_key, clear_legacy_credentials
+from src import config
+from src.utils.logger import setup_logger
+from src.security import get_hardware_fingerprint
+from src.api_client import ApiClient
 
-# Setup Logging
-logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL),
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from src.collectors.hardware import get_hardware_info
+from src.collectors.software import get_software_list
+from src.features.wallpaper import WallpaperManager
+from src.features.kiosk import KioskManager
+from src.commands.executor import CommandExecutor
+from src.commands.parser import is_command_expired
+from src.features.updater import execute_installer
 
-class Agent:
+logger = setup_logger(__name__)
+
+class AgentOrchestrator:
     def __init__(self):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        })
-        self.token = None
-        if getattr(sys, 'frozen', False):
-            self.agent_dir = Path(sys.executable).resolve().parent
-        else:
-            self.agent_dir = Path(__file__).parent.absolute()
-        self.version_file = self.agent_dir / ".agent_version"
+        self.api = ApiClient()
         self.machine_id = get_hardware_fingerprint().hex()
-        self.computer_db_id = None  # ID in the database
-        self._cached_lab_wallpaper_url = None  # URL do papel de parede padrão do lab
-        self._cached_lab_wallpaper_enabled = True  # Se o agente deve aplicar o wallpaper
-
-
-    def _ensure_kiosk_script(self):
-        """Returns the path to the kiosk lock script, generating it if necessary."""
-        script_path = self.agent_dir / "src" / "kiosk.py"
-        try:
-            os.makedirs(script_path.parent, exist_ok=True)
-            with open(script_path, "w", encoding="utf-8") as f:
-                f.write("""import tkinter as tk
-import os, time, sys
-import ctypes
-from ctypes import wintypes
-import atexit
-
-unlock_file = r"C:\\ProgramData\\IFLabAgent\\unlock_kiosk.txt"
-active_file = r"C:\\ProgramData\\IFLabAgent\\kiosk_active.txt"
-
-if not os.path.exists(active_file):
-    sys.exit(0)
-
-
-# Low-Level Keyboard Hook to block Windows Key, Alt+Tab, etc.
-WH_KEYBOARD_LL = 13
-WM_KEYDOWN = 0x0100
-WM_SYSKEYDOWN = 0x0104
-
-VK_TAB = 0x09
-VK_LWIN = 0x5B
-VK_RWIN = 0x5C
-VK_ESCAPE = 0x1B
-VK_F4 = 0x73
-LLKHF_ALTDOWN = 0x20
-
-user32 = ctypes.windll.user32
-
-class KBDLLHOOKSTRUCT(ctypes.Structure):
-    _fields_ = [("vkCode", wintypes.DWORD),
-                ("scanCode", wintypes.DWORD),
-                ("flags", wintypes.DWORD),
-                ("time", wintypes.DWORD),
-                ("dwExtraInfo", ctypes.POINTER(wintypes.ULONG))]
-
-def hook_proc(nCode, wParam, lParam):
-    if nCode >= 0:
-        vk = lParam.contents.vkCode
-        flags = lParam.contents.flags
         
-        # Block Win keys
-        if vk in (VK_LWIN, VK_RWIN):
-            return 1
+        self.agent_dir = Path(__file__).resolve().parent
+        if getattr(sys, 'frozen', False):
+             self.agent_dir = Path(sys.executable).resolve().parent
+             
+        self.version_file = self.agent_dir / ".agent_version"
         
-        # Block Alt+Tab
-        if vk == VK_TAB and (flags & LLKHF_ALTDOWN):
-            return 1
-            
-        # Block Alt+F4
-        if vk == VK_F4 and (flags & LLKHF_ALTDOWN):
-            return 1
-            
-        # Block Ctrl+Esc
-        if vk == VK_ESCAPE and (ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000):
-            return 1
+        self.wallpaper_man = WallpaperManager(self.api)
+        self.kiosk_man = KioskManager(str(self.agent_dir))
+        self.cmd_executor = CommandExecutor(str(self.agent_dir), self.api)
 
-    return user32.CallNextHookEx(None, nCode, wParam, lParam)
+    def get_current_version(self) -> str:
+        """Get the current agent version."""
+        if self.version_file.exists():
+            try:
+                return self.version_file.read_text().strip()
+            except Exception as e:
+                logger.debug(f"Could not read .agent_version: {e}")
+                
+        fallback_version = self.agent_dir / "VERSION"
+        if fallback_version.exists():
+            try:
+                return fallback_version.read_text().strip()
+            except Exception as e:
+                logger.debug(f"Could not read VERSION: {e}")
+                
+        return "1.0.0"
 
-CMPFUNC = ctypes.CFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, ctypes.POINTER(KBDLLHOOKSTRUCT))
-pointer = CMPFUNC(hook_proc)
-hook_id = None
-
-def install_hook():
-    global hook_id
-    hook_id = user32.SetWindowsHookExW(WH_KEYBOARD_LL, pointer, None, 0)
-
-def uninstall_hook():
-    global hook_id
-    if hook_id:
-        user32.UnhookWindowsHookEx(hook_id)
-        hook_id = None
-
-def check_unlock(root):
-    if os.path.exists(unlock_file):
-        uninstall_hook()
-        try:
-            os.remove(unlock_file)
-        except:
-            pass
-        active_file = r"C:\\ProgramData\\IFLabAgent\\kiosk_active.txt"
-        try:
-            if os.path.exists(active_file):
-                os.remove(active_file)
-        except:
-            pass
-        root.destroy()
-        sys.exit(0)
-    root.after(1000, check_unlock, root)
-
-root = tk.Tk()
-root.attributes("-fullscreen", True)
-root.attributes("-topmost", True)
-root.configure(background="black")
-root.protocol("WM_DELETE_WINDOW", lambda: None)
-root.bind("<Escape>", lambda e: None)
-root.bind("<Alt-F4>", lambda e: None)
-label = tk.Label(root, text="LABORATÓRIO EM ATENÇÃO", font=("Arial", 48, "bold"), fg="red", bg="black")
-label.pack(expand=True)
-
-install_hook()
-atexit.register(uninstall_hook)
-
-root.after(1000, check_unlock, root)
-root.mainloop()""")
-            return str(script_path)
-        except Exception as e:
-            logger.error(f"Error generating kiosk script: {e}")
-            return None
-
-    def login(self):
-        """Authenticate with the backend using the securely stored API Key."""
-        # 1. Tentar ler API Key local
-        api_key, computer_id = load_api_key()
-        
-        if api_key and computer_id:
+    def login(self) -> bool:
+        """Authenticate or Register with the backend."""
+        # Tenta carregar token local no ApiClient
+        if self.api.computer_id:
             logger.info("Chave API válida encontrada localmente.")
-            self.token = api_key
-            self.computer_db_id = computer_id
-            self.session.headers.update({'Authorization': f"Bearer {self.token}"})
             return True
             
         logger.warning("Nenhuma chave API local encontrada. Iniciando fluxo de provisionamento...")
         
-        # Fluxo de Registro Limpo (Com INSTALLATION_TOKEN)
         if config.INSTALLATION_TOKEN:
             logger.info("Token de instalação detectado. Tentando registrar no laboratório...")
             try:
-                hardware_info = self.get_hardware_info()
+                hardware_info = get_hardware_info()
                 payload = {
                     'installation_token': config.INSTALLATION_TOKEN,
                     'machine_id': self.machine_id,
@@ -198,1908 +80,155 @@ root.mainloop()""")
                 if hardware_info.get('network') and len(hardware_info['network']) > 0:
                    payload['wol_mac'] = hardware_info['network'][0].get('mac')
 
-                res = self.session.post(f"{config.API_BASE_URL}/agents/register", json=payload, timeout=30)
-                res.raise_for_status()
-                data = res.json()
+                logger.info(f"Registrando agente (versão {payload['agent_version']}) com Token: {config.INSTALLATION_TOKEN[:8]}...")
                 
-                self.token = data['api_key']
-                self.computer_db_id = data['computer_id']
-                save_api_key(self.token, self.computer_db_id)
-                self.session.headers.update({'Authorization': f"Bearer {self.token}"})
+                response = self.api.post('/agents/register', json=payload)
+                response.raise_for_status()
                 
-                logger.info("Registro bem-sucedido.")
-                return True
-                
+                data = response.json()
+                from src.security import save_api_key
+                if save_api_key(data['api_key'], data['computer_id']):
+                    logger.info("Agente registrado e chave API salva com sucesso.")
+                    self.api._load_token()
+                    return True
+                else:
+                    logger.error("Falha ao salvar a chave API localmente.")
+                    return False
             except Exception as e:
                 logger.error(f"Falha no registro: {e}")
                 
-        logger.error("Sem chave API local e sem token de instalação válido. Agente interrompido. Verifique o arquivo config.py / .env e verifique se o INSTALLATION_TOKEN está configurado corretamente e é válido para este laboratório.")
         return False
 
-    def get_hardware_info(self):
-        """Collect hardware information."""
-        try:
-            cpu_count = psutil.cpu_count(logical=False)
-            cpu_count_logical = psutil.cpu_count(logical=True)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+    def send_metrics_report(self) -> bool:
+        """Send lightweight metrics report to backend."""
+        if not self.api.computer_id:
+            return False
             
-            # Network interfaces
-            network_interfaces = []
-            try:
-                if_addrs = psutil.net_if_addrs()
-                for interface_name, addresses in if_addrs.items():
-                    interface_info = {'name': interface_name, 'ipv4': [], 'ipv6': [], 'mac': None}
-                    for addr in addresses:
-                        if addr.family == socket.AF_INET:
-                            interface_info['ipv4'].append(addr.address)
-                        elif addr.family == socket.AF_INET6:
-                            # Filter out link-local ipv6 to reduce noise
-                            if '%' not in addr.address:
-                                interface_info['ipv6'].append(addr.address)
-                        elif addr.family == psutil.AF_LINK:
-                            interface_info['mac'] = addr.address
-                    
-                    # Only add if it has some address and skip loopback if desired
-                    if interface_info['ipv4'] or interface_info['mac']:
-                        network_interfaces.append(interface_info)
-            except Exception as e:
-                logger.warning(f"Could not collect network interfaces: {e}")
-
-            return {
-                'cpu': {
-                    'physical_cores': cpu_count,
-                    'logical_cores': cpu_count_logical,
-                    'processor': platform.processor(),
-                },
-                'memory': {
-                    'total_gb': round(memory.total / (1024**3), 2),
-                    'available_gb': round(memory.available / (1024**3), 2),
-                },
-                'disk': {
-                    'total_gb': round(disk.total / (1024**3), 2),
-                    'used_gb': round(disk.used / (1024**3), 2),
-                    'free_gb': round(disk.free / (1024**3), 2),
-                },
-                'network': network_interfaces,
-                'os': {
-                    'system': platform.system(),
-                    'release': platform.release(),
-                    'version': platform.version(),
-                }
-            }
-        except Exception as e:
-            logger.error(f"Error collecting hardware info: {e}")
-            return {}
-
-    def get_software_list(self):
-        """Collect installed software (Windows and Linux)."""
-        softwares = []
+        import psutil
         try:
-            if platform.system() == 'Windows':
-                # Windows: Query registry for installed software
-                import winreg
-                
-                # Registry paths for installed software
-                registry_paths = [
-                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-                    (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-                    (winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-                ]
-                
-                seen_names = set()  # Avoid duplicates
-                
-                for hkey, path in registry_paths:
-                    try:
-                        key = winreg.OpenKey(hkey, path)
-                        i = 0
-                        while i < 1000:  # Limit iterations
-                            try:
-                                subkey_name = winreg.EnumKey(key, i)
-                                subkey = winreg.OpenKey(key, subkey_name)
-                                
-                                try:
-                                    name = winreg.QueryValueEx(subkey, "DisplayName")[0]
-                                    version = None
-                                    vendor = None
-                                    
-                                    try:
-                                        version = winreg.QueryValueEx(subkey, "DisplayVersion")[0]
-                                    except (FileNotFoundError, OSError):
-                                        pass
-                                    
-                                    try:
-                                        vendor = winreg.QueryValueEx(subkey, "Publisher")[0]
-                                    except (FileNotFoundError, OSError):
-                                        pass
-                                    
-                                    # Skip if no name or already seen
-                                    if name and name not in seen_names:
-                                        seen_names.add(name)
-                                        softwares.append({
-                                            'name': name,
-                                            'version': version,
-                                            'vendor': vendor
-                                        })
-                                        
-                                        # Limit to 200 entries total
-                                        if len(softwares) >= 200:
-                                            break
-                                
-                                except (FileNotFoundError, OSError):
-                                    pass
-                                finally:
-                                    winreg.CloseKey(subkey)
-                                
-                                i += 1
-                            except OSError:
-                                break
-                        
-                        winreg.CloseKey(key)
-                        
-                        if len(softwares) >= 200:
-                            break
-                    
-                    except (FileNotFoundError, OSError, PermissionError) as e:
-                        logger.debug(f"Could not access registry path {path}: {e}")
-                        continue
-                
-            elif platform.system() == 'Linux':
-                # Linux: Use dpkg
-                result = subprocess.run(['dpkg', '-l'], capture_output=True, text=True, timeout=10)
-                if result.returncode == 0:
-                    lines = result.stdout.split('\n')
-                    for line in lines:
-                        if line.startswith('ii'):
-                            parts = line.split()
-                            if len(parts) >= 3:
-                                softwares.append({
-                                    'name': parts[1],
-                                    'version': parts[2],
-                                    'vendor': None
-                                })
-                    # Limit to first 200 to avoid overwhelming the server
-                    softwares = softwares[:200]
-        
-        except Exception as e:
-            logger.warning(f"Could not collect software list: {e}")
-        
-        return softwares
-
-    def get_current_version(self):
-        """Get the current agent version.
-
-        Priority:
-        1) .agent_version (written by update.py)
-        2) VERSION (shipped inside agent ZIP package)
-        """
-        if self.version_file.exists():
-            try:
-                with open(self.version_file, 'r') as f:
-                    return f.read().strip()
-            except Exception as e:
-                logger.warning(f"Error reading version file: {e}")
-        
-        # Fallback to VERSION file (present in built ZIP packages)
-        version_in_zip = self.agent_dir / "VERSION"
-        if version_in_zip.exists():
-            try:
-                with open(version_in_zip, 'r') as f:
-                    v = f.read().strip()
-                    if v:
-                        return v
-            except Exception as e:
-                logger.warning(f"Error reading VERSION file: {e}")
-        return "0.0.0"
-
-    def collect_data(self):
-        """Collect system information."""
-        return {
-            'lab_id': config.LAB_ID,
-            'machine_id': self.machine_id,
-            'hostname': socket.gethostname(),
-            'agent_version': self.get_current_version(),
-        }
-
-    def _find_computer_by_machine_id(self, bypass_cache=False):
-        """Search for computer by machine_id using exact match endpoint first, then fallback to search."""
-        headers = {}
-        if self.token:
-            headers['Authorization'] = f"Bearer {self.token}"
-
-        # First, try the exact match endpoint (faster and more reliable)
-        try:
-            exact_url = f"{config.API_BASE_URL}/computers/by-machine-id/{self.machine_id}"
-            response = self.session.get(exact_url, headers=headers)
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 404:
-                # Computer not found, return None
-                return None
-            # If other error, fall through to search method
-        except Exception as e:
-            logger.warning(f"Exact match endpoint failed: {e}. Falling back to search method.")
-        
-        # Fallback: Search for computer by machine_id across all pages
-        # Add timestamp to bypass cache if needed
-        cache_buster = f"&_bypass_cache=true&_t={int(time.time())}" if bypass_cache else ""
-        search_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}&per_page=100{cache_buster}"
-        try:
-            response = self.session.get(search_url, headers=headers)
-            response.raise_for_status()
-            results = response.json()
-            
-            # Check if found in current page
-            if 'data' in results:
-                for pc in results['data']:
-                    if pc.get('machine_id') == self.machine_id:
-                        return pc
-            
-            # If not found in first page and there are more pages, search through all pages
-            if results.get('last_page', 1) > 1:
-                for page in range(2, results.get('last_page', 1) + 1):
-                    page_url = f"{config.API_BASE_URL}/computers?search={self.machine_id}&per_page=100&page={page}{cache_buster}"
-                    page_response = self.session.get(page_url, headers=headers)
-                    page_response.raise_for_status()
-                    page_results = page_response.json()
-                    
-                    if 'data' in page_results:
-                        for pc in page_results['data']:
-                            if pc.get('machine_id') == self.machine_id:
-                                return pc
-        except Exception as e:
-            logger.warning(f"Search method failed: {e}")
-        
-        return None
-
-    def register_or_update(self):
-        """No longer used. Updates are handled by send_detailed_report and registration by login()."""
-        pass
-
-    def get_metrics(self):
-        """Collect dynamic system metrics."""
-        try:
-            # CPU
-            cpu_percent = psutil.cpu_percent(interval=None) # Non-blocking
-            
-            # Memory
             memory = psutil.virtual_memory()
             
-            # Disk (Iterate partitions)
-            disk_usage = []
+            disk_info = []
             for part in psutil.disk_partitions(all=False):
+                if 'cdrom' in part.opts or part.fstype == '': continue
                 try:
                     usage = psutil.disk_usage(part.mountpoint)
-                    disk_usage.append({
+                    disk_info.append({
                         'mount': part.mountpoint,
-                        'total_gb': round(usage.total / (1024**3), 2),
+                        'percent': usage.percent,
                         'free_gb': round(usage.free / (1024**3), 2),
-                        'percent': usage.percent
+                        'total_gb': round(usage.total / (1024**3), 2)
                     })
                 except Exception:
-                    continue
-            
-            # Network
-            net_io = psutil.net_io_counters()
-            network_stats = {
-                'bytes_sent': net_io.bytes_sent,
-                'bytes_recv': net_io.bytes_recv,
-                'packets_sent': net_io.packets_sent,
-                'packets_recv': net_io.packets_recv
-            }
-            
-            # Uptime
-            uptime = int(time.time() - psutil.boot_time())
-            
-            # Processes
-            process_count = len(psutil.pids())
-            
-            
-            # Check if kiosk active
-            kiosk_locked = False
-            if platform.system() == 'Windows':
-                active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
-                if os.path.exists(active_file):
-                    kiosk_locked = True
-
-            return {
-                'cpu_usage_percent': cpu_percent,
+                    pass
+                    
+            metrics = {
+                'cpu_usage_percent': psutil.cpu_percent(interval=1),
                 'memory_usage_percent': memory.percent,
                 'memory_total_gb': round(memory.total / (1024**3), 2),
                 'memory_free_gb': round(memory.available / (1024**3), 2),
-                'disk_usage': disk_usage,
-                'network_stats': network_stats,
-                'uptime_seconds': uptime,
-                'processes_count': process_count,
-                'kiosk_locked': kiosk_locked
+                'disk_usage': disk_info,
+                'uptime_seconds': int(time.time() - psutil.boot_time()),
+                'processes_count': len(psutil.pids()),
             }
+            response = self.api.post(f"/computers/{self.api.computer_id}/metrics", json=metrics)
+            return response.status_code == 200
         except Exception as e:
-            logger.error(f"Error collecting metrics: {e}")
-            return {}
+            logger.error(f"Erro ao enviar métricas: {e}")
+            return False
 
-    def send_metrics_report(self):
-        """Send lightweight metrics report to backend."""
-        if not self.computer_db_id:
-            return
-        
-        try:
-            metrics = self.get_metrics()
-            if not metrics:
-                return
-
-            metrics_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/metrics"
-            response = self.session.post(metrics_url, json=metrics)
-            response.raise_for_status()
-            
-            logger.debug("Metrics sent successfully.")
-        except Exception as e:
-            logger.error(f"Failed to send metrics: {e}")
-
-    def send_detailed_report(self):
+    def send_detailed_report(self) -> bool:
         """Send detailed hardware and software report to backend."""
-        if not self.computer_db_id:
-            logger.warning("Cannot send report: computer not registered yet.")
-            return
-        
-        try:
-            logger.info("Collecting detailed system information...")
-            hardware_info = self.get_hardware_info()
-            software_list = self.get_software_list()
+        if not self.api.computer_id:
+            return False
             
-            report_data = {
-                'hardware_info': hardware_info,
-                'softwares': software_list,
-                'agent_version': self.get_current_version(),
-                'hostname': socket.gethostname()
+        try:
+            hardware = get_hardware_info()
+            software = get_software_list()
+            
+            payload = {
+                'hardware_info': hardware,
+                'softwares': software,
+                'agent_version': self.get_current_version()
             }
             
-            report_url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/report"
-            response = self.session.post(report_url, json=report_data)
-            response.raise_for_status()
-            
-            logger.info(f"Detailed report sent successfully. Hardware: {len(hardware_info)} items, Software: {len(software_list)} packages.")
+            response = self.api.post(f"/computers/{self.api.computer_id}/report", json=payload)
+            return response.status_code in [200, 201]
         except Exception as e:
-            logger.error(f"Failed to send detailed report: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
+            logger.error(f"Erro ao enviar relatório detalhado: {e}")
+            return False
 
     def check_commands(self):
         """Check for pending remote commands."""
-        if not self.computer_db_id:
+        if not self.api.computer_id:
             return
+            
         try:
-            url = f"{config.API_BASE_URL}/computers/{self.computer_db_id}/commands/pending"
-            response = self.session.get(url, timeout=30)
-            if response.status_code == 404:
+            response = self.api.get(f"/computers/{self.api.computer_id}/commands/pending")
+            if response.status_code != 200:
                 return
-            response.raise_for_status()
-            data = response.json()
-            commands = data if isinstance(data, list) else data.get("data", data.get("commands", []))
+                
+            commands = response.json()
             if not isinstance(commands, list):
-                logger.warning("check_commands: unexpected response format (not a list): %s", type(commands))
-                return
-            if commands:
-                logger.info("Pending commands: %s", len(commands))
+                commands = commands.get('data', [])
+                
             for cmd in commands:
-                if not isinstance(cmd, dict):
-                    logger.warning("check_commands: skipping non-dict command: %s", type(cmd))
+                command_id = cmd.get('id')
+                
+                if is_command_expired(cmd):
+                    self.update_command_status(command_id, 'failed', 'Comando expirado')
                     continue
-                cid = cmd.get("id")
-                ctype = cmd.get("command", "?")
-                logger.info("Processing command id=%s type=%s", cid, ctype)
-                self.execute_command(cmd)
-        except requests.exceptions.ConnectionError as e:
-            logger.debug("Network not ready yet for checking commands.")
-        except Exception as e:
-            logger.error("Error checking commands: %s", e)
-            logger.exception("check_commands failed")
-
-    def send_wol(self, mac_address):
-        """Send Wake-on-LAN magic packet."""
-        try:
-            # Clean MAC address
-            mac_address = mac_address.replace(':', '').replace('-', '')
-            
-            if len(mac_address) != 12:
-                raise ValueError(f"Invalid MAC address length: {len(mac_address)}")
-                
-            data = bytes.fromhex('FF' * 6 + mac_address * 16)
-            
-            # Broadcast to LAN
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                sock.sendto(data, ("255.255.255.255", 9))
-                
-            return True
-        except Exception as e:
-            logger.error(f"Error sending WoL: {e}")
-            raise e
-
-    def get_screenshot(self):
-        """Capture screen, compress and return base64 string."""
-        try:
-            with mss.mss() as sct:
-                # Capture all monitors
-                monitor = sct.monitors[0] # 0 = All monitors combined
-                sct_img = sct.grab(monitor)
-                
-                # Convert to PIL Image
-                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                
-                # Resize if too large (max 1920 width to save bandwidth)
-                if img.width > 1920:
-                    ratio = 1920 / img.width
-                    new_height = int(img.height * ratio)
-                    img = img.resize((1920, new_height), Image.Resampling.LANCZOS)
-                
-                # Compress to JPEG
-                buffer = io.BytesIO()
-                img.save(buffer, format="JPEG", quality=60)
-                img_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
-                
-                return img_str
-        except Exception as e:
-            logger.error(f"Error taking screenshot: {e}")
-            raise e
-
-    def get_processes(self):
-        """Get list of running processes."""
-        processes = []
-        for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
-            try:
-                pinfo = proc.info
-                # Add create_time
-                pinfo['create_time'] = proc.create_time()
-                processes.append(pinfo)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
-        
-        # Sort by CPU usage and limit to top 100 to avoid huge payload
-        processes.sort(key=lambda p: p['cpu_percent'] or 0, reverse=True)
-        return processes[:100]
-
-    def receive_file(self, params):
-        """Handle file reception (download or copy)."""
-        params = (params or {}) if isinstance(params, dict) else {}
-        logger.info(
-            "receive_file started: platform=%s, params_keys=%s",
-            platform.system(),
-            list(params.keys()),
-        )
-        try:
-            filename = params.get('filename')
-            source_type = params.get('source_type')
-            url = params.get('url')
-            auth_required = params.get('auth_required', False)
-
-            # Resolve relative URL (e.g. Laravel route() without APP_URL)
-            if url and isinstance(url, str) and url.startswith('/'):
-                base = (config.API_BASE_URL or '').rstrip('/').replace('/api/v1', '').rstrip('/') or 'http://localhost'
-                url = base + url
-                logger.info("Resolved relative URL to %s", url[:80] + "..." if len(url) > 80 else url)
-            # If backend sent localhost/127.0.0.1 but agent runs on another machine, use host from API_BASE_URL
-            if url and isinstance(url, str) and ('http://localhost' in url or 'https://localhost' in url or 'http://127.0.0.1' in url):
-                try:
-                    from urllib.parse import urlparse
-                    api_host = urlparse(config.API_BASE_URL or '').netloc or urlparse(str(url)).netloc
-                    if api_host and api_host not in ('localhost', '127.0.0.1'):
-                        parsed = urlparse(str(url))
-                        url = f"{parsed.scheme}://{api_host}{parsed.path}" + (f"?{parsed.query}" if parsed.query else "")
-                        logger.info("Replaced localhost with API host: %s", url[:80] + "..." if len(url) > 80 else url)
-                except Exception as e:
-                    logger.warning("Could not replace localhost in URL: %s", e)
-
-            if not url and source_type != 'upload':
-                logger.warning("receive_file: missing url in params")
-                return False, "Error: missing url in transfer parameters"
-
-            # Determine destination path (ASCII on Windows to avoid encoding issues)
-            base_dir = None
-            if platform.system() == 'Windows':
-                candidates = [
-                    Path(os.environ.get('PUBLIC', 'C:\\Users\\Public')) / 'Desktop' / 'LabReceived',
-                    Path(os.environ.get('TEMP') or os.environ.get('TMP') or 'C:\\Temp') / 'Received',
-                    self.agent_dir / 'Received',
-                ]
-                for candidate in candidates:
-                    try:
-                        candidate.mkdir(parents=True, exist_ok=True)
-                        test_file = candidate / '.write_test'
-                        test_file.touch()
-                        test_file.unlink()
-                        base_dir = candidate
-                        logger.info("receive_file: Windows using base_dir=%s", base_dir)
-                        break
-                    except Exception as e:
-                        logger.warning("receive_file: Windows candidate %s failed: %s", candidate, e)
-                if base_dir is None:
-                    return False, "Error: no writable destination on Windows (tried Public Desktop, TEMP, agent dir)"
-            else:
-                home = Path.home()
-                if home.name == 'root' and os.environ.get('SUDO_USER'):
-                    home = Path('/home') / os.environ.get('SUDO_USER')
-                desktop = home / 'Desktop'
-                if desktop.exists():
-                    base_dir = desktop / 'Recebidos'
-                else:
-                    base_dir = Path('/tmp/Received')
-                try:
-                    base_dir.mkdir(parents=True, exist_ok=True)
-                    test_file = base_dir / '.write_test'
-                    test_file.touch()
-                    test_file.unlink()
-                except Exception as e:
-                    logger.error("Cannot write to destination %s: %s", base_dir, e)
-                    base_dir = Path('/tmp/Received')
-                    base_dir.mkdir(parents=True, exist_ok=True)
-                logger.info("receive_file: destination base_dir=%s", base_dir)
-
-            if not filename:
-                if source_type == 'upload' and url:
-                    # Generic name
-                    filename = 'downloaded_file.dat'
-                elif url:
-                    filename = Path(url).name
-                else:
-                    filename = f"file_{int(time.time())}.dat"
-            
-            # Sanitize filename
-            filename = "".join(x for x in filename if (x.isalnum() or x in "._- "))
-            dest_path = base_dir / filename
-            
-            logger.info(f"Receiving file '{filename}' from {url}")
-            logger.info(f"Saving to: {dest_path}")
-            
-            if source_type == 'upload' or (url and str(url).startswith(('http:', 'https:'))):
-                if not url:
-                    logger.error("receive_file: upload source_type but url is missing")
-                    return False, "Error: url is required for download"
-                url_str = str(url)
-                if auth_required:
-                    if not self.token and not self.login():
-                        logger.error("receive_file: auth_required but login failed, cannot download")
-                        return False, "Error: authentication required but login failed"
-                    logger.info("receive_file: using auth (token present)")
-                headers = {'Authorization': f"Bearer {self.token}"} if auth_required and self.token else {}
-                logger.info("Starting HTTP download from %s", url_str[:80] + "..." if len(url_str) > 80 else url_str)
-                try:
-                    r = self.session.get(url_str, headers=headers, stream=True, timeout=600)
-                    logger.info("receive_file: HTTP response status=%s", r.status_code)
-                    r.raise_for_status()
-                except Exception as req_err:
-                    logger.error("receive_file: HTTP request failed: %s", req_err)
-                    logger.exception("receive_file request failed")
-                    return False, f"Error: download request failed: {req_err}"
-                total_size = int(r.headers.get('content-length', 0))
-                downloaded = 0
-                dest_path_str = str(dest_path)
-                try:
-                    with open(dest_path_str, 'wb') as f:
-                        for chunk in r.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                    logger.info("Download completed. Size: %s bytes", downloaded)
-                except Exception as write_err:
-                    logger.error("receive_file: failed to write file %s: %s", dest_path_str, write_err)
-                    logger.exception("receive_file write failed")
-                    return False, f"Error: failed to write file: {write_err}"
-            
-            elif source_type in ['link', 'network_path'] and url:
-                src_path = Path(url)
-                logger.info("Copying from %s to %s", src_path, dest_path)
-                shutil.copy2(src_path, dest_path)
-            else:
-                logger.error(
-                    "receive_file: no action taken (source_type=%s, url=%s)",
-                    source_type,
-                    (str(url)[:50] + "..." if url and len(str(url)) > 50 else url),
-                )
-                return False, "Error: invalid source_type or missing url for download/copy"
-
-            # Visual Feedback - Best Effort
-            msg = f"Arquivo recebido: {filename}\nLocal: {base_dir}"
-            try:
-                if platform.system() == 'Windows':
-                    # Try msg command
-                    subprocess.run(['msg', '*', msg], shell=True, capture_output=True)
-                    # Try opening explorer (might fail in Session 0)
-                    subprocess.Popen(['explorer', str(base_dir)])
-                else:
-                    # Linux feedback
-                    user = os.environ.get('SUDO_USER') or os.environ.get('USER')
-                    if user:
-                        # Try to notify user
-                        subprocess.run(['notify-send', 'Laboratório', msg], capture_output=True)
-                        subprocess.Popen(['xdg-open', str(base_dir)], stderr=subprocess.DEVNULL)
-            except Exception as e:
-                logger.warning(f"Visual feedback failed (non-critical): {e}")
-
-            return True, f"File successfully saved to {dest_path}"
-            
-        except Exception as e:
-            logger.error("Error receiving file: %s", e)
-            logger.exception("receive_file failed")
-            return False, f"Error: {str(e)}"
-
-    def execute_command(self, cmd):
-        """Execute a remote command."""
-        command_id = cmd.get('id')
-        command_type = cmd.get('command') or cmd.get('command_type')
-        params = cmd.get('parameters') or cmd.get('params') or {}
-        if not isinstance(params, dict):
-            params = {}
-        if not command_type:
-            logger.warning("execute_command: missing command type in cmd keys=%s", list(cmd.keys()))
-            return
-        logger.info("Executing command %s (ID: %s)", command_type, command_id)
-
-        # Check scheduled command expiration (computer was off at scheduled time)
-        expires_at_str = params.get('expires_at')
-        if expires_at_str:
-            try:
-                # Parse ISO 8601 (may include timezone)
-                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=timezone.utc)
-                else:
-                    expires_at = expires_at.astimezone(timezone.utc)
-                if datetime.now(timezone.utc) > expires_at:
-                    self.update_command_status(
-                        command_id, 'failed',
-                        output='Comando expirado - o computador estava desligado no horário agendado.'
-                    )
-                    logger.info("Command %s expired (expires_at=%s), skipped execution", command_id, expires_at_str)
-                    return
-            except (ValueError, TypeError) as e:
-                logger.warning("Could not parse expires_at %s: %s, proceeding with execution", expires_at_str, e)
-
-        try:
-            self.update_command_status(command_id, 'processing')
-        except Exception as e:
-            logger.warning("Could not mark command as processing (will still execute): %s", e)
-
-        logger.info("Proceeding to run command body (type=%s)", command_type)
-
-        output = ""
-        success = False
-
-        # Normalize command_type for comparison (backend may send different casing)
-        command_type = (command_type or "").strip().lower()
-
-        try:
-            if command_type == 'shutdown':
-                if platform.system() == 'Windows':
-                    os.system("shutdown /s /t 5") # 5s delay
-                else:
-                    # Requires root or sudo NOPASSWD
-                    os.system("shutdown -h +1") # 1 min delay to allow status update
-                success = True
-                output = "Shutdown command issued."
-                
-            elif command_type == 'restart':
-                if platform.system() == 'Windows':
-                    os.system("shutdown /r /t 5")
-                else:
-                    os.system("shutdown -r +1")
-                success = True
-                output = "Restart command issued."
-            
-            elif command_type == 'lock':
-                if platform.system() == 'Windows':
-                    # On Windows, lock the workstation
-                    # Services running as SYSTEM cannot directly lock - must execute in user session
-                    try:
-                        # Method 1: Use schtasks to execute lock command as logged-in user
-                        # This is the most reliable method for Windows services
-                        ps_script = r'''
-# Get logged-in user from Win32_ComputerSystem
-$cs = Get-WmiObject -Class Win32_ComputerSystem
-$user = $cs.UserName
-
-if (-not $user) {
-    Write-Error "No user logged in"
-    exit 1
-}
-
-# Parse domain and username
-if ($user -match '^(.+)\\(.+)$') {
-    $domain = $matches[1]
-    $username = $matches[2]
-} else {
-    $domain = $env:COMPUTERNAME
-    $username = $user
-}
-
-# Create unique task name
-$taskName = "IFLabLock_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
-
-# Create and run scheduled task
-$createCmd = "schtasks /Create /TN `"$taskName`" /TR `"rundll32.exe user32.dll,LockWorkStation`" /SC ONCE /ST 23:59 /F /RU `"$domain\$username`" /RL HIGHEST"
-$createResult = cmd /c $createCmd 2>&1
-
-if ($LASTEXITCODE -eq 0) {
-    # Run the task
-    $runCmd = "schtasks /Run /TN `"$taskName`""
-    $runResult = cmd /c $runCmd 2>&1
-    Start-Sleep -Milliseconds 800
-    
-    # Clean up
-    $deleteCmd = "schtasks /Delete /TN `"$taskName`" /F"
-    cmd /c $deleteCmd 2>&1 | Out-Null
-    
-    if ($LASTEXITCODE -eq 0) {
-        exit 0
-    }
-}
-
-Write-Error "schtasks failed: $createResult $runResult"
-exit 1
-'''
-                        
-                        # Execute PowerShell script
-                        try:
-                            result = subprocess.run(
-                                ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_script],
-                                capture_output=True,
-                                text=True,
-                                timeout=25
-                            )
-                            
-                            if result.returncode == 0:
-                                success = True
-                                output = "Lock command issued successfully (scheduled task method)."
-                                logger.info("Lock executed via schtasks method")
-                            else:
-                                error_msg = result.stderr or result.stdout or "Unknown error"
-                                logger.warning(f"PowerShell/schtasks method failed: {error_msg}")
-                                raise Exception(f"schtasks returned {result.returncode}: {error_msg}")
-                        
-                        except Exception as e:
-                            logger.warning(f"PowerShell/schtasks method failed: {e}")
-                            success = False
-                            output = f"Lock failed: {str(e)}. The service may need administrator privileges to create scheduled tasks, or no user may be logged in."
-                            logger.error(f"Lock command failed: {e}")
                     
-                    except Exception as e:
-                        logger.error(f"Error executing lock command: {e}")
-                        success = False
-                        output = f"Lock failed: {str(e)}"
+                self.update_command_status(command_id, 'processing')
+                output = self.cmd_executor.execute(cmd)
+                self.update_command_status(command_id, 'completed', output)
                 
-                else:
-                    # Linux: Try common lock commands
-                    try:
-                        # Use loginctl if available (systemd)
-                        result = subprocess.run(
-                            ['loginctl', 'lock-session'],
-                            capture_output=True,
-                            text=True,
-                            timeout=5
-                        )
-                        if result.returncode == 0:
-                            success = True
-                            output = "Lock command issued (loginctl)."
-                        else:
-                            # Try xdg-screensaver or gnome-screensaver
-                            result2 = subprocess.run(
-                                ['xdg-screensaver', 'lock'],
-                                capture_output=True,
-                                text=True,
-                                timeout=5
-                            )
-                            if result2.returncode == 0:
-                                success = True
-                                output = "Lock command issued (xdg-screensaver)."
-                            else:
-                                result3 = subprocess.run(
-                                    ['gnome-screensaver-command', '-l'],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=5
-                                )
-                                if result3.returncode == 0:
-                                    success = True
-                                    output = "Lock command issued (gnome-screensaver)."
-                                else:
-                                    success = False
-                                    output = "Lock failed: No lock command available."
-                    except Exception as e:
-                        logger.error(f"Error executing lock command on Linux: {e}")
-                        success = False
-                        output = f"Lock failed: {str(e)}"
-
-            elif command_type == 'kiosk_lock':
-                if platform.system() == 'Windows':
-                    unlock_file = r"C:\ProgramData\IFLabAgent\unlock_kiosk.txt"
-                    if os.path.exists(unlock_file):
-                        try:
-                            os.remove(unlock_file)
-                        except:
-                            pass
-                    
-                    script_path = self._ensure_kiosk_script()
-                    if script_path:
-                        active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
-                        try:
-                            os.makedirs(r"C:\ProgramData\IFLabAgent", exist_ok=True)
-                            with open(active_file, 'w') as f:
-                                f.write('locked')
-                        except Exception as e:
-                            logger.error(f"Failed to create kiosk_active file: {e}")
-                            
-                        python_exe = sys.executable.replace('python.exe', 'pythonw.exe')
-                        if not os.path.exists(python_exe):
-                            python_exe = sys.executable
-                            
-                        ps_script = f'''
-$cs = Get-WmiObject -Class Win32_ComputerSystem
-$user = $cs.UserName
-if (-not $user) {{ exit 1 }}
-if ($user -match '^(.+)\\\\(.+)$') {{
-    $domain = $matches[1]
-    $username = $matches[2]
-}} else {{
-    $domain = $env:COMPUTERNAME
-    $username = $user
-}}
-$taskName = "IFLabKiosk_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
-cmd /c "schtasks /Create /TN `"$taskName`" /TR `"{python_exe} `"{script_path}`"`" /SC ONCE /ST 23:59 /F /RU `"$domain\\$username`" /RL HIGHEST" 2>&1 | Out-Null
-cmd /c "schtasks /Run /TN `"$taskName`"" 2>&1 | Out-Null
-Start-Sleep -Milliseconds 800
-cmd /c "schtasks /Delete /TN `"$taskName`" /F" 2>&1 | Out-Null
-exit 0
-'''
-                        try:
-                            result = subprocess.run(
-                                ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_script],
-                                capture_output=True, text=True, timeout=25
-                            )
-                            if result.returncode == 0:
-                                success = True
-                                output = "Kiosk mode locked successfully."
-                            else:
-                                success = False
-                                output = f"Failed to run schtasks: {result.stderr or result.stdout}"
-                        except Exception as e:
-                            success = False
-                            output = str(e)
-                    else:
-                        success = False
-                        output = "Failed to create kiosk script."
-                else:
-                    success = False
-                    output = "Kiosk mode not supported on Linux."
-
-            elif command_type == 'kiosk_unlock':
-                if platform.system() == 'Windows':
-                    unlock_file = r"C:\ProgramData\IFLabAgent\unlock_kiosk.txt"
-                    active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
-                    try:
-                        if not os.path.exists(r"C:\ProgramData\IFLabAgent"):
-                            os.makedirs(r"C:\ProgramData\IFLabAgent", exist_ok=True)
-                        with open(unlock_file, 'w') as f:
-                            f.write('unlock')
-                        if os.path.exists(active_file):
-                            try:
-                                os.remove(active_file)
-                            except:
-                                pass
-                        success = True
-                        output = "Kiosk mode unlocked successfully."
-                    except Exception as e:
-                        success = False
-                        output = f"Failed to write unlock file: {e}"
-                else:
-                    success = False
-                    output = "Kiosk mode not supported on Linux."
-            
-            elif command_type == 'message':
-                msg = (params.get('message') or params.get('text') or '').strip()
-                if not msg:
-                    logger.warning("Message command with empty text, using default")
-                    msg = 'Alert from Admin'
-                if platform.system() == 'Linux':
-                    # Escape single quotes for shell: ' -> '\''
-                    msg_safe = msg.replace("'", "'\"'\"'")
-                    os.system(f"notify-send 'Admin Alert' '{msg_safe}'")
-                elif platform.system() == 'Windows':
-                    # Escape double quotes for cmd: " -> \"
-                    msg_safe = msg.replace('"', '\\"')
-                    os.system(f'msg * "{msg_safe}"')
-                success = True
-                output = f"Message displayed: {msg}"
-            
-            elif command_type == 'wol':
-                target_mac = params.get('target_mac')
-                if target_mac:
-                    logger.info("WoL: sending magic packet to MAC %s", target_mac)
-                    try:
-                        self.send_wol(target_mac)
-                        logger.info("WoL: magic packet sent successfully to %s", target_mac)
-                        success = True
-                        output = f"WoL packet sent to {target_mac}"
-                    except Exception as e:
-                        logger.error("WoL: failed to send to %s: %s", target_mac, e)
-                        success = False
-                        output = str(e)
-                else:
-                    success = False
-                    output = "Missing target_mac for WoL"
-            
-            elif command_type == 'screenshot':
-                img_data = self.get_screenshot()
-                success = True
-                output = img_data # Returns base64 string
-                
-            elif command_type == 'ps_list':
-                procs = self.get_processes()
-                success = True
-                output = json.dumps(procs) # Returns JSON string
-            
-            elif command_type == 'ps_kill':
-                pid = params.get('pid')
-                if pid:
-                    p = psutil.Process(int(pid))
-                    p.terminate() # Try terminate first
-                    try:
-                        p.wait(timeout=3)
-                    except psutil.TimeoutExpired:
-                        p.kill() # Force kill if needed
-                    success = True
-                    output = f"Process {pid} killed."
-                else:
-                    success = False
-                    output = "Missing PID parameter"
-            
-            elif command_type == 'terminal':
-                cmd_text = params.get('command') or params.get('cmd_line')
-                if cmd_text:
-                    # Be careful with shell=True!
-                    result = subprocess.run(cmd_text, shell=True, capture_output=True, text=True, timeout=30)
-                    success = True # Even if exit code != 0, the command executed
-                    output = result.stdout + result.stderr
-                else:
-                    success = False
-                    output = "Missing command text"
-            
-            elif command_type == 'receive_file':
-                logger.info("receive_file: calling with params keys=%s", list(params.keys()) if params else [])
-                success, output = self.receive_file(params)
-
-            elif command_type == 'install_software':
-                method = params.get('method')  # 'upload', 'url', 'network'
-                software_name = params.get('software_name', 'Unknown')
-                install_args = params.get('install_args', '')
-                silent_mode = params.get('silent_mode', True)
-                reboot_after = params.get('reboot_after', False)
-
-                try:
-                    installer_path = None
-
-                    if method == 'upload':
-                        file_id = params.get('file_id')
-                        if not file_id:
-                            output = "Missing file_id for upload method"
-                            success = False
-                        else:
-                            self.update_command_status(command_id, 'processing', 'Baixando instalador do servidor...')
-                            installer_path = self.download_installer(file_id)
-                    elif method == 'url':
-                        installer_url = params.get('installer_url')
-                        if not installer_url:
-                            output = "Missing installer_url for url method"
-                            success = False
-                        else:
-                            self.update_command_status(command_id, 'processing', 'Baixando instalador da URL...')
-                            installer_path = self.download_from_url(installer_url)
-                    elif method == 'network':
-                        network_path = params.get('network_path')
-                        if not network_path:
-                            output = "Missing network_path for network method"
-                            success = False
-                        else:
-                            self.update_command_status(command_id, 'processing', 'Copiando instalador da rede...')
-                            installer_path = self.copy_from_network(network_path)
-                    else:
-                        output = f"Unknown installation method: {method}"
-                        success = False
-
-                    if installer_path:
-                        self.update_command_status(command_id, 'processing', 'Executando instalador...')
-                        result = self.execute_installer(installer_path, install_args, silent_mode)
-                        success = result['success']
-                        output = f"Software: {software_name}\n{result['output']}"
-
-                        if reboot_after and success:
-                            if platform.system() == 'Windows':
-                                os.system("shutdown /r /t 30")
-                                output += "\n[Reboot scheduled in 30 seconds]"
-                            else:
-                                output += "\n[Reboot not supported on this platform]"
-                except Exception as e:
-                    output = f"Installation error: {str(e)}"
-                    success = False
-                    logger.error(f"Installation failed: {e}")
-
-            elif command_type == 'set_hostname':
-                new_hostname = (params.get('new_hostname') or '').strip()
-                hostname_regex = r'^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$'
-                if not new_hostname:
-                    success = False
-                    output = "Parâmetro new_hostname é obrigatório e não pode ser vazio."
-                elif len(new_hostname) > 63:
-                    success = False
-                    output = "Hostname deve ter no máximo 63 caracteres."
-                elif not re.match(hostname_regex, new_hostname):
-                    success = False
-                    output = "Hostname inválido: use apenas letras, números, hífen e ponto."
-                else:
-                    try:
-                        self._set_system_hostname(new_hostname)
-                        success = True
-                        output = f"Hostname alterado para: {new_hostname}"
-                        if platform.system() == 'Windows':
-                            output += ". Em alguns contextos o novo nome só é refletido após reiniciar o computador."
-                        # Enviar report para o backend atualizar o hostname de imediato
-                        self.send_detailed_report()
-                    except Exception as e:
-                        success = False
-                        output = f"Falha ao alterar hostname: {str(e)}"
-                        logger.error(f"set_hostname failed: {e}")
-
-            elif command_type == 'update_agent':
-                try:
-                    logger.info("Executing remote update_agent command...")
-                    if getattr(sys, 'frozen', False):
-                        # Agent running as PyInstaller exe: update by downloading and running installer
-                        success, output = self._run_frozen_update(command_id)
-                        if success and output == "__EXIT_FOR_INSTALLER__":
-                            self.update_command_status(command_id, 'processing', 'Baixando e executando instalador...')
-                            sys.exit(0)
-                        if not success:
-                            self.update_command_status(command_id, 'failed', output)
-                            success = False
-                    else:
-                        # Source/venv: run update.py
-                        update_script = self.agent_dir / "update.py"
-                        if not update_script.exists():
-                            output = "update.py not found in agent directory"
-                            success = False
-                        else:
-                            if platform.system() == 'Windows':
-                                python_exe = self.agent_dir / ".venv" / "Scripts" / "python.exe"
-                            else:
-                                python_exe = self.agent_dir / ".venv" / "bin" / "python"
-                            if not python_exe.exists():
-                                python_exe = "python3" if platform.system() != 'Windows' else "python"
-                            env = os.environ.copy()
-                            env['AUTO_UPDATE'] = '1'
-                            result = subprocess.run(
-                                [str(python_exe), str(update_script)],
-                                cwd=str(self.agent_dir),
-                                capture_output=True,
-                                text=True,
-                                timeout=300,
-                                env=env
-                            )
-                            output_lines = []
-                            if result.stdout:
-                                output_lines.append("STDOUT:")
-                                output_lines.append(result.stdout)
-                            if result.stderr:
-                                output_lines.append("STDERR:")
-                                output_lines.append(result.stderr)
-                            output = "\n".join(output_lines) if output_lines else f"Update completed with exit code: {result.returncode}"
-                            success = result.returncode == 0
-                            if success:
-                                logger.info("Agent update completed successfully")
-                            else:
-                                logger.warning(f"Agent update failed with exit code: {result.returncode}")
-                except subprocess.TimeoutExpired:
-                    output = "Update command timed out after 5 minutes"
-                    success = False
-                    logger.error("Update command timed out")
-                except Exception as e:
-                    output = f"Error executing update: {str(e)}"
-                    success = False
-                    logger.error(f"Update command failed: {e}")
-
-            else:
-                output = f"Unknown command: {command_type}"
-                success = False
-
         except Exception as e:
-            output = str(e)
-            success = False
+            logger.error(f"Erro ao verificar comandos: {e}")
             
-        if command_type == 'wol':
-            logger.info("WoL: updating command %s status to %s", command_id, 'completed' if success else 'failed')
-            
-        logger.info(f"Command {command_type} finished. Success: {success}, Output: {output}")
-        self.update_command_status(command_id, 'completed' if success else 'failed', output)
-
-    def update_command_status(self, command_id, status, output=None):
-        if not command_id:
-            return
-        
+    def update_command_status(self, command_id: int, status: str, output: str = None):
         try:
-            url = f"{config.API_BASE_URL}/commands/{command_id}/status"
             payload = {'status': status}
-            if output:
+            if output is not None:
                 payload['output'] = output
-            resp = self.session.put(url, json=payload, timeout=15)
-            resp.raise_for_status()
-        except Exception as e:
-            logger.error("Failed to update command status: %s", e)
-
-    def _set_system_hostname(self, new_hostname):
-        """Alterar hostname no SO (Windows ou Linux). Requer privilégios de administrador/root."""
-        if platform.system() == 'Windows':
-            ps_script = f'Rename-Computer -NewName "{new_hostname}" -Force'
-            result = subprocess.run(
-                ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-Command', ps_script],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                err = result.stderr or result.stdout or "Erro desconhecido"
-                raise RuntimeError(err)
-        else:
-            # Linux: hostnamectl (preferido) ou /etc/hostname
-            try:
-                result = subprocess.run(
-                    ['hostnamectl', 'set-hostname', new_hostname],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if result.returncode != 0:
-                    err = result.stderr or result.stdout or "Erro ao executar hostnamectl"
-                    raise RuntimeError(err)
-            except FileNotFoundError:
-                # Fallback: escrever em /etc/hostname (requer root)
-                hostname_path = Path('/etc/hostname')
-                hostname_path.write_text(new_hostname + '\n', encoding='utf-8')
-                # Atualizar /etc/hosts para a linha 127.0.1.1
-                hosts_path = Path('/etc/hosts')
-                if hosts_path.exists():
-                    content = hosts_path.read_text(encoding='utf-8')
-                    lines = content.splitlines()
-                    new_lines = []
-                    for line in lines:
-                        if line.strip().startswith('127.0.1.1'):
-                            new_lines.append(f'127.0.1.1\t{new_hostname}')
-                        else:
-                            new_lines.append(line)
-                    hosts_path.write_text('\n'.join(new_lines) + '\n', encoding='utf-8')
-
-    def _run_frozen_update(self, command_id):
-        """Update agent when running as PyInstaller exe: check API, download installer, run it, exit."""
-        try:
-            if not self.token and not self.login():
-                return False, "Agente não autenticado; configure AGENT_EMAIL e AGENT_PASSWORD no .env"
-            base = config.API_BASE_URL.rstrip('/')
-            url = f"{base}/agent/check-update"
-            params = {
-                'current_version': self.get_current_version(),
-                'platform': 'windows-frozen',
-            }
-            resp = self.session.get(url, params=params, timeout=10)
-            if resp.status_code != 200:
-                return False, f"Check-update falhou: HTTP {resp.status_code}"
-            data = resp.json()
-            if not data.get('available') or not data.get('download_url'):
-                return True, "Agente já está atualizado."
-            download_url = data.get('download_url')
-            logger.info("Downloading installer from %s", download_url)
-            temp_dir = Path(tempfile.gettempdir())
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            exe_name = f"iflab-agent-setup-{uuid.uuid4().hex[:8]}.exe"
-            exe_path = temp_dir / exe_name
-            r = self.session.get(download_url, stream=True, timeout=300)
-            r.raise_for_status()
-            with open(exe_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            logger.info("Running installer: %s", exe_path)
-            subprocess.Popen(
-                [str(exe_path), '/VERYSILENT', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'],
-                cwd=str(self.agent_dir),
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if platform.system() == 'Windows' else 0,
-            )
-            return True, "__EXIT_FOR_INSTALLER__"
-        except Exception as e:
-            logger.exception("Frozen update failed")
-            return False, str(e)
-
-    def _download_wallpaper(self, url):
-        """Baixa imagem da URL para um arquivo local. Retorna path absoluto ou None em erro."""
-        try:
-            cache_dir = Path(tempfile.gettempdir()) / "iflab_agent_wallpaper"
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            ext = "jpg"
-            if "." in url.split("?")[0]:
-                ext = url.split("?")[0].rsplit(".", 1)[-1].lower()
-                if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
-                    ext = "jpg"
-            file_path = cache_dir / f"lab_wallpaper.{ext}"
-            r = self.session.get(url, stream=True, timeout=30)
-            r.raise_for_status()
-            with open(file_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return str(file_path.resolve())
-        except Exception as e:
-            logger.warning("Failed to download lab wallpaper from %s: %s", url, e)
-            return None
-
-    def _get_current_wallpaper_path(self):
-        """Retorna o caminho/URI do wallpaper atual do SO, ou None."""
-        try:
-            if platform.system() == "Windows":
-                ps_script = "Get-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name Wallpaper -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Wallpaper"
-                result = subprocess.run(
-                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if result.returncode == 0 and result.stdout and result.stdout.strip():
-                    return result.stdout.strip()
-                return None
-            else:
-                result = subprocess.run(
-                    ["gsettings", "get", "org.gnome.desktop.background", "picture-uri"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if result.returncode == 0 and result.stdout and result.stdout.strip():
-                    uri = result.stdout.strip().strip("'\"")
-                    if uri.startswith("file://"):
-                        return uri[7:]
-                    return uri
-                return None
-        except Exception as e:
-            logger.debug("Could not get current wallpaper path: %s", e)
-            return None
-
-    def _is_windows_service(self):
-        """Return True if the current process is running as a Windows service (Session 0)."""
-        if platform.system() != "Windows":
-            return False
-        try:
-            ps_script = "(Get-Process -Id $PID).SessionId -eq 0"
-            result = subprocess.run(
-                ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            return result.returncode == 0 and result.stdout.strip().lower() == "true"
-        except Exception:
-            return False
-
-    def _wallpaper_programdata_dir(self):
-        """Return ProgramData\\IFLabAgent path for wallpaper files (readable by all users)."""
-        pd = os.environ.get("ProgramData", "C:\\ProgramData")
-        return Path(pd) / "IFLabAgent"
-
-    def _copy_wallpaper_to_programdata(self, source_path):
-        """Copy wallpaper file to ProgramData\\IFLabAgent\\wallpaper.<ext>. Return new path or None."""
-        try:
-            dest_dir = self._wallpaper_programdata_dir()
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            ext = Path(source_path).suffix or ".jpg"
-            dest_path = dest_dir / f"wallpaper{ext}"
-            import shutil
-            shutil.copy2(source_path, dest_path)
-            self._grant_users_read(str(dest_path))
-            return str(dest_path.resolve())
-        except Exception as e:
-            logger.warning("Failed to copy wallpaper to ProgramData: %s", e)
-            return None
-
-    def _grant_users_read(self, file_path):
-        """Grant Users group read access so any logged-in user can read the file (e.g. when running set_wallpaper.ps1)."""
-        if platform.system() != "Windows":
-            return
-        try:
-            subprocess.run(
-                ["icacls", file_path, "/grant", "Users:R", "/q"],
-                capture_output=True,
-                timeout=5,
-            )
-        except Exception:
-            pass
-
-    def _write_pending_wallpaper(self, abs_path):
-        """Write the wallpaper path to pending_wallpaper.txt for the user-session script."""
-        try:
-            dest_dir = self._wallpaper_programdata_dir()
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            pending_file = dest_dir / "pending_wallpaper.txt"
-            pending_file.write_text(abs_path, encoding="utf-8")
-            self._grant_users_read(str(pending_file))
-            return True
-        except Exception as e:
-            logger.warning("Failed to write pending wallpaper path: %s", e)
-            return False
-
-    def _ensure_wallpaper_script(self):
-        """Ensure ProgramData\\IFLabAgent\\set_wallpaper.ps1 exists (reads pending path and applies via SystemParametersInfo)."""
-        script_content = r'''# Read path from pending_wallpaper.txt and set wallpaper via SystemParametersInfo
-$pendingFile = "$env:ProgramData\IFLabAgent\pending_wallpaper.txt"
-if (-not (Test-Path $pendingFile)) { exit 0 }
-$path = (Get-Content $pendingFile -Raw).Trim()
-if (-not $path -or -not (Test-Path $path)) { exit 0 }
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class Params {
-    [DllImport("User32.dll", CharSet=CharSet.Unicode)]
-    public static extern int SystemParametersInfo(Int32 uAction, Int32 uParam, String lpvParam, Int32 fuWinIni);
-}
-"@
-$SPI_SETDESKWALLPAPER = 0x0014
-$SPIF_UPDATEINIFILE = 0x01
-$SPIF_SENDCHANGE = 0x02
-$fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
-[Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $path, $fWinIni) | Out-Null
-'''
-        try:
-            dest_dir = self._wallpaper_programdata_dir()
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            script_path = dest_dir / "set_wallpaper.ps1"
-            script_path.write_text(script_content, encoding="utf-8")
-            return str(script_path)
-        except Exception as e:
-            logger.warning("Failed to write set_wallpaper.ps1: %s", e)
-            return None
-
-    def _run_wallpaper_task(self):
-        """Run the scheduled task that applies pending wallpaper in the logged-in user session."""
-        try:
-            result = subprocess.run(
-                ["schtasks.exe", "/run", "/tn", "IFLabAgentSetWallpaper"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode != 0:
-                logger.debug("schtasks /run failed (task may not exist yet): %s", result.stderr or result.stdout)
-        except Exception as e:
-            logger.debug("Failed to run wallpaper task: %s", e)
-
-    def _ensure_startup_shortcut(self):
-        """Ensure All Users Startup shortcut exists so wallpaper applies at every user logon (for existing installs)."""
-        if platform.system() != "Windows":
-            return
-        try:
-            dest_dir = self._wallpaper_programdata_dir()
-            script_path = dest_dir / "set_wallpaper.ps1"
-            if not script_path.exists():
-                return
-            startup = os.environ.get("ProgramData", "C:\\ProgramData") + "\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp"
-            shortcut_path = os.path.join(startup, "IFLabAgent-ApplyWallpaper.lnk")
-            if os.path.exists(shortcut_path):
-                return
-            # Write a small helper script to create the shortcut (avoids escaping issues)
-            helper = dest_dir / "create_startup_shortcut.ps1"
-            helper.write_text(
-                f'$wsh = New-Object -ComObject WScript.Shell\n'
-                f'$s = $wsh.CreateShortcut("{shortcut_path}")\n'
-                f'$s.TargetPath = "powershell.exe"\n'
-                f'$s.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File \\"{script_path}\\""\n'
-                f'$s.WorkingDirectory = "{dest_dir}"\n'
-                f'$s.Save()\n'
-                f'[Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) | Out-Null\n',
-                encoding="utf-8",
-            )
-            subprocess.run(
-                ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", str(helper)],
-                capture_output=True,
-                timeout=10,
-            )
-        except Exception as e:
-            logger.debug("Could not ensure Startup shortcut: %s", e)
-
-    def _ensure_wallpaper_task_schedule(self):
-        """Ensure the scheduled task has a 30-minute repetition trigger for existing installations."""
-        if platform.system() != "Windows":
-            return
-        if getattr(self, '_wallpaper_task_checked', False):
-            return
-        try:
-            ps_script = '''
-$taskName = "IFLabAgentSetWallpaper"
-$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if ($null -ne $task) {
-    if (-not $task.Triggers[0].Repetition.Interval -or $task.Triggers[0].Repetition.Interval -ne "PT30M") {
-        $taskUser = $task.Principal.UserId
-        $newTrigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
-        $newTrigger.RepetitionInterval = (New-TimeSpan -Minutes 30)
-        $newTrigger.RepetitionDuration = (New-TimeSpan -Days 1)
-        Set-ScheduledTask -TaskName $taskName -Trigger $newTrigger -User $taskUser | Out-Null
-    }
-}
-'''
-            subprocess.run(
-                ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                timeout=15,
-            )
-            self._wallpaper_task_checked = True
-        except Exception as e:
-            logger.debug("Failed to ensure wallpaper task schedule: %s", e)
-
-    def _set_wallpaper(self, file_path):
-        """Aplica o arquivo como papel de parede. file_path deve ser caminho absoluto."""
-        try:
-            abs_path = str(Path(file_path).resolve())
-            if not os.path.exists(abs_path):
-                logger.warning("Wallpaper file does not exist, skipping: %s", abs_path)
-                return
-            if platform.system() == "Windows":
-                if self._is_windows_service():
-                    # Running as service (Session 0): copy to ProgramData, write pending path, run task + rely on Startup at logon
-                    logger.info("Wallpaper: running as service (Session 0), using ProgramData and scheduled task")
-                    dest_path = self._copy_wallpaper_to_programdata(abs_path)
-                    if not dest_path:
-                        logger.warning("Could not copy wallpaper to ProgramData, skipping")
-                        return
-                    logger.info("Wallpaper: copied to %s", dest_path)
-                    if not self._write_pending_wallpaper(dest_path):
-                        logger.warning("Could not write pending_wallpaper.txt")
-                        return
-                    self._ensure_wallpaper_script()
-                    self._ensure_startup_shortcut()
-                    self._run_wallpaper_task()
-                    logger.info("Wallpaper: pending file set and task triggered; will also apply at next user logon via Startup")
-                    return
-                # Running in user context: apply immediately via SystemParametersInfo
-                path_escaped = abs_path.replace("'", "''")
-                ps_script = f'''
-$path = '{path_escaped}'
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class Params {{
-    [DllImport("User32.dll", CharSet=CharSet.Unicode)]
-    public static extern int SystemParametersInfo(Int32 uAction, Int32 uParam, String lpvParam, Int32 fuWinIni);
-}}
-"@
-$SPI_SETDESKWALLPAPER = 0x0014
-$SPIF_UPDATEINIFILE = 0x01
-$SPIF_SENDCHANGE = 0x02
-$fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
-$ret = [Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $path, $fWinIni)
-if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
-'''
-                result = subprocess.run(
-                    ["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script],
-                    capture_output=True,
-                    text=True,
-                    timeout=15,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(result.stderr or result.stdout or "Unknown error")
-            else:
-                uri = "file://" + abs_path
-                result = subprocess.run(
-                    ["gsettings", "set", "org.gnome.desktop.background", "picture-uri", uri],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(result.stderr or result.stdout or "Unknown error")
-        except Exception as e:
-            logger.warning("Failed to set wallpaper: %s", e)
-            raise
-
-    def _enforce_lab_wallpaper(self):
-        """Verifica o wallpaper padrão do lab no servidor e, se o atual for diferente, aplica o padrão."""
-        if not self.computer_db_id:
-            return
-            
-        try:
-            url = f"{config.API_BASE_URL}/agent/me"
-            response = self.session.get(url, timeout=30)
-            if response.status_code == 200:
-                pc_data = response.json()
-                lab_data = pc_data.get('lab')
-                if lab_data:
-                    self._cached_lab_wallpaper_url = lab_data.get('default_wallpaper_url')
-                    self._cached_lab_wallpaper_enabled = lab_data.get('default_wallpaper_enabled', True)
-        except Exception as e:
-            logger.debug("Failed to sync lab wallpaper info: %s", e)
-
-        if not getattr(self, '_cached_lab_wallpaper_enabled', True):
-            return
-        self._ensure_wallpaper_task_schedule()
-        url = (self._cached_lab_wallpaper_url or "").strip()
-        if not url:
-            return
-        if url.startswith("/"):
-            base = config.API_BASE_URL.rstrip("/").replace("/api/v1", "").rstrip("/")
-            url = base + url
-        try:
-            current_path = self._get_current_wallpaper_path()
-            local_path = self._download_wallpaper(url)
-            if not local_path:
-                return
-            normalized_current = (current_path or "").replace("\\", "/").rstrip("/")
-            normalized_local = local_path.replace("\\", "/").rstrip("/")
-            if normalized_current and normalized_current == normalized_local:
-                return
-            self._set_wallpaper(local_path)
-            logger.info("Lab default wallpaper applied: %s", local_path)
-        except Exception as e:
-            logger.debug("Lab wallpaper enforcement skipped or failed: %s", e)
-
-    def download_installer(self, file_id):
-        """Download installer from server. Ensures auth and retries on 401."""
-        import re
-        file_id = (file_id or '').strip()
-        if not file_id:
-            raise ValueError("file_id is required for installer download")
-
-        # Ensure we are authenticated before download
-        if not self.token and not self.login():
-            raise RuntimeError("Agent not authenticated; cannot download installer")
-
-        temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
-        os.makedirs(temp_dir, exist_ok=True)
-        url = f"{config.API_BASE_URL}/installers/{file_id}/download"
-        logger.info("Downloading installer from %s", url)
-
-        response = None
-        for attempt in range(2):
-            response = self.session.get(url, stream=True, timeout=300)
-            if response.status_code == 200:
-                break
-            if response.status_code == 401 and attempt == 0:
-                logger.warning("Download returned 401; re-authenticating and retrying")
-                if self.login():
-                    continue
-            logger.error(
-                "Failed to download installer: %s %s body=%s",
-                response.status_code,
-                url,
-                (response.text or "")[:200],
-            )
-            response.raise_for_status()
-
-        filename = file_id
-        if 'Content-Disposition' in response.headers:
-            match = re.search(r'filename="?([^"]+)"?', response.headers['Content-Disposition'])
-            if match:
-                filename = match.group(1).strip()
-
-        file_path = os.path.join(temp_dir, filename)
-        with open(file_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        logger.info("Downloaded installer: %s", file_path)
-        return file_path
-
-    def download_from_url(self, url):
-        """Download installer from external URL."""
-        try:
-            # Create temp directory if it doesn't exist
-            temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            # Validate URL
-            if not url.startswith(('http://', 'https://')):
-                raise ValueError(f"Invalid URL scheme: {url}")
-            
-            # Get filename from URL
-            filename = os.path.basename(url.split('?')[0])
-            if not filename or '.' not in filename:
-                filename = f"installer_{uuid.uuid4().hex[:8]}.exe"
-            
-            # Validate extension
-            ext = os.path.splitext(filename)[1].lower()
-            if ext not in ['.exe', '.msi', '.zip']:
-                raise ValueError(f"Unsupported file extension: {ext}")
-            
-            file_path = os.path.join(temp_dir, filename)
-            
-            # Download file
-            response = requests.get(url, stream=True, timeout=300)  # 5 min timeout
-            response.raise_for_status()
-            
-            with open(file_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            logger.info(f"Downloaded installer from URL: {file_path}")
-            return file_path
-        except Exception as e:
-            logger.error(f"Failed to download from URL: {e}")
-            raise
-
-    def copy_from_network(self, network_path):
-        """Copy installer from network share."""
-        try:
-            if platform.system() != 'Windows':
-                raise ValueError("Network share copy only supported on Windows")
-            
-            # Create temp directory if it doesn't exist
-            temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            # Validate network path format
-            if not network_path.startswith('\\\\'):
-                raise ValueError(f"Invalid network path format: {network_path}")
-            
-            filename = os.path.basename(network_path)
-            file_path = os.path.join(temp_dir, filename)
-            
-            # Use robocopy for better reliability, fallback to copy
-            try:
-                # Try robocopy first (more reliable)
-                result = subprocess.run(
-                    ['robocopy', os.path.dirname(network_path), temp_dir, filename, '/NFL', '/NDL', '/NJH', '/NJS'],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                # robocopy returns 0-7 for success, 8+ for errors
-                if result.returncode >= 8:
-                    raise subprocess.CalledProcessError(result.returncode, 'robocopy', result.stderr)
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                # Fallback to copy command
-                result = subprocess.run(
-                    ['copy', f'"{network_path}"', f'"{file_path}"'],
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                if result.returncode != 0:
-                    raise subprocess.CalledProcessError(result.returncode, 'copy', result.stderr)
-            
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"File not copied: {file_path}")
-            
-            logger.info(f"Copied installer from network: {file_path}")
-            return file_path
-        except Exception as e:
-            logger.error(f"Failed to copy from network: {e}")
-            raise
-
-    def execute_installer(self, installer_path, install_args, silent_mode):
-        """Execute installer with appropriate arguments."""
-        try:
-            if not os.path.exists(installer_path):
-                return {'success': False, 'output': f"Installer not found: {installer_path}"}
-            
-            ext = os.path.splitext(installer_path)[1].lower()
-            output_lines = []
-            
-            if ext == '.msi':
-                # MSI installer
-                args = ['msiexec', '/i', installer_path]
-                if silent_mode:
-                    args.append('/qn')  # Quiet, no UI
-                else:
-                    args.append('/qb')  # Basic UI
                 
-                if install_args:
-                    args.extend(install_args.split())
-                
-                result = subprocess.run(
-                    args,
-                    capture_output=True,
-                    text=True,
-                    timeout=600,  # 10 min timeout for installation
-                    cwd=os.path.dirname(installer_path)
-                )
-                
-                output_lines.append(f"MSI Installer executed with return code: {result.returncode}")
-                if result.stdout:
-                    output_lines.append(f"STDOUT: {result.stdout}")
-                if result.stderr:
-                    output_lines.append(f"STDERR: {result.stderr}")
-                
-                # MSI return codes: 0 = success, others = failure
-                success = result.returncode == 0
-                
-            elif ext == '.exe':
-                # EXE installer
-                args = [installer_path]
-                
-                if install_args:
-                    args.extend(install_args.split())
-                elif silent_mode:
-                    # Try common silent flags
-                    args.extend(['/S', '/quiet', '/silent', '/VERYSILENT'])
-                
-                result = subprocess.run(
-                    args,
-                    capture_output=True,
-                    text=True,
-                    timeout=600,  # 10 min timeout
-                    cwd=os.path.dirname(installer_path)
-                )
-                
-                output_lines.append(f"EXE Installer executed with return code: {result.returncode}")
-                if result.stdout:
-                    output_lines.append(f"STDOUT: {result.stdout}")
-                if result.stderr:
-                    output_lines.append(f"STDERR: {result.stderr}")
-                
-                # EXE return codes: 0 = success typically
-                success = result.returncode == 0
-                
-            elif ext == '.zip':
-                # ZIP file - extract and look for installer
-                import zipfile
-                extract_dir = os.path.join(os.path.dirname(installer_path), 'extracted')
-                os.makedirs(extract_dir, exist_ok=True)
-                
-                with zipfile.ZipFile(installer_path, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
-                
-                # Look for .exe or .msi in extracted files
-                installer_found = None
-                for root, dirs, files in os.walk(extract_dir):
-                    for file in files:
-                        if file.endswith(('.exe', '.msi')):
-                            installer_found = os.path.join(root, file)
-                            break
-                    if installer_found:
-                        break
-                
-                if installer_found:
-                    # Recursively call execute_installer
-                    return self.execute_installer(installer_found, install_args, silent_mode)
-                else:
-                    return {'success': False, 'output': 'No installer found in ZIP file'}
-            else:
-                return {'success': False, 'output': f"Unsupported installer type: {ext}"}
-            
-            # Cleanup temp file after successful installation
-            if success:
-                try:
-                    os.remove(installer_path)
-                    logger.info(f"Cleaned up installer: {installer_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup installer: {e}")
-            
-            return {
-                'success': success,
-                'output': '\n'.join(output_lines)
-            }
-        except subprocess.TimeoutExpired:
-            return {'success': False, 'output': 'Installation timed out after 10 minutes'}
+            self.api.put(f"/commands/{command_id}/status", json=payload)
         except Exception as e:
-            logger.error(f"Failed to execute installer: {e}")
-            return {'success': False, 'output': f"Installation error: {str(e)}"}
-
-    def _enforce_kiosk_process(self):
-        """Monitor kiosk_active.txt and ensure the kiosk process is running in user session."""
-        if platform.system() != 'Windows':
-            return
-            
-        active_file = r"C:\ProgramData\IFLabAgent\kiosk_active.txt"
-        if os.path.exists(active_file):
-            kiosk_running = False
-            for p in psutil.process_iter(['name', 'cmdline']):
-                try:
-                    if p.info['name'] and 'python' in p.info['name'].lower():
-                        cmdline = p.info.get('cmdline') or []
-                        if any('kiosk.py' in arg for arg in cmdline):
-                            kiosk_running = True
-                            break
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            
-            if not kiosk_running:
-                logger.debug("Kiosk is active but process not running. Attempting to launch in user session...")
-                script_path = self._ensure_kiosk_script()
-                if script_path:
-                    python_exe = sys.executable.replace('python.exe', 'pythonw.exe')
-                    if not os.path.exists(python_exe):
-                        python_exe = sys.executable
-                        
-                    ps_script = f'''
-$cs = Get-WmiObject -Class Win32_ComputerSystem
-$user = $cs.UserName
-if (-not $user) {{ exit 1 }}
-if ($user -match '^(.+)\\\\(.+)$') {{
-    $domain = $matches[1]
-    $username = $matches[2]
-}} else {{
-    $domain = $env:COMPUTERNAME
-    $username = $user
-}}
-$taskName = "IFLabKiosk_" + [System.Guid]::NewGuid().ToString("N").Substring(0,8)
-cmd /c "schtasks /Create /TN `"$taskName`" /TR `"{python_exe} `"{script_path}`"`" /SC ONCE /ST 23:59 /F /RU `"$domain\\$username`" /RL HIGHEST" 2>&1 | Out-Null
-cmd /c "schtasks /Run /TN `"$taskName`"" 2>&1 | Out-Null
-Start-Sleep -Milliseconds 800
-cmd /c "schtasks /Delete /TN `"$taskName`" /F" 2>&1 | Out-Null
-exit 0
-'''
-                    try:
-                        subprocess.run(
-                            ['powershell.exe', '-ExecutionPolicy', 'Bypass', '-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps_script],
-                            capture_output=True, timeout=15
-                        )
-                    except Exception as e:
-                        pass
+            logger.error(f"Erro ao atualizar status do comando {command_id}: {e}")
 
     def run(self):
-        logger.info(f"Starting Agent for Machine ID: {self.machine_id}")
+        """Main orchestrator execution loop."""
+        logger.info(f"Iniciando Coletty Agent V{self.get_current_version()} (Orquestrador modular)")
         
-        # Initialize CPU counter
-        psutil.cpu_percent(interval=None)
-        
-        last_metrics_time = 0
-        last_report_time = 0
-        last_wallpaper_check_time = 0
-        startup_kiosk_checked = False
-
         while True:
-            if not self.token or not self.computer_db_id:
+            try:
                 if not self.login():
-                    time.sleep(10)  # Wait before retry
+                    logger.warning(f"Login falhou. Retentando em {config.POLL_INTERVAL}s")
+                    time.sleep(config.POLL_INTERVAL)
                     continue
 
-            # Check for commands frequently (every loop)
-            if self.computer_db_id:
-                if not startup_kiosk_checked:
-                    # Sync initial kiosk state from server
-                    try:
-                        url = f"{config.API_BASE_URL}/agent/me"
-                        response = self.session.get(url, timeout=30)
-                        if response.status_code == 200:
-                            pc_data = response.json()
-                            is_locked = pc_data.get('is_locked', False)
-                            if is_locked:
-                                # Server says locked, trigger lock command locally to ensure screen is locked (e.g. after reboot)
-                                logger.info("Startup check: Server indicates kiosk is locked. Enforcing lock.")
-                                self.execute_command({'command': 'kiosk_lock'})
-                            else:
-                                # Server says unlocked, trigger unlock locally just in case
-                                logger.info("Startup check: Server indicates kiosk is unlocked. Ensuring unlock.")
-                                self.execute_command({'command': 'kiosk_unlock'})
-                            startup_kiosk_checked = True
-                    except Exception as e:
-                        logger.warning(f"Startup kiosk check failed: {e}")
-
+                # Kiosk & Wallpaper logic
+                self.kiosk_man.enforce_kiosk_process()
+                self.wallpaper_man.enforce_lab_wallpaper()
+                
+                # Check commands frequently
                 self.check_commands()
+                
+                # Setup timers
+                current_time = time.time()
+                if not hasattr(self, 'last_metrics_time') or (current_time - self.last_metrics_time) >= config.METRICS_INTERVAL:
+                    if self.send_metrics_report():
+                        self.last_metrics_time = current_time
+                        
+                if not hasattr(self, 'last_report_time') or (current_time - self.last_report_time) >= config.REPORT_INTERVAL:
+                    if self.send_detailed_report():
+                        self.last_report_time = current_time
 
-            current_time = time.time()
-
-            # Send metrics every 30s
-            if current_time - last_metrics_time >= 30:
-                if self.computer_db_id:
-                    self.send_metrics_report()
-                last_metrics_time = current_time
-
-            # Send detailed report every 5 minutes (300s)
-            if current_time - last_report_time >= 300:
-                if self.computer_db_id:
-                    self.send_detailed_report()
-                last_report_time = current_time
-
-            # Enforce lab default wallpaper every 5 minutes (300s)
-            if current_time - last_wallpaper_check_time >= 300:
-                if self.computer_db_id:
-                    self._enforce_lab_wallpaper()
-                last_wallpaper_check_time = current_time
-
-            self._enforce_kiosk_process()
-
-            # Short sleep for responsive command handling
-            time.sleep(5)
+            except Exception as e:
+                 logger.error(f"Erro no loop principal: {e}")
+            
+            time.sleep(config.POLL_INTERVAL)
 
 if __name__ == "__main__":
-    agent = Agent()
+    agent = AgentOrchestrator()
     agent.run()
