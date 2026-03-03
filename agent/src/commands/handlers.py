@@ -339,7 +339,8 @@ def handle_set_hostname(cmd: Dict[str, Any], os_name: str) -> str:
         return "Hostname ausente."
     try:
         if os_name == 'Windows':
-            subprocess.run(["wmic", "computersystem", "where", f"name='%computername%'", "call", "rename", f"name='{new_hostname}'"], check=True)
+            current_name = socket.gethostname()
+            subprocess.run(["wmic", "computersystem", "where", f"name='{current_name}'", "call", "rename", f"name='{new_hostname}'"], check=True)
         else:
             subprocess.run(["hostnamectl", "set-hostname", new_hostname], check=True)
         return f"Hostname alterado para {new_hostname} com sucesso (reinicie para aplicar)."
