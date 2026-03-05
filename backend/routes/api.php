@@ -276,6 +276,9 @@ Route::prefix('v1')->group(function () {
 
         // System Logs
         Route::get('/system/logs', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'index']);
+        Route::get('/system/logs/{filename}/stats', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'stats']);
+        Route::get('/system/logs/{filename}/entries', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'entries']);
+        Route::get('/system/logs/{filename}/download', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'download']);
         Route::get('/system/logs/{filename}', [\App\Http\Controllers\Api\V1\LogViewerController::class, 'show']);
 
         // Queue Management
