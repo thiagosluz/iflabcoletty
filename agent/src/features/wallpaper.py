@@ -148,15 +148,22 @@ class WallpaperManager:
                 return None
                 
             if platform.system() == "Windows":
-                if self._is_windows_service():
-                    logger.info("Wallpaper: running as service (Session 0), using ProgramData and scheduled task")
-                    dest_path = self._copy_wallpaper_to_programdata(abs_path)
+                if self._is_windows_service() or self._is_linux_service():
+                    logger.info("Wallpaper: running as service, using shared dir and notification")
+                    dest_path = self._copy_wallpaper_to_shared_dir(abs_path)
                     if not dest_path:
                         return None
                     if not self._write_pending_wallpaper(dest_path):
                         return None
-                    self._ensure_wallpaper_script()
-                    self._run_wallpaper_task()
+                    
+                    if platform.system() == "Windows":
+                        self._ensure_wallpaper_script()
+                        self._run_wallpaper_task()
+                    else:
+                        # On Linux, the autostart component will pick it up.
+                        # We could also try to notify via DBUS if we find sessions.
+                        pass
+                        
                     return dest_path
                     
                 path_escaped = abs_path.replace("'", "''")
@@ -216,13 +223,33 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
         except Exception:
             return False
 
-    def _wallpaper_programdata_dir(self):
-        pd = os.environ.get("ProgramData", "C:\\ProgramData")
-        return Path(pd) / "IFLabAgent"
+    def _is_linux_service(self):
+        if platform.system() != "Linux":
+            return False
+        # If UID is 0 (root) or it's running as a service user (like iflab), 
+        # it likely doesn't have a DISPLAY/DBUS_SESSION_BUS_ADDRESS
+        return os.getuid() == 0 or os.environ.get("USER") == "iflab"
 
-    def _copy_wallpaper_to_programdata(self, source_path):
+    def _wallpaper_shared_dir(self):
+        if platform.system() == "Windows":
+            pd = os.environ.get("ProgramData", "C:\\ProgramData")
+            return Path(pd) / "IFLabAgent"
+        else:
+            # On Linux, use a directory that the service user can write to
+            # and everyone can read. /var/lib/iflab-agent is ideal.
+            # Fallback to /tmp if not exists, but installer should create it.
+            path = Path("/var/lib/iflab-agent")
+            if not path.exists():
+                try:
+                    path.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    path = Path("/tmp/iflab-agent")
+                    path.mkdir(parents=True, exist_ok=True)
+            return path
+
+    def _copy_wallpaper_to_shared_dir(self, source_path):
         try:
-            dest_dir = self._wallpaper_programdata_dir()
+            dest_dir = self._wallpaper_shared_dir()
             dest_dir.mkdir(parents=True, exist_ok=True)
             ext = Path(source_path).suffix or ".jpg"
             dest_path = dest_dir / f"wallpaper{ext}"
@@ -231,21 +258,27 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
             self._grant_users_read(str(dest_path))
             return str(dest_path.resolve())
         except Exception as e:
-            logger.warning("Failed to copy wallpaper to ProgramData: %s", e)
+            logger.warning("Failed to copy wallpaper to shared directory: %s", e)
             return None
 
     def _grant_users_read(self, file_path):
-        if platform.system() != "Windows":
-            return
-        try:
-            # *S-1-5-32-545 is the built-in Users group SID, works in any language
-            run_silent(["icacls", file_path, "/grant", "*S-1-5-32-545:R", "/q"], capture_output=True, timeout=5)
-        except Exception:
-            pass
+        if platform.system() == "Windows":
+            try:
+                # *S-1-5-32-545 is the built-in Users group SID, works in any language
+                run_silent(["icacls", file_path, "/grant", "*S-1-5-32-545:R", "/q"], capture_output=True, timeout=5)
+            except Exception:
+                pass
+        else:
+            try:
+                os.chmod(file_path, 0o644)
+                # Ensure parent dir is also readable/executable
+                os.chmod(os.path.dirname(file_path), 0o755)
+            except Exception:
+                pass
 
     def _write_pending_wallpaper(self, abs_path):
         try:
-            dest_dir = self._wallpaper_programdata_dir()
+            dest_dir = self._wallpaper_shared_dir()
             dest_dir.mkdir(parents=True, exist_ok=True)
             pending_file = dest_dir / "pending_wallpaper.txt"
             pending_file.write_text(abs_path, encoding="utf-8")
@@ -254,6 +287,52 @@ if ($ret -eq 0) {{ throw "SystemParametersInfo failed" }}
         except Exception as e:
             logger.warning("Failed to write pending wallpaper path: %s", e)
             return False
+
+    def apply_from_pending(self):
+        """Called by a user-session component to apply whatever wallpaper is pending."""
+        try:
+            dest_dir = self._wallpaper_shared_dir()
+            pending_file = dest_dir / "pending_wallpaper.txt"
+            if not pending_file.exists():
+                return False
+                
+            path = pending_file.read_text(encoding="utf-8").strip()
+            if not path or not os.path.exists(path):
+                return False
+                
+            logger.info("Applying pending wallpaper: %s", path)
+            self._set_wallpaper_direct(path)
+            return True
+        except Exception as e:
+            logger.error("Failed to apply pending wallpaper: %s", e)
+            return False
+
+    def _set_wallpaper_direct(self, abs_path):
+        """Internal helper to set wallpaper without checking if service."""
+        path_escaped = abs_path.replace("'", "''")
+        if platform.system() == "Windows":
+            ps_script = f'''
+$path = '{path_escaped}'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Params {{
+[DllImport("User32.dll", CharSet=CharSet.Unicode)]
+public static extern int SystemParametersInfo(Int32 uAction, Int32 uParam, String lpvParam, Int32 fuWinIni);
+}}
+"@
+$SPI_SETDESKWALLPAPER = 0x0014
+$SPIF_UPDATEINIFILE = 0x01
+$SPIF_SENDCHANGE = 0x02
+$fWinIni = $SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE
+[Params]::SystemParametersInfo($SPI_SETDESKWALLPAPER, 0, $path, $fWinIni)
+'''
+            run_silent(["powershell.exe", "-ExecutionPolicy", "Bypass", "-NoProfile", "-Command", ps_script], timeout=15)
+        else:
+            uri = "file://" + abs_path
+            run_silent(["gsettings", "set", "org.gnome.desktop.background", "picture-uri", uri], timeout=10)
+            # Support Dark Mode too in newer GNOME
+            run_silent(["gsettings", "set", "org.gnome.desktop.background", "picture-uri-dark", uri], timeout=5)
 
     def _ensure_wallpaper_script(self):
         script_content = r'''# Read path from pending_wallpaper.txt and set wallpaper via SystemParametersInfo

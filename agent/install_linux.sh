@@ -102,6 +102,29 @@ if [ -f "$AGENT_DIR/.env" ]; then
 fi
 chmod +x "$AGENT_DIR/main.py"
 
+# Create shared directory for wallpaper (used by background service and user sessions)
+echo -e "${YELLOW}Creating shared state directory...${NC}"
+SHARED_DIR="/var/lib/iflab-agent"
+mkdir -p "$SHARED_DIR"
+chown "$SERVICE_USER:$SERVICE_USER" "$SHARED_DIR"
+chmod 755 "$SHARED_DIR"
+
+# Create autostart entry for all users
+echo -e "${YELLOW}Creating autostart entry for all users...${NC}"
+AUTOSTART_DIR="/etc/xdg/autostart"
+mkdir -p "$AUTOSTART_DIR"
+cat > "$AUTOSTART_DIR/iflab-wallpaper.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=IFLab Wallpaper Applier
+Comment=Applies lab wallpaper on login and periodically
+Exec=$AGENT_DIR/.venv/bin/python $AGENT_DIR/main.py --apply-wallpaper
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+chmod 644 "$AUTOSTART_DIR/iflab-wallpaper.desktop"
+
 # Create systemd service file
 echo -e "${YELLOW}Creating systemd service...${NC}"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"

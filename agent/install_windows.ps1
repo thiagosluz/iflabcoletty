@@ -277,21 +277,23 @@ Set-Content -Path "$programDataAgent\set_wallpaper.ps1" -Value $setWallpaperScri
 
 
 
-# Create scheduled task (same user as installer) so service can trigger immediate apply when that user is logged in
+# Create scheduled task for ALL USERS so service can trigger immediate apply when ANY user is logged in
 $taskName = "IFLabAgentSetWallpaper"
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($existingTask) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 }
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -NoProfile -File `"$programDataAgent\set_wallpaper.ps1`""
-$taskUser = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $taskUser
+# Trigger for ANY user logon
+$trigger = New-ScheduledTaskTrigger -AtLogOn
 # Add repetition interval of 30 minutes to the logon trigger using a dummy trigger
 $dummyTrigger = New-ScheduledTaskTrigger -Once -At "00:00" -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 1)
 $trigger.Repetition = $dummyTrigger.Repetition
-$principal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive
+
+# Use SID S-1-5-32-545 (Built-in Users group) so it runs for any logged-in user
+$principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -LogonType Interactive
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Description "IFLab Agent: apply lab wallpaper" -Force | Out-Null
-Write-ColorOutput Green "Scheduled task '$taskName' created for $taskUser (service can trigger for immediate apply when this user is logged in)."
+Write-ColorOutput Green "Scheduled task '$taskName' created for all Users (service can trigger for immediate apply when any user is logged in)."
 
 # Set recovery options (restart on failure)
 & $nssmPath set $ServiceName AppRestartDelay 10000

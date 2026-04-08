@@ -22,3 +22,5 @@ agent/venv/
 agent/.agent_version
 agent/installer/
 agent/downloads/
+
+.agent/

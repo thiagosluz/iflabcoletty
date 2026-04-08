@@ -235,5 +235,14 @@ class AgentOrchestrator:
             time.sleep(config.POLL_INTERVAL)
 
 if __name__ == "__main__":
+    if "--apply-wallpaper" in sys.argv:
+        from src.api_client import ApiClient
+        api = ApiClient()
+        wp_man = WallpaperManager(api)
+        if wp_man.apply_from_pending():
+            sys.exit(0)
+        else:
+            sys.exit(1)
+            
     agent = AgentOrchestrator()
     agent.run()
