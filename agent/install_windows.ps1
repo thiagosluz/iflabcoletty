@@ -291,7 +291,7 @@ $dummyTrigger = New-ScheduledTaskTrigger -Once -At "00:00" -RepetitionInterval (
 $trigger.Repetition = $dummyTrigger.Repetition
 
 # Use SID S-1-5-32-545 (Built-in Users group) so it runs for any logged-in user
-$principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -LogonType Interactive
+$principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545"
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Description "IFLab Agent: apply lab wallpaper" -Force | Out-Null
 Write-ColorOutput Green "Scheduled task '$taskName' created for all Users (service can trigger for immediate apply when any user is logged in)."
 
